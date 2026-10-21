@@ -137,7 +137,9 @@ endif
 include ion/Makefile
 include kandinsky/Makefile
 include poincare/Makefile
+ifneq ($(filter code,$(apps_list)),)
 include python/Makefile
+endif
 include escher/Makefile
 # Executable Makefiles
 include bootloader/Makefile

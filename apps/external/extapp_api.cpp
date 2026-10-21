@@ -15,10 +15,14 @@
 #include <ion/src/device/shared/drivers/flash.h>
 #endif
 
+#ifdef HAS_CODE
 #include <python/port/port.h>
+#endif
 
 extern "C" {
+#ifdef HAS_CODE
 #include <python/port/mphalport.h>
+#endif
 }
 
 uint64_t extapp_millis() {

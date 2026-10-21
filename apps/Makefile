@@ -111,7 +111,9 @@ $(eval $(call depends_on_image,apps/title_bar_view.cpp,apps/exam_icon.png))
 
 $(call object_for,$(apps_src) $(tests_src)): $(BUILD_DIR)/apps/i18n.h
 $(call object_for,$(apps_src) $(tests_src)): $(BUILD_DIR)/apps/home/apps_layout.h
+ifneq ($(filter code,$(apps_list)),)
 $(call object_for,$(apps_src) $(tests_src)): $(BUILD_DIR)/python/port/genhdr/qstrdefs.generated.h
+endif
 
 $(call object_for,$(apps_src)): $(BUILD_DIR)/apps/home/apps_layout.h
 

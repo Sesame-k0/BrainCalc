@@ -1,5 +1,9 @@
 #include "about_controller.h"
+#ifdef HAS_CODE
 #include "../../../python/src/py/mpconfig.h"
+#else
+#define MICROPY_VERSION_STRING "Disabled"
+#endif
 #include "poincare/division.h"
 #include <assert.h>
 #include <cmath>
