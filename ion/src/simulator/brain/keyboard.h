@@ -32,6 +32,8 @@ void toggleNumberInput();
 NumberPattern numberInputPattern();
 void toggleNumberInputPattern();
 
+bool isShiftActive();
+
 void onKeyDown(WPARAM vkCode, LPARAM lParam);
 void onKeyUp(WPARAM vkCode, LPARAM lParam);
 void onTouchClick(int x, int y);
@@ -46,4 +48,3 @@ void pumpMessages();
 }
 
 #endif
-

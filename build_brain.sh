@@ -11,27 +11,40 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-JOBS="${NUMBER_OF_PROCESSORS:-$(nproc 2>/dev/null || echo 4)}"
+# Automatically add CeGCC installation directories to PATH if present
+for cegcc_dir in "/opt/cegcc/bin" "/c/msys64/opt/cegcc/bin" "$HOME/cegcc/bin"; do
+  if [[ -d "$cegcc_dir" ]] && [[ ":$PATH:" != *":$cegcc_dir:"* ]]; then
+    export PATH="${cegcc_dir}:${PATH}"
+  fi
+done
+
+JOBS="${JOBS:-${NUMBER_OF_PROCESSORS:-4}}"
 TOOLCHAIN_OPT="cegcc"
+OUT_DIR="output/release/simulator/brain"
 
 if [[ "${1:-}" == "--host" ]]; then
   echo "[INFO] --host specified: building Brain target with host Windows MinGW toolchain for PC verification..."
   TOOLCHAIN_OPT="windows"
+  OUT_DIR="output/release/simulator/brain-host"
 elif ! command -v arm-mingw32ce-g++ >/dev/null 2>&1; then
-  echo "[WARN] arm-mingw32ce-g++ not found in PATH."
-  echo "       To cross-compile for actual SHARP Brain hardware, install CeGCC (arm-mingw32ce-g++)"
-  echo "       and ensure it is in your PATH, or run:"
-  echo "         ./build_brain.sh --host"
-  echo "       to verify the Brain Win32 GDI platform build on Windows PC."
+  echo "[ERROR] arm-mingw32ce-g++ not found in PATH."
+  echo "        Ensure CeGCC is installed in /opt/cegcc/bin or run './build_brain.sh --host' for PC verification."
   exit 1
 fi
 
 echo "[INFO] Building BrainCalc (PLATFORM=simulator TARGET=brain TOOLCHAIN=${TOOLCHAIN_OPT}) with -j${JOBS}..."
-make PLATFORM=simulator TARGET=brain TOOLCHAIN="${TOOLCHAIN_OPT}" brain_bundle -j"${JOBS}"
+if [[ "${TOOLCHAIN_OPT}" == "cegcc" ]] && command -v arm-mingw32ce-c++filt >/dev/null 2>&1; then
+  # Keep a persistent Cygwin process alive during parallel Make so cygwin1.dll
+  # shared memory and mount table stay initialized across all worker processes.
+  sleep 3600 | arm-mingw32ce-c++filt >/dev/null 2>&1 &
+  CYG_HOLDER_PID=$!
+  trap 'kill "${CYG_HOLDER_PID}" 2>/dev/null || true' EXIT
+fi
+make PLATFORM=simulator TARGET=brain TOOLCHAIN="${TOOLCHAIN_OPT}" -j"${JOBS}"
 
-OUT_DIR="output/release/simulator/brain"
 DIST_DIR="${OUT_DIR}/BrainCalc"
 mkdir -p "$DIST_DIR"
+cp -f "${OUT_DIR}/epsilon.exe" "${OUT_DIR}/AppMain.exe"
 cp -f "${OUT_DIR}/AppMain.exe" "${DIST_DIR}/AppMain.exe"
 touch "${DIST_DIR}/AppMain.cfg" "${DIST_DIR}/index.din"
 
@@ -40,4 +53,3 @@ echo "[SUCCESS] Build completed!"
 echo "  Executable : ${OUT_DIR}/AppMain.exe"
 echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe, AppMain.cfg, index.din)"
 echo "=============================================================================="
-

@@ -19,6 +19,7 @@ namespace Keyboard {
 
 static bool sNumberInputEnabled = true;
 static NumberPattern sNumberPattern = NumberPattern::PatternA;
+static bool sShiftKeyDown = false;
 static bool sTerminationRequested = false;
 static Ion::Keyboard::State sKeyState(0);
 
@@ -75,12 +76,73 @@ void toggleNumberInputPattern() {
   Main::setNeedsRefresh();
 }
 
+bool isShiftActive() {
+  if (sShiftKeyDown || (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) {
+    return true;
+  }
+  Ion::Events::ShiftAlphaStatus status = Ion::Events::shiftAlphaStatus();
+  return status == Ion::Events::ShiftAlphaStatus::Shift ||
+         status == Ion::Events::ShiftAlphaStatus::ShiftAlpha ||
+         status == Ion::Events::ShiftAlphaStatus::ShiftAlphaLock;
+}
+
 void requestTermination() {
   sTerminationRequested = true;
 }
 
 bool isTerminationRequested() {
   return sTerminationRequested;
+}
+
+// Shift + Digit (1..9, 0) shortcut mapping shown in the sidebar cheat sheet:
+// Shift+1: +, Shift+2: -, Shift+3: *, Shift+4: /, Shift+5: (, Shift+6: ),
+// Shift+7: ^, Shift+8: √, Shift+9: π, Shift+0: =
+static Ion::Events::Event mapShiftDigitShortcut(int digit) {
+  switch (digit) {
+    case 1: return Ion::Events::Plus;
+    case 2: return Ion::Events::Minus;
+    case 3: return Ion::Events::Multiplication;
+    case 4: return Ion::Events::Division;
+    case 5: return Ion::Events::LeftParenthesis;
+    case 6: return Ion::Events::RightParenthesis;
+    case 7: return Ion::Events::Power;
+    case 8: return Ion::Events::Sqrt;
+    case 9: return Ion::Events::Pi;
+    case 0: return Ion::Events::Equal;
+    default: return Ion::Events::None;
+  }
+}
+
+static int digitFromPatternA(WPARAM vkCode) {
+  switch (vkCode) {
+    case 'Q': return 1;
+    case 'W': return 2;
+    case 'E': return 3;
+    case 'R': return 4;
+    case 'T': return 5;
+    case 'Y': return 6;
+    case 'U': return 7;
+    case 'I': return 8;
+    case 'O': return 9;
+    case 'P': return 0;
+    default:  return -1;
+  }
+}
+
+static int digitFromPatternB(WPARAM vkCode) {
+  switch (vkCode) {
+    case 'I':  return 7;
+    case 'O':  return 8;
+    case 'P':  return 9;
+    case 'J':  return 4;
+    case 'K':  return 5;
+    case 'L':  return 6;
+    case 'N':  return 1;
+    case 'M':  return 2;
+    case 0xBD: return 3; // 'ー'
+    case 'B':  return 0;
+    default:   return -1;
+  }
 }
 
 static Ion::Events::Event mapNumberModePatternA(WPARAM vkCode) {
@@ -197,7 +259,15 @@ static Ion::Events::Event mapAlphaMode(WPARAM vkCode, bool shiftDown) {
 
 void onKeyDown(WPARAM vkCode, LPARAM lParam) {
   bool isRepeat = (lParam & (1 << 30)) != 0;
-  bool shiftDown = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+  if (vkCode == VK_SHIFT || vkCode == VK_LSHIFT || vkCode == VK_RSHIFT) {
+    if (!sShiftKeyDown) {
+      sShiftKeyDown = true;
+      Main::setNeedsRefresh();
+    }
+    return;
+  }
+
+  bool shiftDown = isShiftActive();
 
   // Navigation & state-scanned repeatable keys
   switch (vkCode) {
@@ -238,6 +308,7 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
       return;
     case VK_F5:
       sKeyState.setKey(Ion::Keyboard::Key::Shift);
+      Main::setNeedsRefresh();
       return;
     default:
       break;
@@ -295,14 +366,24 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
       break;
   }
 
-  // Support PC physical number keys (0-9 and Numpad 0-9) for convenient testing
+  // Support PC physical number keys (0-9 and Numpad 0-9) and Shift+Digit shortcuts
   if (vkCode >= '0' && vkCode <= '9') {
+    int digit = static_cast<int>(vkCode - '0');
+    if (shiftDown) {
+      Ion::Events::Event sc = mapShiftDigitShortcut(digit);
+      if (sc != Ion::Events::None) {
+        Ion::Events::removeShift();
+        pushPendingEvent(sc);
+        Main::setNeedsRefresh();
+        return;
+      }
+    }
     static constexpr Ion::Events::Event kDigitEvents[10] = {
       Ion::Events::Zero, Ion::Events::One, Ion::Events::Two, Ion::Events::Three,
       Ion::Events::Four, Ion::Events::Five, Ion::Events::Six, Ion::Events::Seven,
       Ion::Events::Eight, Ion::Events::Nine
     };
-    pushPendingEvent(kDigitEvents[vkCode - '0']);
+    pushPendingEvent(kDigitEvents[digit]);
     return;
   }
   if (vkCode >= VK_NUMPAD0 && vkCode <= VK_NUMPAD9) {
@@ -319,7 +400,12 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
   if ((vkCode >= 'A' && vkCode <= 'Z') || vkCode == 0xBD) {
     Ion::Events::Event mapped = Ion::Events::None;
     if (sNumberInputEnabled) {
-      if (sNumberPattern == NumberPattern::PatternA) {
+      int digit = (sNumberPattern == NumberPattern::PatternA)
+                    ? digitFromPatternA(vkCode)
+                    : digitFromPatternB(vkCode);
+      if (shiftDown && digit >= 0) {
+        mapped = mapShiftDigitShortcut(digit);
+      } else if (sNumberPattern == NumberPattern::PatternA) {
         mapped = mapNumberModePatternA(vkCode);
       } else {
         mapped = mapNumberModePatternB(vkCode);
@@ -330,11 +416,20 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
     if (mapped != Ion::Events::None) {
       Ion::Events::removeShift();
       pushPendingEvent(mapped);
+      Main::setNeedsRefresh();
     }
   }
 }
 
 void onKeyUp(WPARAM vkCode, LPARAM /*lParam*/) {
+  if (vkCode == VK_SHIFT || vkCode == VK_LSHIFT || vkCode == VK_RSHIFT) {
+    if (sShiftKeyDown) {
+      sShiftKeyDown = false;
+      Main::setNeedsRefresh();
+    }
+    return;
+  }
+
   switch (vkCode) {
     case VK_UP:
       sKeyState.clearKey(Ion::Keyboard::Key::Up);
@@ -369,6 +464,7 @@ void onKeyUp(WPARAM vkCode, LPARAM /*lParam*/) {
       break;
     case VK_F5:
       sKeyState.clearKey(Ion::Keyboard::Key::Shift);
+      Main::setNeedsRefresh();
       break;
     default:
       break;
@@ -376,51 +472,10 @@ void onKeyUp(WPARAM vkCode, LPARAM /*lParam*/) {
 }
 
 void onTouchClick(int x, int y) {
-  // Left side panel touch buttons (x: 0 .. 106)
-  if (x >= 4 && x < Display::kCalcOffsetX - 4) {
-    if (y >= 64 && y < 110) {
-      toggleNumberInput();
-    } else if (y >= 116 && y < 162) {
-      toggleNumberInputPattern();
-    } else if (y >= 176 && y < 222) {
-      pushPendingEvent(Ion::Events::Home);
-    } else if (y >= 228 && y < 274) {
-      pushPendingEvent(Ion::Events::Back);
-    } else if (y >= 280 && y < 326) {
-      pushPendingEvent(Ion::Events::Toolbox);
-    } else if (y >= 332 && y < 378) {
-      pushPendingEvent(Ion::Events::Var);
-    } else if (y >= 384 && y < 430) {
-      pushPendingEvent(Ion::Events::Shift);
-    } else if (y >= 436 && y < 476) {
-      requestTermination();
-    }
-    return;
-  }
-
-  // Right side panel touch buttons (x: 747 .. 853)
-  int rightStart = Display::kCalcOffsetX + Display::kCalcScaledWidth;
-  if (x >= rightStart + 4 && x < Display::kBrainScreenWidth - 4) {
-    int localX = x - (rightStart + 4);
-    bool isRightCol = (localX >= 50);
-    if (y >= 64 && y < 110) {
-      pushPendingEvent(isRightCol ? Ion::Events::Pi : Ion::Events::XNT);
-    } else if (y >= 116 && y < 162) {
-      pushPendingEvent(isRightCol ? Ion::Events::RightParenthesis : Ion::Events::LeftParenthesis);
-    } else if (y >= 168 && y < 214) {
-      pushPendingEvent(isRightCol ? Ion::Events::Sqrt : Ion::Events::Power);
-    } else if (y >= 220 && y < 266) {
-      pushPendingEvent(isRightCol ? Ion::Events::Cosine : Ion::Events::Sine);
-    } else if (y >= 272 && y < 318) {
-      pushPendingEvent(isRightCol ? Ion::Events::Minus : Ion::Events::Plus);
-    } else if (y >= 324 && y < 370) {
-      pushPendingEvent(isRightCol ? Ion::Events::Division : Ion::Events::Multiplication);
-    } else if (y >= 376 && y < 422) {
-      pushPendingEvent(isRightCol ? Ion::Events::Backspace : Ion::Events::Ans);
-    } else if (y >= 428 && y < 476) {
-      pushPendingEvent(Ion::Events::EXE);
-    }
-    return;
+  // Only the bottom Exit button in the right sidebar is touch-active
+  if (x >= Display::kExitButtonX && x < Display::kExitButtonX + Display::kExitButtonW &&
+      y >= Display::kExitButtonY && y < Display::kExitButtonY + Display::kExitButtonH) {
+    requestTermination();
   }
 }
 
@@ -451,4 +506,3 @@ State scan() {
 
 }
 }
-

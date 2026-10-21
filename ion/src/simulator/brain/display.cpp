@@ -43,7 +43,7 @@ static inline uint32_t rgb565ToRgb888(uint16_t c) {
   return (r << 16) | (g << 8) | b;
 }
 
-static void drawButton(HDC hdc, int x, int y, int w, int h, COLORREF bgColor, COLORREF borderColor, COLORREF textColor, const wchar_t * label) {
+static void drawBox(HDC hdc, int x, int y, int w, int h, COLORREF bgColor, COLORREF borderColor) {
   RECT rc = { x, y, x + w, y + h };
   HBRUSH hBrush = CreateSolidBrush(bgColor);
   FillRect(hdc, &rc, hBrush);
@@ -56,93 +56,123 @@ static void drawButton(HDC hdc, int x, int y, int w, int h, COLORREF bgColor, CO
   SelectObject(hdc, oldBrush);
   SelectObject(hdc, oldPen);
   DeleteObject(hPen);
-
-  SetTextColor(hdc, textColor);
-  DrawTextW(hdc, label, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
-static void renderSidePanels(HDC hdc) {
-  // Clear left & right sidebars in the DIB buffer (dark slate theme)
+static void drawTextLine(HDC hdc, int x, int y, int w, int h, COLORREF color, const wchar_t * text, UINT alignFlags = DT_LEFT | DT_VCENTER | DT_SINGLELINE) {
+  RECT rc = { x, y, x + w, y + h };
+  SetTextColor(hdc, color);
+  DrawTextW(hdc, text, -1, &rc, alignFlags);
+}
+
+static void renderRightSidebar(HDC hdc) {
+  // Clear right sidebar area (X = 640..853, Y = 0..479) in the 32-bit DIB buffer
   for (int y = 0; y < kBrainScreenHeight; y++) {
     uint32_t * row = sDibPixels + y * kBrainScreenWidth;
-    for (int x = 0; x < kCalcOffsetX; x++) {
-      row[x] = 0x001E222A;
-    }
-    for (int x = kCalcOffsetX + kCalcScaledWidth; x < kBrainScreenWidth; x++) {
-      row[x] = 0x001E222A;
+    row[kSidebarX] = 0x00465268; // 1px separator line at X = 640
+    for (int x = kSidebarX + 1; x < kBrainScreenWidth; x++) {
+      row[x] = 0x001B1F27; // Dark slate background
     }
   }
 
   SetBkMode(hdc, TRANSPARENT);
   HGDIOBJ oldFont = SelectObject(hdc, sUiFontBold);
 
-  // Header on Left Panel
-  RECT rcTitleL = { 4, 6, kCalcOffsetX - 4, 30 };
-  SetTextColor(hdc, RGB(140, 200, 255));
-  DrawTextW(hdc, L"BRAIN KEY", -1, &rcTitleL, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  const int sx = kSidebarX + 8;            // 648
+  const int sw = kSidebarWidth - 16;       // 198
 
-  SelectObject(hdc, sUiFontSmall);
-  RECT rcSubL = { 4, 30, kCalcOffsetX - 4, 58 };
-  SetTextColor(hdc, RGB(190, 195, 205));
-  DrawTextW(hdc, L"[Shift]:NUM切替", -1, &rcSubL, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  // ===========================================================================
+  // [Top Section] Current Input Status (Y = 6..114)
+  // ===========================================================================
+  drawTextLine(hdc, sx, 6, sw, 20, RGB(130, 195, 255), L"■ 入力状態ステータス");
+  drawBox(hdc, sx, 28, sw, 84, RGB(34, 40, 52), RGB(75, 90, 115));
 
-  // Number input mode toggle button
   bool numOn = Keyboard::isNumberInputEnabled();
-  COLORREF numBg = numOn ? RGB(28, 115, 65) : RGB(95, 55, 45);
-  COLORREF numBorder = numOn ? RGB(80, 220, 130) : RGB(210, 110, 90);
-  drawButton(hdc, 6, 64, kCalcOffsetX - 12, 46, numBg, numBorder, RGB(255, 255, 255),
-             numOn ? L"NUM: ON" : L"NUM: OFF(A-Z)");
-
-  // Pattern A / B toggle button
   bool isPatA = (Keyboard::numberInputPattern() == Keyboard::NumberPattern::PatternA);
-  drawButton(hdc, 6, 116, kCalcOffsetX - 12, 46, RGB(45, 62, 92), RGB(100, 140, 200), RGB(240, 245, 255),
-             isPatA ? L"配列A (Q-P)" : L"配列B (テンキー)");
-
-  // Navigation buttons on Left Panel
-  drawButton(hdc, 6, 176, kCalcOffsetX - 12, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(235, 235, 240), L"HOME (F3)");
-  drawButton(hdc, 6, 228, kCalcOffsetX - 12, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(235, 235, 240), L"戻る (Esc)");
-  drawButton(hdc, 6, 280, kCalcOffsetX - 12, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(235, 235, 240), L"調べる (F1)");
-  drawButton(hdc, 6, 332, kCalcOffsetX - 12, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(235, 235, 240), L"VARS (F4)");
-  drawButton(hdc, 6, 384, kCalcOffsetX - 12, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(255, 215, 100), L"2nd (F5)");
-  drawButton(hdc, 6, 436, kCalcOffsetX - 12, 40, RGB(90, 35, 40), RGB(180, 80, 90), RGB(255, 220, 220), L"終了 (S+Esc)");
-
-  // Header on Right Panel
-  int rx = kCalcOffsetX + kCalcScaledWidth;
-  SelectObject(hdc, sUiFontBold);
-  RECT rcTitleR = { rx + 4, 6, kBrainScreenWidth - 4, 30 };
-  SetTextColor(hdc, RGB(140, 200, 255));
-  DrawTextW(hdc, L"QUICK PAD", -1, &rcTitleR, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  bool shiftOn = Keyboard::isShiftActive();
 
   SelectObject(hdc, sUiFontSmall);
-  RECT rcSubR = { rx + 4, 30, kBrainScreenWidth - 4, 58 };
-  SetTextColor(hdc, RGB(190, 195, 205));
-  DrawTextW(hdc, isPatA ? L"Q-P:1-0 A-F:+-*/" : L"IOP:789 JKL:456", -1, &rcSubR, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  drawTextLine(hdc, sx + 8, 33, 72, 22, RGB(190, 198, 210), L"数字入力:");
+  SelectObject(hdc, sUiFontBold);
+  drawTextLine(hdc, sx + 80, 33, sw - 86, 22,
+               numOn ? RGB(90, 235, 140) : RGB(255, 165, 90),
+               numOn ? L"ON (数字/演算)" : L"OFF (英字A-Z)");
 
-  int bw = 45;
-  int lx = rx + 6;
-  int rcx = rx + 56;
-  drawButton(hdc, lx,  64, bw, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(235, 235, 240), L"x,t");
-  drawButton(hdc, rcx, 64, bw, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(235, 235, 240), L"π");
+  SelectObject(hdc, sUiFontSmall);
+  drawTextLine(hdc, sx + 8, 59, 72, 22, RGB(190, 198, 210), L"配列設定:");
+  SelectObject(hdc, sUiFontBold);
+  drawTextLine(hdc, sx + 80, 59, sw - 86, 22,
+               RGB(150, 215, 255),
+               isPatA ? L"パターンA (Q-P)" : L"パターンB (テンキー)");
 
-  drawButton(hdc, lx,  116, bw, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(235, 235, 240), L"(");
-  drawButton(hdc, rcx, 116, bw, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(235, 235, 240), L")");
+  SelectObject(hdc, sUiFontSmall);
+  drawTextLine(hdc, sx + 8, 85, 72, 22, RGB(190, 198, 210), L"Shift状態:");
+  SelectObject(hdc, sUiFontBold);
+  drawTextLine(hdc, sx + 80, 85, sw - 86, 22,
+               shiftOn ? RGB(255, 230, 95) : RGB(145, 155, 170),
+               shiftOn ? L"ON (Shift有効)" : L"OFF");
 
-  drawButton(hdc, lx,  168, bw, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(235, 235, 240), L"x^y");
-  drawButton(hdc, rcx, 168, bw, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(235, 235, 240), L"√");
+  // ===========================================================================
+  // [Middle Section] Key Binding & Function Cheat Sheet (Y = 120..422)
+  // ===========================================================================
+  SelectObject(hdc, sUiFontBold);
+  drawTextLine(hdc, sx, 120, sw, 20, RGB(130, 195, 255), L"■ キー割り当て / ヒント");
+  drawBox(hdc, sx, 142, sw, 278, RGB(31, 36, 46), RGB(68, 80, 102));
 
-  drawButton(hdc, lx,  220, bw, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(235, 235, 240), L"sin");
-  drawButton(hdc, rcx, 220, bw, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(235, 235, 240), L"cos");
+  SelectObject(hdc, sUiFontSmall);
+  int cy = 147;
+  const int lh = 19;
 
-  drawButton(hdc, lx,  272, bw, 46, RGB(50, 60, 78), RGB(100, 120, 155), RGB(255, 255, 255), L"+");
-  drawButton(hdc, rcx, 272, bw, 46, RGB(50, 60, 78), RGB(100, 120, 155), RGB(255, 255, 255), L"-");
+  // Group 1: Basic & Mode Keys
+  drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(255, 215, 120), L"[基本操作・モード切替]");
+  cy += lh;
+  drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(230, 235, 242), L"Enter: 決定(EXE) / Esc: 戻る");
+  cy += lh;
+  drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(230, 235, 242), L"BS: 削除 / Space: 空白");
+  cy += lh;
+  drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(230, 235, 242), L"Caps: 数字ON/OFF  Tab: 配列A/B");
+  cy += lh;
+  drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(230, 235, 242), L"F1: 関数  F3: Home  F4: 変数");
+  cy += lh + 3;
 
-  drawButton(hdc, lx,  324, bw, 46, RGB(50, 60, 78), RGB(100, 120, 155), RGB(255, 255, 255), L"×");
-  drawButton(hdc, rcx, 324, bw, 46, RGB(50, 60, 78), RGB(100, 120, 155), RGB(255, 255, 255), L"÷");
+  // Group 2: Number Layout Hint
+  drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(255, 215, 120), L"[数字入力 (NUM:ON時)]");
+  cy += lh;
+  if (isPatA) {
+    drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(180, 235, 195), L"パターンA: Q〜O = 1〜9, P = 0");
+    cy += lh;
+    drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(205, 212, 222), L"文字大(.): .   文字小(,): ,");
+    cy += lh + 3;
+  } else {
+    drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(180, 235, 195), L"パターンB: IOP=789  JKL=456");
+    cy += lh;
+    drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(180, 235, 195), L"          NMー=123  B=0  H=.");
+    cy += lh + 3;
+  }
 
-  drawButton(hdc, lx,  376, bw, 46, RGB(42, 48, 60), RGB(90, 100, 120), RGB(235, 235, 240), L"Ans");
-  drawButton(hdc, rcx, 376, bw, 46, RGB(80, 50, 45), RGB(160, 100, 90), RGB(255, 230, 230), L"BS");
+  // Group 3: Shift + Digit & Function Shortcuts
+  drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(255, 215, 120), L"[演算・関数ショートカット]");
+  cy += lh;
+  drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(230, 235, 242), L"Shift+1: +   Shift+2: -");
+  cy += lh;
+  drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(230, 235, 242), L"Shift+3: *   Shift+4: /");
+  cy += lh;
+  drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(230, 235, 242), L"Shift+5: (   Shift+6: )");
+  cy += lh;
+  drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(230, 235, 242), L"Shift+7: ^   Shift+8: √");
+  cy += lh;
+  drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(230, 235, 242), L"Shift+9: π   Shift+0: =");
+  cy += lh;
+  drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(200, 210, 225), L"A,S,D,F: +-*/  C,V,B: sin,cos,tan");
 
-  drawButton(hdc, lx,  428, kCalcOffsetX - 12, 48, RGB(35, 105, 175), RGB(100, 180, 255), RGB(255, 255, 255), L"決定 / EXE");
+  // ===========================================================================
+  // [Bottom Section] Exit Button Only (Y = 430..470)
+  // ===========================================================================
+  SelectObject(hdc, sUiFontBold);
+  drawBox(hdc, kExitButtonX, kExitButtonY, kExitButtonW, kExitButtonH,
+          RGB(120, 38, 45), RGB(215, 95, 105));
+  drawTextLine(hdc, kExitButtonX, kExitButtonY, kExitButtonW, kExitButtonH,
+               RGB(255, 235, 235), L"終了 (タッチ / Shift+Esc)",
+               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
   SelectObject(hdc, oldFont);
 }
@@ -153,6 +183,7 @@ static void renderCalculatorFrameBuffer() {
     return;
   }
 
+  // Render 320x240 RGB565 framebuffer scaled 2x at left-aligned X=0..639, Y=0..479
   for (int y = 0; y < Ion::Display::Height; y++) {
     const KDColor * srcRow = src + y * Ion::Display::Width;
     uint32_t * dstRow0 = sDibPixels + (kCalcOffsetY + y * 2) * kBrainScreenWidth + kCalcOffsetX;
@@ -289,14 +320,14 @@ void init() {
 
   // Create Brain dictionary built-in font with ANTIALIASED_QUALITY (4) per FOR-AGENTS.md Section 3-5
   LOGFONTW lf = {};
-  lf.lfHeight = -15;
+  lf.lfHeight = -14;
   lf.lfWeight = FW_BOLD;
   lf.lfCharSet = DEFAULT_CHARSET;
   lf.lfQuality = ANTIALIASED_QUALITY; // Explicitly 4 (ClearType is forbidden on Brain)
   wcscpy(lf.lfFaceName, L"DFGHSGothic-W5-SH");
   sUiFontBold = CreateFontIndirectW(&lf);
 
-  lf.lfHeight = -13;
+  lf.lfHeight = -12;
   lf.lfWeight = FW_NORMAL;
   lf.lfQuality = ANTIALIASED_QUALITY;
   sUiFontSmall = CreateFontIndirectW(&lf);
@@ -312,8 +343,8 @@ void draw() {
     return;
   }
 
-  renderSidePanels(sMemDC);
   renderCalculatorFrameBuffer();
+  renderRightSidebar(sMemDC);
 
   HDC hdc = GetDC(sHwnd);
   if (hdc) {
@@ -357,4 +388,3 @@ HWND windowHandle() {
 }
 }
 }
-
