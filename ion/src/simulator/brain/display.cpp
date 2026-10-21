@@ -119,8 +119,8 @@ static void renderRightSidebar(HDC hdc) {
   drawBox(hdc, sx, 142, sw, 278, RGB(31, 36, 46), RGB(68, 80, 102));
 
   SelectObject(hdc, sUiFontSmall);
-  int cy = 147;
-  const int lh = 19;
+  int cy = 145;
+  const int lh = 18;
 
   // Group 1: Basic & Mode Keys
   drawTextLine(hdc, sx + 8, cy, sw - 16, lh, RGB(255, 215, 120), L"[基本操作・モード切替]");
