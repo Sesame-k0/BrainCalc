@@ -48,8 +48,28 @@ cp -f "${OUT_DIR}/epsilon.exe" "${OUT_DIR}/AppMain.exe"
 cp -f "${OUT_DIR}/AppMain.exe" "${DIST_DIR}/AppMain.exe"
 touch "${DIST_DIR}/AppMain.cfg" "${DIST_DIR}/index.din"
 
+# Copy bundled TrueType font (font.ttf) next to AppMain.exe and into BrainCalc SD bundle
+FONT_SRC=""
+for candidate in "ion/src/simulator/brain/font.ttf" "font.ttf" "../MisakiFont/misaki_gothic.ttf"; do
+  if [[ -f "$candidate" ]]; then
+    FONT_SRC="$candidate"
+    break
+  fi
+done
+
+if [[ -n "$FONT_SRC" ]]; then
+  if ! cmp -s "$FONT_SRC" "${OUT_DIR}/font.ttf" 2>/dev/null; then
+    cp -f "$FONT_SRC" "${OUT_DIR}/font.ttf" 2>/dev/null || true
+  fi
+  if ! cmp -s "$FONT_SRC" "${DIST_DIR}/font.ttf" 2>/dev/null; then
+    cp -f "$FONT_SRC" "${DIST_DIR}/font.ttf" 2>/dev/null || true
+  fi
+else
+  echo "[WARN] font.ttf source not found; skipping font bundle copy."
+fi
+
 echo "=============================================================================="
 echo "[SUCCESS] Build completed!"
 echo "  Executable : ${OUT_DIR}/AppMain.exe"
-echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe, AppMain.cfg, index.din)"
+echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe, AppMain.cfg, index.din, font.ttf)"
 echo "=============================================================================="

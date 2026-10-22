@@ -105,15 +105,15 @@ static bool handleNumberModeKey(WPARAM vkCode) {
     case 'P': pushPendingEvent(Ion::Events::Zero);  return true;
 
     // 【中段 A-L】
-    case 'A': pushPendingEvent(Ion::Events::Plus);             return true; // +
-    case 'S': pushPendingEvent(Ion::Events::Minus);            return true; // -
-    case 'D': pushPendingEvent(Ion::Events::Multiplication);   return true; // *
-    case 'F': pushPendingEvent(Ion::Events::Division);         return true; // /
-    case 'G': pushPendingEvent(Ion::Events::Equal);            return true; // =
-    case 'H': pushPendingEvent(Ion::Events::Power);            return true; // x^n (n乗)
-    case 'J': pushExternalTextEvent("\xe2\x84\xaf");           return true; // e (ネイピア数 U+212F 'ℯ')
-    case 'K': pushPendingEvent(Ion::Events::LeftParenthesis);  return true; // (
-    case 'L': pushPendingEvent(Ion::Events::RightParenthesis); return true; // )
+    case 'A': pushPendingEvent(Ion::Events::Plus);           return true; // +
+    case 'S': pushPendingEvent(Ion::Events::Minus);          return true; // -
+    case 'D': pushPendingEvent(Ion::Events::Multiplication); return true; // *
+    case 'F': pushPendingEvent(Ion::Events::Division);       return true; // /
+    case 'G': pushPendingEvent(Ion::Events::Equal);          return true; // =
+    case 'H': pushPendingEvent(Ion::Events::Power);          return true; // x^n (n乗)
+    case 'J': pushExternalTextEvent("\xe2\x84\xaf");         return true; // e (ネイピア数 U+212F 'ℯ')
+    case 'K': pushPendingEvent(Ion::Events::Ans);            return true; // ANSキー
+    case 'L': pushPendingEvent(Ion::Events::Sto);            return true; // STOキー
 
     // 【下段 Z-ー】
     case 'Z': pushPendingEvent(Ion::Events::Sqrt);  return true; // sqrt (√)

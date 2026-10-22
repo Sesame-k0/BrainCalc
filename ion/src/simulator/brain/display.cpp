@@ -112,8 +112,8 @@ static constexpr KeyCapSpec kRightHandGrid[3][5] = {
   {
     { L"H", L"x^n", L"h", false },
     { L"J", L"e",   L"j", false },
-    { L"K", L"(",   L"k", false },
-    { L"L", L")",   L"l", false },
+    { L"K", L"ANS", L"k", false },
+    { L"L", L"STO", L"l", false },
     { nullptr, nullptr, nullptr, false },
   },
   // 下段右 (N, M, ー + 余白2枠)
@@ -169,15 +169,14 @@ static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec g
 
       drawBox(hdc, kx, ky, kKeyW, kKeyH, bgColor, borderColor);
 
-      // 上部: 物理キー名 (小文字ガイド)
+      // 上部: 物理キー名 (小文字ガイド: 8px 等倍ドット)
       SelectObject(hdc, sUiFontTiny);
-      drawTextLine(hdc, kx, ky + 1, kKeyW, 11, RGB(140, 152, 172),
+      drawTextLine(hdc, kx, ky + 2, kKeyW, 10, RGB(140, 152, 172),
                    spec.keyName, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-      // 中央〜下部: 現在のモードで入力される文字・記号
-      size_t len = wcslen(activeLabel);
-      SelectObject(hdc, (len >= 3) ? sUiFontSmall : sUiFontBold);
-      drawTextLine(hdc, kx, ky + 12, kKeyW, 21, textColor,
+      // 中央〜下部: 現在のモードで入力される文字・記号 (16px 2倍ドット)
+      SelectObject(hdc, sUiFontBold);
+      drawTextLine(hdc, kx, ky + 13, kKeyW, 19, textColor,
                    activeLabel, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
   }
@@ -208,37 +207,37 @@ static void renderRightSidebar(HDC hdc) {
           numOn ? RGB(75, 195, 125) : RGB(225, 145, 75));
 
   SelectObject(hdc, sUiFontBold);
-  drawTextLine(hdc, sx + 6, 9, sw - 12, 22,
+  drawTextLine(hdc, sx + 4, 9, sw - 8, 22,
                numOn ? RGB(100, 245, 150) : RGB(255, 185, 95),
-               numOn ? L"モード: 12x (数字)" : L"モード: abc (通常)");
+               numOn ? L"モード:12x (数字)" : L"モード:abc (通常)");
 
   SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx + 6, 33, sw - 12, 22,
+  drawTextLine(hdc, sx + 4, 33, sw - 8, 22,
                RGB(215, 222, 235),
-               numOn ? L"[Shift]:切替  Enter:EXE" : L"[Shift]:切替  Enter:OK");
+               numOn ? L"Shift:切替 Ent:EXE" : L"Shift:切替 Ent:OK");
 
   // ===========================================================================
   // 2. 特殊キー（銀色キー）ヒント枠 (Y = 66..136)
   // ===========================================================================
   drawBox(hdc, sx, 66, sw, 70, RGB(29, 34, 44), RGB(64, 76, 98));
   SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx + 6, 70,  sw - 12, 20, RGB(185, 220, 255), L"F1(調):関数  F9(ツ):変数");
-  drawTextLine(hdc, sx + 6, 91,  sw - 12, 20, RGB(215, 222, 235), L"F2 / F10 / HOME: ホーム");
-  drawTextLine(hdc, sx + 6, 112, sw - 12, 20, RGB(255, 215, 130),
-               numOn ? L"PgUp: (      PgDn: )" : L"PgUp: 拡大   PgDn: 縮小");
+  drawTextLine(hdc, sx + 4, 70,  sw - 8, 20, RGB(185, 220, 255), L"F1:関数   F9:変数");
+  drawTextLine(hdc, sx + 4, 91,  sw - 8, 20, RGB(215, 222, 235), L"F2/F10/HOME:ホーム");
+  drawTextLine(hdc, sx + 4, 112, sw - 8, 20, RGB(255, 215, 130),
+               numOn ? L"PgUp:(    PgDn:)" : L"PgUp拡大  PgDn縮小");
 
   // ===========================================================================
   // 3. 左手側キー 5列×3段グリッド (Y = 142..276)
   // ===========================================================================
   SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx, 142, sw, 18, RGB(135, 198, 255), L"■ 左手側 (Q-T / A-G / Z-B)");
+  drawTextLine(hdc, sx, 142, sw, 18, RGB(135, 198, 255), L"■左手側 (Q-T/A-G)");
   drawKeyGridBlock(hdc, sx, 163, kLeftHandGrid, numOn);
 
   // ===========================================================================
   // 4. 右手側キー 5列×3段グリッド (Y = 282..416)
   // ===========================================================================
   SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx, 282, sw, 18, RGB(135, 198, 255), L"■ 右手側 (Y-P / H-L / N-ー)");
+  drawTextLine(hdc, sx, 282, sw, 18, RGB(135, 198, 255), L"■右手側 (Y-P/H-L)");
   drawKeyGridBlock(hdc, sx, 303, kRightHandGrid, numOn);
 
   // ===========================================================================
@@ -332,6 +331,52 @@ static LRESULT CALLBACK BrainWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
   }
 }
 
+static int CALLBACK fontEnumProc(const LOGFONTW * /*lpelfe*/, const TEXTMETRICW * /*lpntme*/, DWORD /*FontType*/, LPARAM lParam) {
+  *reinterpret_cast<bool *>(lParam) = true;
+  return 0; // 1つでも一致したら列挙を終了
+}
+
+static bool isFontFamilyAvailable(HDC hdc, const wchar_t * faceName) {
+  bool found = false;
+  EnumFontFamiliesW(hdc, faceName, reinterpret_cast<FONTENUMPROCW>(fontEnumProc), reinterpret_cast<LPARAM>(&found));
+  return found;
+}
+
+static const wchar_t * resolvePreferredFontFace(HDC hdc) {
+  // 多重フォールバック優先順位:
+  //   1. 同梱フォントのファミリ名 (font.ttf の内部フォント名: MisakiGothic / 美咲ゴシック)
+  //   2. Brain実機ROM内蔵フォント (DFGHSGothic-W5-SH)
+  //   3. PC環境フォールバック (MS Gothic または Meiryo)
+  static constexpr const wchar_t * kFontCandidates[] = {
+    L"MisakiGothic",
+    L"美咲ゴシック",
+    L"DFGHSGothic-W5-SH",
+    L"MS Gothic",
+    L"Meiryo"
+  };
+
+  for (const wchar_t * candidate : kFontCandidates) {
+    if (isFontFamilyAvailable(hdc, candidate)) {
+      return candidate;
+    }
+  }
+  return kFontCandidates[0];
+}
+
+static HFONT createFontWithFallback(const wchar_t * faceName, int height, LONG weight) {
+  LOGFONTW lf = {};
+  lf.lfHeight = height;
+  lf.lfWeight = weight;
+  lf.lfCharSet = DEFAULT_CHARSET;
+  lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+  lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+  lf.lfQuality = ANTIALIASED_QUALITY; // 明示的に 4 を指定 (ClearTypeはBrain実機で滲むため禁止)
+  lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+  wcsncpy(lf.lfFaceName, faceName, LF_FACESIZE - 1);
+  lf.lfFaceName[LF_FACESIZE - 1] = L'\0';
+  return CreateFontIndirectW(&lf);
+}
+
 void init() {
   HINSTANCE hInstance = GetModuleHandleW(NULL);
 
@@ -395,24 +440,14 @@ void init() {
   sDibPixels = static_cast<uint32_t *>(bits);
   sOldBitmap = SelectObject(sMemDC, sDibBitmap);
 
-  // Create Brain dictionary built-in font with ANTIALIASED_QUALITY (4) per FOR-AGENTS.md Section 3-5
-  LOGFONTW lf = {};
-  lf.lfHeight = -14;
-  lf.lfWeight = FW_BOLD;
-  lf.lfCharSet = DEFAULT_CHARSET;
-  lf.lfQuality = ANTIALIASED_QUALITY; // Explicitly 4 (ClearType is forbidden on Brain)
-  wcscpy(lf.lfFaceName, L"DFGHSGothic-W5-SH");
-  sUiFontBold = CreateFontIndirectW(&lf);
-
-  lf.lfHeight = -12;
-  lf.lfWeight = FW_NORMAL;
-  lf.lfQuality = ANTIALIASED_QUALITY;
-  sUiFontSmall = CreateFontIndirectW(&lf);
-
-  lf.lfHeight = -10;
-  lf.lfWeight = FW_NORMAL;
-  lf.lfQuality = ANTIALIASED_QUALITY;
-  sUiFontTiny = CreateFontIndirectW(&lf);
+  // Resolve preferred font face with multi-stage fallback and ANTIALIASED_QUALITY (4)
+  // 美咲フォント (8x8ドット) 使用時は整数倍サイズ (-16 = 2倍, -8 = 1倍) かつ FW_NORMAL で
+  // ドット潰れ・端数滲みのない完全なピクセル描画にする
+  const wchar_t * faceName = resolvePreferredFontFace(sMemDC);
+  bool isMisaki = (wcscmp(faceName, L"MisakiGothic") == 0 || wcscmp(faceName, L"美咲ゴシック") == 0);
+  sUiFontBold  = createFontWithFallback(faceName, isMisaki ? -16 : -14, isMisaki ? FW_NORMAL : FW_BOLD);
+  sUiFontSmall = createFontWithFallback(faceName, isMisaki ? -16 : -12, FW_NORMAL);
+  sUiFontTiny  = createFontWithFallback(faceName, isMisaki ? -8  : -10, FW_NORMAL);
 
   ReleaseDC(sHwnd, hdcScreen);
 
