@@ -54,6 +54,7 @@ namespace Main {
 static bool sNeedsRefresh = false;
 static wchar_t sExeDirFontPath[MAX_PATH] = L"";
 static bool sExeDirFontLoaded = false;
+static HWND sTaskBarHwnd = NULL;
 
 static void loadBundledFont() {
   // 1. カレントディレクトリの font.ttf を一時登録
@@ -90,10 +91,44 @@ static void unloadBundledFont() {
   RemoveFontResourceW(L"font.ttf");
 }
 
+void hideTaskBar() {
+  HWND hTaskBar = FindWindowW(L"HHTaskBar", NULL);
+  if (hTaskBar != NULL) {
+    sTaskBarHwnd = hTaskBar;
+    ShowWindow(hTaskBar, SW_HIDE);
+  }
+}
+
+void restoreTaskBar() {
+  HWND hTaskBar = sTaskBarHwnd ? sTaskBarHwnd : FindWindowW(L"HHTaskBar", NULL);
+  if (hTaskBar != NULL) {
+    ShowWindow(hTaskBar, SW_SHOW);
+    sTaskBarHwnd = NULL;
+  }
+}
+
 void init() {
   loadBundledFont();
   Ion::Simulator::Random::init();
   Ion::Simulator::Display::init();
+
+  // A. OSタスクバー／インジケーター（右上バッテリーアイコン等）を非表示化
+  hideTaskBar();
+
+  // B. 自アプリのウィンドウを完全な最前面（HWND_TOPMOST）に固定
+  HWND hWnd = Ion::Simulator::Display::windowHandle();
+  if (hWnd != NULL) {
+#ifdef _WIN32_WCE
+    SetWindowPos(hWnd, HWND_TOPMOST, 0, 0,
+                 Ion::Simulator::Display::kBrainScreenWidth,
+                 Ion::Simulator::Display::kBrainScreenHeight,
+                 SWP_SHOWWINDOW);
+#else
+    SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+#endif
+  }
+
   setNeedsRefresh();
 }
 
@@ -105,11 +140,12 @@ void refresh() {
   if (!sNeedsRefresh) {
     return;
   }
-  Ion::Simulator::Display::draw();
   sNeedsRefresh = false;
+  Ion::Simulator::Display::draw();
 }
 
 void quit() {
+  restoreTaskBar();
   Ion::Simulator::Display::quit();
   unloadBundledFont();
 }
@@ -124,4 +160,3 @@ int main(int argc, char * argv[]) {
   Ion::Simulator::Main::quit();
   return 0;
 }
-

@@ -11,6 +11,7 @@
 #define _UNICODE
 #endif
 #include <windows.h>
+#include <kandinsky/rect.h>
 
 namespace Ion {
 namespace Simulator {
@@ -40,6 +41,8 @@ constexpr int kExitButtonH = 38;
 void init();
 void quit();
 void draw();
+void markCalcRectDirty(KDRect r);
+void markSidebarDirty();
 HWND windowHandle();
 
 }

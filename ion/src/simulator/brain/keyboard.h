@@ -11,25 +11,26 @@
 #define _UNICODE
 #endif
 #include <windows.h>
-#include <ion/events.h>
 #include <ion/keyboard.h>
+#include <ion/events.h>
 
 namespace Ion {
 namespace Simulator {
 namespace Keyboard {
 
+void onKeyDown(WPARAM vkCode, LPARAM lParam);
+void onKeyUp(WPARAM vkCode, LPARAM lParam);
+void onTouchClick(int x, int y);
+void pumpMessages();
+
 bool isNumberInputEnabled();
 void setNumberInputEnabled(bool enabled);
 void toggleNumberInput();
 
-void onKeyDown(WPARAM vkCode, LPARAM lParam);
-void onKeyUp(WPARAM vkCode, LPARAM lParam);
-void onTouchClick(int x, int y);
+bool hasPendingEvent();
+Ion::Events::Event popPendingEvent();
 void requestTermination();
 bool isTerminationRequested();
-
-Ion::Events::Event popPendingEvent();
-void pumpMessages();
 
 }
 }

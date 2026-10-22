@@ -3,14 +3,13 @@
 PLATFORM ?= device
 DEBUG ?= 0
 
-HOME_DISPLAY_EXTERNALS ?= 1
 EPSILON_VERSION ?= 15.5.0
 OMEGA_VERSION ?= 2.0.2
 OMEGA_VERSION_SHORT ?= 2.0 # 3 chars max, required for compatibility
 UPSILON_VERSION ?= 1.1.2
 # OMEGA_USERNAME ?= N/A
 OMEGA_STATE ?= dev
-EPSILON_APPS ?= calculation graph rpn statistics probability solver atomic sequence regression reader settings external
+EPSILON_APPS ?= calculation graph rpn statistics probability solver atomic sequence regression reader settings
 SUBMODULES_APPS = atomic rpn
 EPSILON_I18N ?= en fr nl pt it de es hu
 EPSILON_COUNTRIES ?= WW CA DE ES FR GB IT NL PT US

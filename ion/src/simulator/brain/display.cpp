@@ -34,6 +34,14 @@ static HFONT sUiFontBold = NULL;
 static HFONT sUiFontSmall = NULL;
 static HFONT sUiFontTiny = NULL;
 
+// Dirty region tracking for differential updates (pushRect)
+static bool sCalcDirty = true;
+static int sDirtyMinX = 0;
+static int sDirtyMinY = 0;
+static int sDirtyMaxX = Ion::Display::Width;
+static int sDirtyMaxY = Ion::Display::Height;
+static bool sSidebarDirty = true;
+
 static inline uint32_t rgb565ToRgb888(uint16_t c) {
   uint32_t r = (c >> 11) & 0x1F;
   uint32_t g = (c >> 5) & 0x3F;
@@ -42,6 +50,37 @@ static inline uint32_t rgb565ToRgb888(uint16_t c) {
   g = (g << 2) | (g >> 4);
   b = (b << 3) | (b >> 2);
   return (r << 16) | (g << 8) | b;
+}
+
+void markCalcRectDirty(KDRect r) {
+  int rx0 = r.x();
+  int ry0 = r.y();
+  int rx1 = rx0 + r.width();
+  int ry1 = ry0 + r.height();
+  if (rx0 < 0) rx0 = 0;
+  if (ry0 < 0) ry0 = 0;
+  if (rx1 > Ion::Display::Width) rx1 = Ion::Display::Width;
+  if (ry1 > Ion::Display::Height) ry1 = Ion::Display::Height;
+  if (rx0 >= rx1 || ry0 >= ry1) {
+    return;
+  }
+
+  if (!sCalcDirty) {
+    sDirtyMinX = rx0;
+    sDirtyMinY = ry0;
+    sDirtyMaxX = rx1;
+    sDirtyMaxY = ry1;
+    sCalcDirty = true;
+  } else {
+    if (rx0 < sDirtyMinX) sDirtyMinX = rx0;
+    if (ry0 < sDirtyMinY) sDirtyMinY = ry0;
+    if (rx1 > sDirtyMaxX) sDirtyMaxX = rx1;
+    if (ry1 > sDirtyMaxY) sDirtyMaxY = ry1;
+  }
+}
+
+void markSidebarDirty() {
+  sSidebarDirty = true;
 }
 
 static void drawBox(HDC hdc, int x, int y, int w, int h, COLORREF bgColor, COLORREF borderColor) {
@@ -66,10 +105,10 @@ static void drawTextLine(HDC hdc, int x, int y, int w, int h, COLORREF color, co
 }
 
 struct KeyCapSpec {
-  const wchar_t * keyName; // 物理キートップ (nullptr なら空白枠)
+  const wchar_t * keyName;  // 物理キートップ (nullptr なら空白枠)
   const wchar_t * numLabel; // 数字モード (12x) 時の表示
   const wchar_t * abcLabel; // 通常モード (abc) 時の表示
-  bool isDigitInNumMode;    // 数字モード時に数字キーか（色分け用）
+  bool isDigitInNumMode;    // 数字モード時に数字キーか
 };
 
 static constexpr KeyCapSpec kLeftHandGrid[3][5] = {
@@ -141,40 +180,28 @@ static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec g
       const KeyCapSpec & spec = grid[r][c];
 
       if (!spec.keyName) {
-        // 空き枠（ダミー枠）
-        drawBox(hdc, kx, ky, kKeyW, kKeyH, RGB(23, 27, 35), RGB(42, 49, 62));
+        // 空き枠（控えめな薄グレー枠）
+        drawBox(hdc, kx, ky, kKeyW, kKeyH, RGB(228, 233, 239), RGB(208, 215, 223));
         continue;
       }
 
       const wchar_t * activeLabel = numOn ? spec.numLabel : spec.abcLabel;
-      COLORREF bgColor;
-      COLORREF borderColor;
-      COLORREF textColor;
 
-      if (numOn) {
-        if (spec.isDigitInNumMode) {
-          bgColor = RGB(36, 48, 66);
-          borderColor = RGB(88, 130, 185);
-          textColor = RGB(135, 245, 175);
-        } else {
-          bgColor = RGB(38, 42, 54);
-          borderColor = RGB(82, 95, 120);
-          textColor = RGB(255, 220, 125);
-        }
-      } else {
-        bgColor = RGB(42, 38, 48);
-        borderColor = RGB(110, 92, 125);
-        textColor = RGB(240, 232, 255);
-      }
+      // NumWorksに合わせた明るいトーン（キー枠: 白、枠線: 薄グレー、文字: 濃グレー）
+      COLORREF bgColor = RGB(255, 255, 255);
+      COLORREF borderColor = RGB(196, 204, 214);
+      COLORREF textColor = (numOn && spec.isDigitInNumMode)
+                             ? RGB(32, 82, 145)
+                             : RGB(45, 52, 62);
 
       drawBox(hdc, kx, ky, kKeyW, kKeyH, bgColor, borderColor);
 
-      // 上部: 物理キー名 (小文字ガイド: 8px 等倍ドット)
+      // 上部: 物理キー名 (小文字ガイド: 8px 等倍ドット, 中間グレー)
       SelectObject(hdc, sUiFontTiny);
-      drawTextLine(hdc, kx, ky + 2, kKeyW, 10, RGB(140, 152, 172),
+      drawTextLine(hdc, kx, ky + 2, kKeyW, 10, RGB(125, 135, 148),
                    spec.keyName, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-      // 中央〜下部: 現在のモードで入力される文字・記号 (16px 2倍ドット)
+      // 中央〜下部: 現在のモードで入力される文字・記号 (16px 2倍ドット, 濃グレー)
       SelectObject(hdc, sUiFontBold);
       drawTextLine(hdc, kx, ky + 13, kKeyW, 19, textColor,
                    activeLabel, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -183,12 +210,12 @@ static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec g
 }
 
 static void renderRightSidebar(HDC hdc) {
-  // Clear right sidebar area (X = 640..799, Y = 0..479) in the 32-bit DIB buffer
+  // Clear right sidebar area (X = 640..799, Y = 0..479) with #EDF1F5 in 32-bit DIB buffer
   for (int y = 0; y < kBrainScreenHeight; y++) {
     uint32_t * row = sDibPixels + y * kBrainScreenWidth;
-    row[kSidebarX] = 0x00465268; // 1px separator line at X = 640
+    row[kSidebarX] = 0x00C8D0D8; // 1px light gray separator line at X = 640
     for (int x = kSidebarX + 1; x < kBrainScreenWidth; x++) {
-      row[x] = 0x001B1F27; // Dark slate background
+      row[x] = 0x00EDF1F5; // #EDF1F5 light background matching NumWorks
     }
   }
 
@@ -202,75 +229,74 @@ static void renderRightSidebar(HDC hdc) {
   // ===========================================================================
   // 1. モード表示ボックス (Y = 6..60)
   // ===========================================================================
-  drawBox(hdc, sx, 6, sw, 54,
-          numOn ? RGB(26, 44, 38) : RGB(48, 34, 28),
-          numOn ? RGB(75, 195, 125) : RGB(225, 145, 75));
+  drawBox(hdc, sx, 6, sw, 54, RGB(255, 255, 255), RGB(190, 199, 210));
 
   SelectObject(hdc, sUiFontBold);
   drawTextLine(hdc, sx + 4, 9, sw - 8, 22,
-               numOn ? RGB(100, 245, 150) : RGB(255, 185, 95),
+               numOn ? RGB(28, 92, 152) : RGB(145, 78, 24),
                numOn ? L"モード:12x (数字)" : L"モード:abc (通常)");
 
   SelectObject(hdc, sUiFontSmall);
   drawTextLine(hdc, sx + 4, 33, sw - 8, 22,
-               RGB(215, 222, 235),
-               numOn ? L"Shift:切替 Ent:EXE" : L"Shift:切替 Ent:OK");
+               RGB(65, 74, 86),
+               numOn ? L"F2:切替   Ent:EXE" : L"F2:切替   Ent:OK");
 
   // ===========================================================================
   // 2. 特殊キー（銀色キー）ヒント枠 (Y = 66..136)
   // ===========================================================================
-  drawBox(hdc, sx, 66, sw, 70, RGB(29, 34, 44), RGB(64, 76, 98));
+  drawBox(hdc, sx, 66, sw, 70, RGB(255, 255, 255), RGB(196, 204, 214));
   SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx + 4, 70,  sw - 8, 20, RGB(185, 220, 255), L"F1:関数   F9:変数");
-  drawTextLine(hdc, sx + 4, 91,  sw - 8, 20, RGB(215, 222, 235), L"F2/F10/HOME:ホーム");
-  drawTextLine(hdc, sx + 4, 112, sw - 8, 20, RGB(255, 215, 130),
+  drawTextLine(hdc, sx + 4, 70,  sw - 8, 20, RGB(45, 52, 62), L"F1:関数   F9:変数");
+  drawTextLine(hdc, sx + 4, 91,  sw - 8, 20, RGB(65, 74, 86), L"F10 / HOME: ホーム");
+  drawTextLine(hdc, sx + 4, 112, sw - 8, 20, RGB(45, 52, 62),
                numOn ? L"PgUp:(    PgDn:)" : L"PgUp拡大  PgDn縮小");
 
   // ===========================================================================
   // 3. 左手側キー 5列×3段グリッド (Y = 142..276)
   // ===========================================================================
   SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx, 142, sw, 18, RGB(135, 198, 255), L"■左手側 (Q-T/A-G)");
+  drawTextLine(hdc, sx, 142, sw, 18, RGB(58, 66, 78), L"■左手側 (Q-T/A-G)");
   drawKeyGridBlock(hdc, sx, 163, kLeftHandGrid, numOn);
 
   // ===========================================================================
   // 4. 右手側キー 5列×3段グリッド (Y = 282..416)
   // ===========================================================================
   SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx, 282, sw, 18, RGB(135, 198, 255), L"■右手側 (Y-P/H-L)");
+  drawTextLine(hdc, sx, 282, sw, 18, RGB(58, 66, 78), L"■右手側 (Y-P/H-L)");
   drawKeyGridBlock(hdc, sx, 303, kRightHandGrid, numOn);
 
   // ===========================================================================
-  // 5. 最下部「終了」ボタン (Y = 434..472)
+  // 5. 最下部「終了」ボタン (Y = 434..472) - 控えめなフラットボタン
   // ===========================================================================
   SelectObject(hdc, sUiFontBold);
   drawBox(hdc, kExitButtonX, kExitButtonY, kExitButtonW, kExitButtonH,
-          RGB(125, 38, 46), RGB(220, 98, 108));
+          RGB(222, 228, 235), RGB(184, 193, 204));
   drawTextLine(hdc, kExitButtonX, kExitButtonY, kExitButtonW, kExitButtonH,
-               RGB(255, 238, 238), L"終了",
+               RGB(52, 59, 68), L"終了",
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
   SelectObject(hdc, oldFont);
 }
 
-static void renderCalculatorFrameBuffer() {
+static void renderCalculatorRect(int x0, int y0, int x1, int y1) {
   const KDColor * src = Framebuffer::address();
   if (!src || !sDibPixels) {
     return;
   }
 
-  // Render 320x240 RGB565 framebuffer scaled 2x at left-aligned X=0..639, Y=0..479
-  for (int y = 0; y < Ion::Display::Height; y++) {
+  // Integer 2x nearest-neighbor expansion of only the dirty [x0..x1) x [y0..y1) sub-rectangle
+  for (int y = y0; y < y1; y++) {
     const KDColor * srcRow = src + y * Ion::Display::Width;
     uint32_t * dstRow0 = sDibPixels + (kCalcOffsetY + y * 2) * kBrainScreenWidth + kCalcOffsetX;
     uint32_t * dstRow1 = dstRow0 + kBrainScreenWidth;
 
-    for (int x = 0; x < Ion::Display::Width; x++) {
+    for (int x = x0; x < x1; x++) {
       uint32_t rgb = rgb565ToRgb888(static_cast<uint16_t>(srcRow[x]));
-      dstRow0[x * 2]     = rgb;
-      dstRow0[x * 2 + 1] = rgb;
-      dstRow1[x * 2]     = rgb;
-      dstRow1[x * 2 + 1] = rgb;
+      int dx = x * 2;
+      dstRow0[dx]     = rgb;
+      dstRow0[dx + 1] = rgb;
+      dstRow1[dx]     = rgb;
+      dstRow1[dx + 1] = rgb;
     }
   }
 }
@@ -282,12 +308,11 @@ static LRESULT CALLBACK BrainWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
       return 1;
 
     case WM_SIZE: {
-      // Enforce fixed 800x480 effective resolution on Windows CE (KEY-MAPPING.md Section 5)
 #ifdef _WIN32_WCE
       int w = LOWORD(lParam);
       int h = HIWORD(lParam);
       if (w != kBrainScreenWidth || h != kBrainScreenHeight) {
-        SetWindowPos(hWnd, NULL, 0, 0, kBrainScreenWidth, kBrainScreenHeight, SWP_NOMOVE | SWP_NOZORDER);
+        SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, kBrainScreenWidth, kBrainScreenHeight, SWP_SHOWWINDOW);
       }
 #endif
       return 0;
@@ -314,7 +339,13 @@ static LRESULT CALLBACK BrainWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
       PAINTSTRUCT ps;
       HDC hdc = BeginPaint(hWnd, &ps);
       if (sMemDC) {
-        BitBlt(hdc, 0, 0, kBrainScreenWidth, kBrainScreenHeight, sMemDC, 0, 0, SRCCOPY);
+        int px = ps.rcPaint.left;
+        int py = ps.rcPaint.top;
+        int pw = ps.rcPaint.right - ps.rcPaint.left;
+        int ph = ps.rcPaint.bottom - ps.rcPaint.top;
+        if (pw > 0 && ph > 0) {
+          BitBlt(hdc, px, py, pw, ph, sMemDC, px, py, SRCCOPY);
+        }
       }
       EndPaint(hWnd, &ps);
       return 0;
@@ -322,6 +353,7 @@ static LRESULT CALLBACK BrainWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 
     case WM_CLOSE:
     case WM_DESTROY:
+      Main::restoreTaskBar();
       Keyboard::requestTermination();
       PostQuitMessage(0);
       return 0;
@@ -388,16 +420,16 @@ void init() {
   wc.hInstance = hInstance;
   wc.hIcon = NULL;
   wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
-  wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+  wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH));
   wc.lpszMenuName = NULL;
   wc.lpszClassName = kWindowClassName;
 
   RegisterClassW(&wc);
 
 #ifdef _WIN32_WCE
-  // Fixed 800x480 window on SHARP Brain (avoiding rightmost 54px touch strip)
+  // Fixed 800x480 topmost popup window on SHARP Brain (avoiding rightmost 54px touch strip)
   DWORD style = WS_POPUP | WS_VISIBLE;
-  DWORD exStyle = 0;
+  DWORD exStyle = WS_EX_TOPMOST;
   int winX = 0;
   int winY = 0;
   int winW = kBrainScreenWidth;
@@ -405,7 +437,7 @@ void init() {
 #else
   // Fixed-size window with exact 800x480 client area on desktop Windows
   DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE;
-  DWORD exStyle = 0;
+  DWORD exStyle = WS_EX_TOPMOST;
   RECT rc = { 0, 0, kBrainScreenWidth, kBrainScreenHeight };
   AdjustWindowRectEx(&rc, style, FALSE, exStyle);
   int winW = rc.right - rc.left;
@@ -449,6 +481,17 @@ void init() {
   sUiFontSmall = createFontWithFallback(faceName, isMisaki ? -16 : -12, FW_NORMAL);
   sUiFontTiny  = createFontWithFallback(faceName, isMisaki ? -8  : -10, FW_NORMAL);
 
+  sCalcDirty = true;
+  sDirtyMinX = 0;
+  sDirtyMinY = 0;
+  sDirtyMaxX = Ion::Display::Width;
+  sDirtyMaxY = Ion::Display::Height;
+  sSidebarDirty = true;
+
+  // Initial render into memory DC before showing window
+  renderCalculatorRect(0, 0, Ion::Display::Width, Ion::Display::Height);
+  renderRightSidebar(sMemDC);
+
   ReleaseDC(sHwnd, hdcScreen);
 
   ShowWindow(sHwnd, SW_SHOW);
@@ -459,13 +502,40 @@ void draw() {
   if (!sHwnd || !sMemDC || !sDibPixels) {
     return;
   }
-
-  renderCalculatorFrameBuffer();
-  renderRightSidebar(sMemDC);
+  if (!sCalcDirty && !sSidebarDirty) {
+    return;
+  }
 
   HDC hdc = GetDC(sHwnd);
+
+  // 1. 電卓画面領域: pushRect で要求された差分矩形のみ 2倍整数展開 & 等倍 BitBlt
+  if (sCalcDirty) {
+    int x0 = sDirtyMinX;
+    int y0 = sDirtyMinY;
+    int x1 = sDirtyMaxX;
+    int y1 = sDirtyMaxY;
+    sCalcDirty = false;
+
+    renderCalculatorRect(x0, y0, x1, y1);
+    if (hdc) {
+      int dstX = kCalcOffsetX + x0 * 2;
+      int dstY = kCalcOffsetY + y0 * 2;
+      int dstW = (x1 - x0) * 2;
+      int dstH = (y1 - y0) * 2;
+      BitBlt(hdc, dstX, dstY, dstW, dstH, sMemDC, dstX, dstY, SRCCOPY);
+    }
+  }
+
+  // 2. 右側サイドバー領域: モード切替時のみ再描画 & 等倍 BitBlt
+  if (sSidebarDirty) {
+    sSidebarDirty = false;
+    renderRightSidebar(sMemDC);
+    if (hdc) {
+      BitBlt(hdc, kSidebarX, 0, kSidebarWidth, kBrainScreenHeight, sMemDC, kSidebarX, 0, SRCCOPY);
+    }
+  }
+
   if (hdc) {
-    BitBlt(hdc, 0, 0, kBrainScreenWidth, kBrainScreenHeight, sMemDC, 0, 0, SRCCOPY);
     ReleaseDC(sHwnd, hdc);
   }
 }

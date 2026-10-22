@@ -11,11 +11,13 @@ ion_src += $(addprefix ion/src/simulator/brain/, \
   random.cpp \
   clipboard.cpp \
   console.cpp \
+  battery.cpp \
 )
 
 ion_src += ion/src/shared/collect_registers.cpp
 
-# Remove SDL-dependent simulator files added by ion/src/simulator/Makefile
+# Remove SDL-dependent simulator files and dummy battery added by ion/src/simulator/Makefile
+sdl_simu_needs_to_be_removed += ion/src/shared/dummy/battery.cpp
 sdl_simu_needs_to_be_removed += $(addprefix ion/src/simulator/shared/, \
   main.cpp \
   clipboard.cpp \

@@ -24,13 +24,16 @@ const char * Event::text() const {
 
 Event getPlatformEvent() {
   Simulator::Keyboard::pumpMessages();
-  Simulator::Main::refresh();
   if (Simulator::Keyboard::isTerminationRequested()) {
     return Termination;
   }
-  return Simulator::Keyboard::popPendingEvent();
+  Event e = Simulator::Keyboard::popPendingEvent();
+  if (e == None) {
+    // キュー内のイベントをすべて処理し終えたタイミングで差分画面更新を実行
+    Simulator::Main::refresh();
+  }
+  return e;
 }
 
 }
 }
-

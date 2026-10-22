@@ -1,4 +1,5 @@
 #include "framebuffer.h"
+#include "display.h"
 #include "main.h"
 #include <ion/display.h>
 #include <stdint.h>
@@ -14,15 +15,17 @@ static KDFrameBuffer sFrameBuffer = KDFrameBuffer(sPixels, KDSize(Ion::Display::
 
 void pushRect(KDRect r, const KDColor * pixels) {
   if (sFrameBufferActive) {
-    Simulator::Main::setNeedsRefresh();
     sFrameBuffer.pushRect(r, pixels);
+    Simulator::Display::markCalcRectDirty(r);
+    Simulator::Main::setNeedsRefresh();
   }
 }
 
 void pushRectUniform(KDRect r, KDColor c) {
   if (sFrameBufferActive) {
-    Simulator::Main::setNeedsRefresh();
     sFrameBuffer.pushRectUniform(r, c);
+    Simulator::Display::markCalcRectDirty(r);
+    Simulator::Main::setNeedsRefresh();
   }
 }
 
@@ -50,4 +53,3 @@ void setActive(bool enabled) {
 }
 }
 }
-

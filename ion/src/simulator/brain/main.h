@@ -8,6 +8,8 @@ namespace Main {
 void init();
 void setNeedsRefresh();
 void refresh();
+void hideTaskBar();
+void restoreTaskBar();
 void quit();
 
 }
@@ -15,4 +17,3 @@ void quit();
 }
 
 #endif
-
