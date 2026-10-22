@@ -8,18 +8,25 @@
 #define _UNICODE
 #endif
 #include <windows.h>
+#include <string.h>
 
 #include "keyboard.h"
 #include "display.h"
 #include "main.h"
 
 namespace Ion {
+namespace Events {
+char * sharedExternalTextBuffer();
+}
+}
+
+namespace Ion {
 namespace Simulator {
 namespace Keyboard {
 
+// true  = 数字モード (12x)
+// false = 通常モード (abc)
 static bool sNumberInputEnabled = true;
-static NumberPattern sNumberPattern = NumberPattern::PatternA;
-static bool sShiftKeyDown = false;
 static bool sTerminationRequested = false;
 static Ion::Keyboard::State sKeyState(0);
 
@@ -37,6 +44,15 @@ static void pushPendingEvent(Ion::Events::Event e) {
   if (nextTail != sEventQueueHead) {
     sEventQueue[sEventQueueTail] = e;
     sEventQueueTail = nextTail;
+  }
+}
+
+static void pushExternalTextEvent(const char * utf8Text) {
+  char * buf = Ion::Events::sharedExternalTextBuffer();
+  if (buf && utf8Text) {
+    strncpy(buf, utf8Text, 31);
+    buf[31] = '\0';
+    pushPendingEvent(Ion::Events::ExternalText);
   }
 }
 
@@ -65,27 +81,6 @@ void toggleNumberInput() {
   Main::setNeedsRefresh();
 }
 
-NumberPattern numberInputPattern() {
-  return sNumberPattern;
-}
-
-void toggleNumberInputPattern() {
-  sNumberPattern = (sNumberPattern == NumberPattern::PatternA)
-                     ? NumberPattern::PatternB
-                     : NumberPattern::PatternA;
-  Main::setNeedsRefresh();
-}
-
-bool isShiftActive() {
-  if (sShiftKeyDown || (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) {
-    return true;
-  }
-  Ion::Events::ShiftAlphaStatus status = Ion::Events::shiftAlphaStatus();
-  return status == Ion::Events::ShiftAlphaStatus::Shift ||
-         status == Ion::Events::ShiftAlphaStatus::ShiftAlpha ||
-         status == Ion::Events::ShiftAlphaStatus::ShiftAlphaLock;
-}
-
 void requestTermination() {
   sTerminationRequested = true;
 }
@@ -94,141 +89,51 @@ bool isTerminationRequested() {
   return sTerminationRequested;
 }
 
-// Shift + Digit (1..9, 0) shortcut mapping shown in the sidebar cheat sheet:
-// Shift+1: +, Shift+2: -, Shift+3: *, Shift+4: /, Shift+5: (, Shift+6: ),
-// Shift+7: ^, Shift+8: √, Shift+9: π, Shift+0: =
-static Ion::Events::Event mapShiftDigitShortcut(int digit) {
-  switch (digit) {
-    case 1: return Ion::Events::Plus;
-    case 2: return Ion::Events::Minus;
-    case 3: return Ion::Events::Multiplication;
-    case 4: return Ion::Events::Division;
-    case 5: return Ion::Events::LeftParenthesis;
-    case 6: return Ion::Events::RightParenthesis;
-    case 7: return Ion::Events::Power;
-    case 8: return Ion::Events::Sqrt;
-    case 9: return Ion::Events::Pi;
-    case 0: return Ion::Events::Equal;
-    default: return Ion::Events::None;
-  }
-}
-
-static int digitFromPatternA(WPARAM vkCode) {
+// KEY-MAPPING.md Section 4: 【数字モード（ON / 12x）時】
+static bool handleNumberModeKey(WPARAM vkCode) {
   switch (vkCode) {
-    case 'Q': return 1;
-    case 'W': return 2;
-    case 'E': return 3;
-    case 'R': return 4;
-    case 'T': return 5;
-    case 'Y': return 6;
-    case 'U': return 7;
-    case 'I': return 8;
-    case 'O': return 9;
-    case 'P': return 0;
-    default:  return -1;
-  }
-}
+    // 【上段 Q-P】 -> 1, 2, 3, 4, 5, 6, 7, 8, 9, 0
+    case 'Q': pushPendingEvent(Ion::Events::One);   return true;
+    case 'W': pushPendingEvent(Ion::Events::Two);   return true;
+    case 'E': pushPendingEvent(Ion::Events::Three); return true;
+    case 'R': pushPendingEvent(Ion::Events::Four);  return true;
+    case 'T': pushPendingEvent(Ion::Events::Five);  return true;
+    case 'Y': pushPendingEvent(Ion::Events::Six);   return true;
+    case 'U': pushPendingEvent(Ion::Events::Seven); return true;
+    case 'I': pushPendingEvent(Ion::Events::Eight); return true;
+    case 'O': pushPendingEvent(Ion::Events::Nine);  return true;
+    case 'P': pushPendingEvent(Ion::Events::Zero);  return true;
 
-static int digitFromPatternB(WPARAM vkCode) {
-  switch (vkCode) {
-    case 'I':  return 7;
-    case 'O':  return 8;
-    case 'P':  return 9;
-    case 'J':  return 4;
-    case 'K':  return 5;
-    case 'L':  return 6;
-    case 'N':  return 1;
-    case 'M':  return 2;
-    case 0xBD: return 3; // 'ー'
-    case 'B':  return 0;
-    default:   return -1;
-  }
-}
+    // 【中段 A-L】
+    case 'A': pushPendingEvent(Ion::Events::Plus);             return true; // +
+    case 'S': pushPendingEvent(Ion::Events::Minus);            return true; // -
+    case 'D': pushPendingEvent(Ion::Events::Multiplication);   return true; // *
+    case 'F': pushPendingEvent(Ion::Events::Division);         return true; // /
+    case 'G': pushPendingEvent(Ion::Events::Equal);            return true; // =
+    case 'H': pushPendingEvent(Ion::Events::Power);            return true; // x^n (n乗)
+    case 'J': pushExternalTextEvent("\xe2\x84\xaf");           return true; // e (ネイピア数 U+212F 'ℯ')
+    case 'K': pushPendingEvent(Ion::Events::LeftParenthesis);  return true; // (
+    case 'L': pushPendingEvent(Ion::Events::RightParenthesis); return true; // )
 
-static Ion::Events::Event mapNumberModePatternA(WPARAM vkCode) {
-  // FOR-AGENTS.md Pattern A:
-  // 'Q','W','E','R','T','Y','U','I','O','P' -> '1','2','3','4','5','6','7','8','9','0'
-  switch (vkCode) {
-    case 'Q': return Ion::Events::One;
-    case 'W': return Ion::Events::Two;
-    case 'E': return Ion::Events::Three;
-    case 'R': return Ion::Events::Four;
-    case 'T': return Ion::Events::Five;
-    case 'Y': return Ion::Events::Six;
-    case 'U': return Ion::Events::Seven;
-    case 'I': return Ion::Events::Eight;
-    case 'O': return Ion::Events::Nine;
-    case 'P': return Ion::Events::Zero;
+    // 【下段 Z-ー】
+    case 'Z': pushPendingEvent(Ion::Events::Sqrt);  return true; // sqrt (√)
+    case 'X': pushPendingEvent(Ion::Events::XNT);   return true; // x,n,t
+    case 'C': pushPendingEvent(Ion::Events::Power); return true; // ^ (累乗)
+    case 'V': pushPendingEvent(Ion::Events::Pi);    return true; // pi (π)
+    case 'B': pushPendingEvent(Ion::Events::Log);   return true; // log
+    case 'N': pushPendingEvent(Ion::Events::Comma); return true; // ,
+    case 'M': pushPendingEvent(Ion::Events::Dot);   return true; // .
+    case 0xBD: // [ー(長音記号)] -> マイナス (-)
+      pushPendingEvent(Ion::Events::Minus);
+      return true;
 
-    // Middle & bottom rows mapped to convenient math operators & functions
-    case 'A': return Ion::Events::Plus;
-    case 'S': return Ion::Events::Minus;
-    case 'D': return Ion::Events::Multiplication;
-    case 'F': return Ion::Events::Division;
-    case 'G': return Ion::Events::Power;
-    case 'H': return Ion::Events::LeftParenthesis;
-    case 'J': return Ion::Events::RightParenthesis;
-    case 'K': return Ion::Events::Sqrt;
-    case 'L': return Ion::Events::Pi;
-
-    case 'Z': return Ion::Events::Ans;
-    case 'X': return Ion::Events::XNT;
-    case 'C': return Ion::Events::Sine;
-    case 'V': return Ion::Events::Cosine;
-    case 'B': return Ion::Events::Tangent;
-    case 'N': return Ion::Events::Ln;
-    case 'M': return Ion::Events::Log;
-    case 0xBD: // VK_OEM_MINUS ('ー')
-      return Ion::Events::Minus;
     default:
-      return Ion::Events::None;
+      return false;
   }
 }
 
-static Ion::Events::Event mapNumberModePatternB(WPARAM vkCode) {
-  // FOR-AGENTS.md Pattern B (Tenkey-like layout):
-  // I, O, P -> 7, 8, 9
-  // J, K, L -> 4, 5, 6
-  // N, M, ー(0xBD) -> 1, 2, 3
-  // B -> 0
-  // H -> .
-  switch (vkCode) {
-    case 'I': return Ion::Events::Seven;
-    case 'O': return Ion::Events::Eight;
-    case 'P': return Ion::Events::Nine;
-    case 'J': return Ion::Events::Four;
-    case 'K': return Ion::Events::Five;
-    case 'L': return Ion::Events::Six;
-    case 'N': return Ion::Events::One;
-    case 'M': return Ion::Events::Two;
-    case 0xBD: // 'ー' key on Brain
-      return Ion::Events::Three;
-    case 'B': return Ion::Events::Zero;
-    case 'H': return Ion::Events::Dot;
-
-    // Left-hand side keys for operators & functions
-    case 'A': return Ion::Events::Plus;
-    case 'S': return Ion::Events::Minus;
-    case 'D': return Ion::Events::Multiplication;
-    case 'F': return Ion::Events::Division;
-    case 'G': return Ion::Events::Power;
-    case 'Q': return Ion::Events::LeftParenthesis;
-    case 'W': return Ion::Events::RightParenthesis;
-    case 'E': return Ion::Events::Sqrt;
-    case 'R': return Ion::Events::Pi;
-    case 'T': return Ion::Events::Ln;
-    case 'Y': return Ion::Events::Log;
-    case 'Z': return Ion::Events::Ans;
-    case 'X': return Ion::Events::XNT;
-    case 'C': return Ion::Events::Sine;
-    case 'V': return Ion::Events::Cosine;
-    case 'U': return Ion::Events::Tangent;
-    default:
-      return Ion::Events::None;
-  }
-}
-
-static Ion::Events::Event mapAlphaMode(WPARAM vkCode, bool shiftDown) {
+// KEY-MAPPING.md Section 4: 【数字モード (OFF / abc) 時】
+static bool handleNormalAlphaModeKey(WPARAM vkCode) {
   static constexpr Ion::Events::Event kLowerEvents[26] = {
     Ion::Events::LowerA, Ion::Events::LowerB, Ion::Events::LowerC, Ion::Events::LowerD,
     Ion::Events::LowerE, Ion::Events::LowerF, Ion::Events::LowerG, Ion::Events::LowerH,
@@ -238,38 +143,32 @@ static Ion::Events::Event mapAlphaMode(WPARAM vkCode, bool shiftDown) {
     Ion::Events::LowerU, Ion::Events::LowerV, Ion::Events::LowerW, Ion::Events::LowerX,
     Ion::Events::LowerY, Ion::Events::LowerZ
   };
-  static constexpr Ion::Events::Event kUpperEvents[26] = {
-    Ion::Events::UpperA, Ion::Events::UpperB, Ion::Events::UpperC, Ion::Events::UpperD,
-    Ion::Events::UpperE, Ion::Events::UpperF, Ion::Events::UpperG, Ion::Events::UpperH,
-    Ion::Events::UpperI, Ion::Events::UpperJ, Ion::Events::UpperK, Ion::Events::UpperL,
-    Ion::Events::UpperM, Ion::Events::UpperN, Ion::Events::UpperO, Ion::Events::UpperP,
-    Ion::Events::UpperQ, Ion::Events::UpperR, Ion::Events::UpperS, Ion::Events::UpperT,
-    Ion::Events::UpperU, Ion::Events::UpperV, Ion::Events::UpperW, Ion::Events::UpperX,
-    Ion::Events::UpperY, Ion::Events::UpperZ
-  };
   if (vkCode >= 'A' && vkCode <= 'Z') {
     int idx = static_cast<int>(vkCode - 'A');
-    return shiftDown ? kUpperEvents[idx] : kLowerEvents[idx];
+    pushPendingEvent(kLowerEvents[idx]);
+    return true;
   }
-  if (vkCode == 0xBD) {
-    return Ion::Events::Minus;
+  if (vkCode == 0xBD) { // "ー"(長音記号)は "-"(マイナス)
+    pushPendingEvent(Ion::Events::Minus);
+    return true;
   }
-  return Ion::Events::None;
+  return false;
 }
 
 void onKeyDown(WPARAM vkCode, LPARAM lParam) {
   bool isRepeat = (lParam & (1 << 30)) != 0;
-  if (vkCode == VK_SHIFT || vkCode == VK_LSHIFT || vkCode == VK_RSHIFT) {
-    if (!sShiftKeyDown) {
-      sShiftKeyDown = true;
-      Main::setNeedsRefresh();
+
+  // KEY-MAPPING.md Section 2:
+  // [Shift] キー (Brain実機では VK_CAPITAL [シフト] または VK_SHIFT) を押すたびに
+  // 「数字モード(12x)」と「通常モード(abc)」をトグル切替
+  if (vkCode == VK_SHIFT || vkCode == VK_LSHIFT || vkCode == VK_RSHIFT || vkCode == VK_CAPITAL) {
+    if (!isRepeat) {
+      toggleNumberInput();
     }
     return;
   }
 
-  bool shiftDown = isShiftActive();
-
-  // Navigation & state-scanned repeatable keys
+  // KEY-MAPPING.md Section 1 & 2 & 3: 基本操作・モード別Enter・銀色キー
   switch (vkCode) {
     case VK_UP:
       sKeyState.setKey(Ion::Keyboard::Key::Up);
@@ -286,68 +185,61 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
     case VK_BACK:
       sKeyState.setKey(Ion::Keyboard::Key::Backspace);
       return;
-    case VK_RETURN:
-      sKeyState.setKey(Ion::Keyboard::Key::EXE);
-      return;
     case VK_ESCAPE:
-      if (shiftDown) {
-        requestTermination();
-        return;
-      }
       sKeyState.setKey(Ion::Keyboard::Key::Back);
       return;
-    case VK_F1:
+    case VK_RETURN:
+      // [Enter] -> 数字モードでは「EXE」, 通常モードでは「OK」
+      if (sNumberInputEnabled) {
+        sKeyState.setKey(Ion::Keyboard::Key::EXE);
+      } else {
+        sKeyState.setKey(Ion::Keyboard::Key::OK);
+      }
+      return;
+
+    // Section 3: 特殊キー（銀色キー）の割り当て
+    case VK_F1: // [調べる] -> Toolbox（関数一覧・コマンドパレット）
       sKeyState.setKey(Ion::Keyboard::Key::Toolbox);
       return;
     case VK_HOME:
-    case VK_F3:
+    case VK_F2:  // [Brain English / 国語] -> Home
+    case VK_F10: // [HOME] -> Home
       sKeyState.setKey(Ion::Keyboard::Key::Home);
       return;
-    case VK_F4:
+    case VK_F9:  // [ツール] -> Var（変数・ストアメニュー）
       sKeyState.setKey(Ion::Keyboard::Key::Var);
       return;
-    case VK_F5:
-      sKeyState.setKey(Ion::Keyboard::Key::Shift);
-      Main::setNeedsRefresh();
-      return;
-    default:
-      break;
-  }
 
-  // Mode toggle keys (ignore key auto-repeat for toggles)
-  if (vkCode == VK_CAPITAL) {
-    if (!isRepeat) {
-      if (shiftDown) {
-        toggleNumberInputPattern();
-      } else {
-        toggleNumberInput();
-      }
-    }
-    return;
-  }
-  if (vkCode == VK_TAB || vkCode == VK_F2) {
-    if (!isRepeat) {
-      toggleNumberInputPattern();
-    }
-    return;
-  }
-
-  // Special Brain keys from FOR-AGENTS.md
-  switch (vkCode) {
     case VK_SPACE:
       pushPendingEvent(Ion::Events::Space);
       return;
-    case VK_PRIOR: // PageUp (»上) -> Zoom In / Plus
-      pushPendingEvent(Ion::Events::Plus);
+
+    case VK_PRIOR: // [PageUp (>>↑)]
+      if (sNumberInputEnabled) {
+        // 数字モードでは: "("
+        pushPendingEvent(Ion::Events::LeftParenthesis);
+      } else {
+        // 通常モードでは: グラフのズームイン
+        pushPendingEvent(Ion::Events::Plus);
+      }
       return;
-    case VK_NEXT:  // PageDown (»下) -> Zoom Out / Minus
-      pushPendingEvent(Ion::Events::Minus);
+
+    case VK_NEXT: // [PageDown (>>↓)]
+      if (sNumberInputEnabled) {
+        // 数字モードでは: ")"
+        pushPendingEvent(Ion::Events::RightParenthesis);
+      } else {
+        // 通常モードでは: グラフのズームアウト
+        pushPendingEvent(Ion::Events::Minus);
+      }
       return;
-    case 0xBE:     // '.' (文字大)
+
+    // PCテンキー・直接記号キー補助対応
+    case 0xBE:
     case VK_DECIMAL:
       pushPendingEvent(Ion::Events::Dot);
       return;
-    case 0xBC:     // ',' (文字小)
+    case 0xBC:
       pushPendingEvent(Ion::Events::Comma);
       return;
     case VK_ADD:
@@ -366,24 +258,14 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
       break;
   }
 
-  // Support PC physical number keys (0-9 and Numpad 0-9) and Shift+Digit shortcuts
+  // PC物理数字キー (0-9 / Numpad 0-9) の直接入力補助
   if (vkCode >= '0' && vkCode <= '9') {
-    int digit = static_cast<int>(vkCode - '0');
-    if (shiftDown) {
-      Ion::Events::Event sc = mapShiftDigitShortcut(digit);
-      if (sc != Ion::Events::None) {
-        Ion::Events::removeShift();
-        pushPendingEvent(sc);
-        Main::setNeedsRefresh();
-        return;
-      }
-    }
     static constexpr Ion::Events::Event kDigitEvents[10] = {
       Ion::Events::Zero, Ion::Events::One, Ion::Events::Two, Ion::Events::Three,
       Ion::Events::Four, Ion::Events::Five, Ion::Events::Six, Ion::Events::Seven,
       Ion::Events::Eight, Ion::Events::Nine
     };
-    pushPendingEvent(kDigitEvents[digit]);
+    pushPendingEvent(kDigitEvents[vkCode - '0']);
     return;
   }
   if (vkCode >= VK_NUMPAD0 && vkCode <= VK_NUMPAD9) {
@@ -396,40 +278,22 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
     return;
   }
 
-  // Letter keys & 'ー' (0xBD): apply Brain number input flag mapping
+  // Section 4: アルファベットキー（A〜Z）および「ー」(0xBD)
   if ((vkCode >= 'A' && vkCode <= 'Z') || vkCode == 0xBD) {
-    Ion::Events::Event mapped = Ion::Events::None;
+    bool handled = false;
     if (sNumberInputEnabled) {
-      int digit = (sNumberPattern == NumberPattern::PatternA)
-                    ? digitFromPatternA(vkCode)
-                    : digitFromPatternB(vkCode);
-      if (shiftDown && digit >= 0) {
-        mapped = mapShiftDigitShortcut(digit);
-      } else if (sNumberPattern == NumberPattern::PatternA) {
-        mapped = mapNumberModePatternA(vkCode);
-      } else {
-        mapped = mapNumberModePatternB(vkCode);
-      }
+      handled = handleNumberModeKey(vkCode);
     } else {
-      mapped = mapAlphaMode(vkCode, shiftDown);
+      handled = handleNormalAlphaModeKey(vkCode);
     }
-    if (mapped != Ion::Events::None) {
+    if (handled) {
       Ion::Events::removeShift();
-      pushPendingEvent(mapped);
       Main::setNeedsRefresh();
     }
   }
 }
 
 void onKeyUp(WPARAM vkCode, LPARAM /*lParam*/) {
-  if (vkCode == VK_SHIFT || vkCode == VK_LSHIFT || vkCode == VK_RSHIFT) {
-    if (sShiftKeyDown) {
-      sShiftKeyDown = false;
-      Main::setNeedsRefresh();
-    }
-    return;
-  }
-
   switch (vkCode) {
     case VK_UP:
       sKeyState.clearKey(Ion::Keyboard::Key::Up);
@@ -448,6 +312,7 @@ void onKeyUp(WPARAM vkCode, LPARAM /*lParam*/) {
       break;
     case VK_RETURN:
       sKeyState.clearKey(Ion::Keyboard::Key::EXE);
+      sKeyState.clearKey(Ion::Keyboard::Key::OK);
       break;
     case VK_ESCAPE:
       sKeyState.clearKey(Ion::Keyboard::Key::Back);
@@ -456,15 +321,12 @@ void onKeyUp(WPARAM vkCode, LPARAM /*lParam*/) {
       sKeyState.clearKey(Ion::Keyboard::Key::Toolbox);
       break;
     case VK_HOME:
-    case VK_F3:
+    case VK_F2:
+    case VK_F10:
       sKeyState.clearKey(Ion::Keyboard::Key::Home);
       break;
-    case VK_F4:
+    case VK_F9:
       sKeyState.clearKey(Ion::Keyboard::Key::Var);
-      break;
-    case VK_F5:
-      sKeyState.clearKey(Ion::Keyboard::Key::Shift);
-      Main::setNeedsRefresh();
       break;
     default:
       break;
@@ -472,7 +334,7 @@ void onKeyUp(WPARAM vkCode, LPARAM /*lParam*/) {
 }
 
 void onTouchClick(int x, int y) {
-  // Only the bottom Exit button in the right sidebar is touch-active
+  // 最下部「終了」ボタンのタッチ／クリック判定
   if (x >= Display::kExitButtonX && x < Display::kExitButtonX + Display::kExitButtonW &&
       y >= Display::kExitButtonY && y < Display::kExitButtonY + Display::kExitButtonH) {
     requestTermination();
