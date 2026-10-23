@@ -562,15 +562,15 @@ static bool isFontFamilyAvailable(HDC hdc, const wchar_t * faceName) {
 
 static const wchar_t * resolvePreferredFontFace(HDC hdc) {
   // 多重フォールバック優先順位:
-  //   1. 同梱フォント (DotGothic16 / DotGothic16 Regular)
-  //   2. 旧同梱フォント (MisakiGothic / 美咲ゴシック)
+  //   1. 同梱フォント (MisakiGothic / 美咲ゴシック)
+  //   2. 代替同梱フォント (DotGothic16 / DotGothic16 Regular)
   //   3. Brain実機ROM内蔵フォント (DFGHSGothic-W5-SH)
   //   4. PC環境フォールバック (MS Gothic または Meiryo)
   static constexpr const wchar_t * kFontCandidates[] = {
-    L"DotGothic16",
-    L"DotGothic16 Regular",
     L"MisakiGothic",
     L"美咲ゴシック",
+    L"DotGothic16",
+    L"DotGothic16 Regular",
     L"DFGHSGothic-W5-SH",
     L"MS Gothic",
     L"Meiryo"

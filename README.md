@@ -16,9 +16,9 @@
   - 右端 54px のフレキシブルタッチキー領域を除外した有効領域（800×480）で描画。
   - 左側（640×480）: 電卓画面（320×240 を自前の整数 2 倍最近傍補間で高速展開）。
   - 右側（160×480）: NumWorks デザインに統一したライトテーマの入力支援サイドバー。
-- **美しく視認性の高い「DotGothic16」フォント採用**:
-  - フォントワークス社のレトロ調 16 ドットフォント「[DotGothic16](https://github.com/fontworks-fonts/DotGothic16)」をアプリ内に同梱。
-  - Brain 実機と PC シミュレータで全く同じくっきりとした日本語・数学記号を表示。
+- **クッキリと判読性の高い「美咲ゴシック」フォント採用**:
+  - 8ドットフォントの名作「[美咲ゴシック](https://littlelimit.net/misaki.htm)」をアプリ内に同梱。
+  - 原寸（1倍: 8px）および整数倍（2倍: 16px）スケーリングにより、文字の滲みや偽色を抑え、Brain 実機と PC シミュレータでシャープな日本語・数学記号を表示。
 - **実機キーボードに合わせた専用キーマッピング**:
   - `[Brain English / 国語 (F2)]` キーで **数字モード (12x)** と **通常モード (abc)** をワンタッチ切り替え。
   - 数字モード時は QWERTY 配列がそのまま直感的なテンキー・四則演算・累乗・平方根・定数ショートカットに変化。
@@ -49,11 +49,11 @@
 2. 解凍して生成された `BrainCalc` フォルダ（以下のファイルが含まれます）を、microSD カードのアプリ配置先（例: `アプリ` フォルダ）にそのままコピーします。
    ```text
    BrainCalc/
-   ├── AppMain.exe          # 電卓本体バイナリ (WinCE ARM)
-   ├── AppMain.cfg          # 設定ファイル
+   ├── AppMain.exe          # Brain起動用ローダー (188KB, PW-SB4等に必須)
+   ├── AppMain.cfg          # ローダー設定ファイル (8バイト)
+   ├── AppMain_.exe         # 電卓本体バイナリ (約2.2MB, WinCE ARM)
    ├── index.din            # アプリアイコン・定義ファイル
-   ├── dotgothic16.ttf      # 同梱日本語フォント
-   └── font.ttf             # 同梱日本語フォント (互換エイリアス)
+   └── font.ttf             # 同梱日本語フォント (美咲ゴシック)
    ```
 3. microSD カードを Brain に挿入し、ホームメニューの「追加アプリ」等から **BrainCalc** を起動してください。
 
@@ -116,6 +116,6 @@
 - **NumWorks Epsilon / Upsilon**:
   - [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
   - Copyright (c) NumWorks SAS & Upsilon Project Contributors.
-- **DotGothic16**:
-  - [SIL Open Font License 1.1](https://scripts.sil.org/OFL)
-  - Copyright (c) 2020 The DotGothic16 Project Authors / Fontworks Inc.
+- **美咲ゴシック (Misaki Gothic)**:
+  - [SIL Open Font License 1.1 / 自由利用ライセンス](https://littlelimit.net/font.htm)
+  - Copyright (c) 門真 なむ (Little Limit)

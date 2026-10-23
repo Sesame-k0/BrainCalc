@@ -44,13 +44,35 @@ make PLATFORM=simulator TARGET=brain TOOLCHAIN="${TOOLCHAIN_OPT}" -j"${JOBS}"
 
 DIST_DIR="${OUT_DIR}/BrainCalc"
 mkdir -p "$DIST_DIR"
-cp -f "${OUT_DIR}/epsilon.exe" "${OUT_DIR}/AppMain.exe"
-cp -f "${OUT_DIR}/AppMain.exe" "${DIST_DIR}/AppMain.exe"
-touch "${DIST_DIR}/AppMain.cfg" "${DIST_DIR}/index.din"
 
-# Copy bundled TrueType font (font.ttf / dotgothic16.ttf) next to AppMain.exe and into BrainCalc SD bundle
+# アプリ本体 (epsilon.exe) を AppMain_.exe として出力 (SHARP Brain PW-SB4 必須仕様)
+cp -f "${OUT_DIR}/epsilon.exe" "${OUT_DIR}/AppMain_.exe"
+cp -f "${OUT_DIR}/epsilon.exe" "${DIST_DIR}/AppMain_.exe"
+
+# PW-SB4 動作必須のローダー (188KB AppMain.exe) と AppMain.cfg (8バイト) を保持・復元
+LOADER_DIR="ion/src/simulator/brain/loader"
+if [[ -f "${LOADER_DIR}/AppMain.exe" ]]; then
+  if [[ ! -f "${DIST_DIR}/AppMain.exe" ]]; then
+    cp -f "${LOADER_DIR}/AppMain.exe" "${DIST_DIR}/AppMain.exe"
+  fi
+fi
+if [[ -f "${LOADER_DIR}/AppMain.cfg" ]]; then
+  if [[ ! -f "${DIST_DIR}/AppMain.cfg" ]]; then
+    cp -f "${LOADER_DIR}/AppMain.cfg" "${DIST_DIR}/AppMain.cfg"
+  fi
+fi
+
+# PCホスト検証用 (--host) の場合は PC 上で直接起動できるよう AppMain.exe も同期出力
+if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
+  cp -f "${OUT_DIR}/epsilon.exe" "${OUT_DIR}/AppMain.exe"
+  cp -f "${OUT_DIR}/epsilon.exe" "${DIST_DIR}/AppMain.exe"
+fi
+
+touch "${DIST_DIR}/index.din"
+
+# Copy bundled TrueType font (font.ttf = MisakiGothic) next to executables and into BrainCalc SD bundle
 FONT_SRC=""
-for candidate in "ion/src/simulator/brain/dotgothic16.ttf" "ion/src/simulator/brain/font.ttf" "../DotGothic16-Regular.ttf" "font.ttf" "../MisakiFont/misaki_gothic.ttf"; do
+for candidate in "ion/src/simulator/brain/font.ttf" "../MisakiFont/misaki_gothic.ttf" "misaki_gothic.ttf"; do
   if [[ -f "$candidate" ]]; then
     FONT_SRC="$candidate"
     break
@@ -58,7 +80,7 @@ for candidate in "ion/src/simulator/brain/dotgothic16.ttf" "ion/src/simulator/br
 done
 
 if [[ -n "$FONT_SRC" ]]; then
-  for fname in "font.ttf" "dotgothic16.ttf"; do
+  for fname in "font.ttf" "misaki_gothic.ttf"; do
     if ! cmp -s "$FONT_SRC" "${OUT_DIR}/${fname}" 2>/dev/null; then
       cp -f "$FONT_SRC" "${OUT_DIR}/${fname}" 2>/dev/null || true
     fi
@@ -72,6 +94,11 @@ fi
 
 echo "=============================================================================="
 echo "[SUCCESS] Build completed!"
-echo "  Executable : ${OUT_DIR}/AppMain.exe"
-echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe, AppMain.cfg, index.din, font.ttf)"
+if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
+  echo "  Executable : ${OUT_DIR}/AppMain.exe"
+  echo "  Bundle     : ${DIST_DIR}/ (AppMain.exe, font.ttf)"
+else
+  echo "  App Binary : ${DIST_DIR}/AppMain_.exe"
+  echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe [loader], AppMain.cfg, AppMain_.exe [app], index.din, font.ttf)"
+fi
 echo "=============================================================================="
