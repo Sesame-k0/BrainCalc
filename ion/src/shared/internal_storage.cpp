@@ -640,4 +640,16 @@ InternalStorage::RecordIterator & InternalStorage::RecordIterator::operator++() 
   return *this;
 }
 
+size_t InternalStorage::rawBufferSize() {
+  return (size_t)(endBuffer() - m_buffer) + sizeof(record_size_t);
+}
+
+void InternalStorage::loadRawBuffer(const char * src, size_t size) {
+  if (!src || size == 0 || size > k_storageSize) {
+    return;
+  }
+  memcpy(m_buffer, src, size);
+  notifyChangeToDelegate();
+}
+
 }

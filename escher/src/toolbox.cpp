@@ -1,3 +1,6 @@
+#if TARGET_BRAIN
+#include <ion/display.h>
+#endif
 #include <escher/toolbox.h>
 #include <escher/metric.h>
 #include <assert.h>
@@ -11,7 +14,37 @@ Toolbox::Toolbox(Responder * parentResponder, I18n::Message title) :
 void Toolbox::viewWillAppear() {
   m_messageTreeModel = (ToolboxMessageTree *)rootModel();
   NestedMenuController::viewWillAppear();
+#if TARGET_BRAIN
+  updateHelpForSelection();
+#endif
 }
+
+void Toolbox::viewDidDisappear() {
+  NestedMenuController::viewDidDisappear();
+#if TARGET_BRAIN
+  Ion::Display::clearHelpMessage();
+#endif
+}
+
+void Toolbox::tableViewDidChangeSelection(SelectableTableView * /*t*/, int /*previousSelectedCellX*/, int /*previousSelectedCellY*/, bool /*withinTemporarySelection*/) {
+#if TARGET_BRAIN
+  updateHelpForSelection();
+#endif
+}
+
+#if TARGET_BRAIN
+void Toolbox::updateHelpForSelection() {
+  int row = m_selectableTableView.selectedRow();
+  if (m_messageTreeModel && row >= 0 && row < m_messageTreeModel->numberOfChildren()) {
+    const ToolboxMessageTree * tree = static_cast<const ToolboxMessageTree *>(m_messageTreeModel->childAtIndex(row));
+    if (tree) {
+      Ion::Display::setHelpMessage(tree->label());
+      return;
+    }
+  }
+  Ion::Display::clearHelpMessage();
+}
+#endif
 
 int Toolbox::numberOfRows() const {
   if (m_messageTreeModel == nullptr) {
@@ -54,7 +87,11 @@ bool Toolbox::selectSubMenu(int selectedRow) {
     assert(m_messageTreeModel->numberOfChildren() < 0);
     m_messageTreeModel = static_cast<const ToolboxMessageTree *>(m_messageTreeModel->childAtIndex(indexAfterFork()));
   }
-  return NestedMenuController::selectSubMenu(selectedRow);
+  bool res = NestedMenuController::selectSubMenu(selectedRow);
+#if TARGET_BRAIN
+  updateHelpForSelection();
+#endif
+  return res;
 }
 
 bool Toolbox::returnToPreviousMenu() {
@@ -71,5 +108,9 @@ bool Toolbox::returnToPreviousMenu() {
     }
   }
   m_messageTreeModel = parentMessageTree;
-  return NestedMenuController::returnToPreviousMenu();
+  bool res = NestedMenuController::returnToPreviousMenu();
+#if TARGET_BRAIN
+  updateHelpForSelection();
+#endif
+  return res;
 }

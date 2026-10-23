@@ -13,6 +13,8 @@
 #include <windows.h>
 #include <kandinsky/rect.h>
 
+namespace I18n { enum class Message : uint16_t; }
+
 namespace Ion {
 namespace Simulator {
 namespace Display {
@@ -51,6 +53,10 @@ void showExitConfirm();
 void closeExitConfirm();
 bool handleExitConfirmKey(WPARAM vkCode);
 bool handleExitConfirmClick(int x, int y);
+
+// Japanese Help Panel
+void setHelpMessage(::I18n::Message messageId);
+void clearHelpMessage();
 
 }
 }

@@ -14,6 +14,8 @@
 #include <kandinsky/rect.h>
 #include <kandinsky/color.h>
 
+namespace I18n { enum class Message : uint16_t; }
+
 namespace Ion {
 namespace Display {
 
@@ -39,6 +41,11 @@ constexpr int HeightInTenthOfMillimeter = 432;
 int displayUniformTilingSize10(KDColor c);
 int displayColoredTilingSize10();
 void POSTPushMulticolor(int rootNumberTiles, int tileSize);
+
+#if TARGET_BRAIN
+void setHelpMessage(::I18n::Message messageId);
+void clearHelpMessage();
+#endif
 
 }
 }

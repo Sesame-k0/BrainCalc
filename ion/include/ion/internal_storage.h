@@ -115,6 +115,12 @@ public:
   static bool FullNameCompliant(const char * name);
 
   // Used by Python OS module
+  // BrainCalc persistence helpers
+  const char * rawBuffer() const { return m_buffer; }
+  char * rawBuffer() { return m_buffer; }
+  size_t rawBufferSize();
+  void loadRawBuffer(const char * src, size_t size);
+
   int numberOfRecords();
   Record recordAtIndex(int index);
 protected:

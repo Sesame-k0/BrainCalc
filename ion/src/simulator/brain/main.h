@@ -10,6 +10,8 @@ void setNeedsRefresh();
 void refresh();
 void hideTaskBar();
 void restoreTaskBar();
+void loadState();
+void saveState();
 void quit();
 
 }
