@@ -405,7 +405,7 @@ static HFONT createFontWithFallback(const wchar_t * faceName, int height, LONG w
   lf.lfCharSet = DEFAULT_CHARSET;
   lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
   lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
-  lf.lfQuality = ANTIALIASED_QUALITY; // 明示的に 4 を指定 (ClearTypeはBrain実機で滲むため禁止)
+  lf.lfQuality = NONANTIALIASED_QUALITY; // アンチエイリアス無効 (3: サブピクセル偽色・黄緑/水色の滲みを完全カット)
   lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
   wcsncpy(lf.lfFaceName, faceName, LF_FACESIZE - 1);
   lf.lfFaceName[LF_FACESIZE - 1] = L'\0';
