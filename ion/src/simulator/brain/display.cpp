@@ -106,73 +106,75 @@ static void drawTextLine(HDC hdc, int x, int y, int w, int h, COLORREF color, co
 }
 
 struct KeyCapSpec {
-  const wchar_t * keyName;  // 物理キートップ (nullptr なら空白枠)
-  const wchar_t * numLabel; // 数字モード (12x) 時の表示
-  const wchar_t * abcLabel; // 通常モード (abc) 時の表示
-  bool isDigitInNumMode;    // 数字モード時に数字キーか
+  const wchar_t * keyName;    // 物理キートップ (nullptr なら空白枠)
+  const wchar_t * numLabel;   // 数字モード (12x) 時の表示
+  const wchar_t * abcLabel;   // 通常モード (abc) 時の表示 (小文字)
+  const wchar_t * upperLabel; // 大文字モード (ABC) 時の表示
+  bool isDigitInNumMode;      // 数字モード時に数字キーか
 };
 
 static constexpr KeyCapSpec kLeftHandGrid[3][5] = {
   // 上段左 (Q, W, E, R, T)
   {
-    { L"Q", L"1", L"q", true },
-    { L"W", L"2", L"w", true },
-    { L"E", L"3", L"e", true },
-    { L"R", L"4", L"r", true },
-    { L"T", L"5", L"t", true },
+    { L"Q", L"1", L"q", L"Q", true },
+    { L"W", L"2", L"w", L"W", true },
+    { L"E", L"3", L"e", L"E", true },
+    { L"R", L"4", L"r", L"R", true },
+    { L"T", L"5", L"t", L"T", true },
   },
   // 中段左 (A, S, D, F, G)
   {
-    { L"A", L"+", L"a", false },
-    { L"S", L"-", L"s", false },
-    { L"D", L"*", L"d", false },
-    { L"F", L"/", L"f", false },
-    { L"G", L"=", L"g", false },
+    { L"A", L"+", L"a", L"A", false },
+    { L"S", L"-", L"s", L"S", false },
+    { L"D", L"*", L"d", L"D", false },
+    { L"F", L"/", L"f", L"F", false },
+    { L"G", L"=", L"g", L"G", false },
   },
   // 下段左 (Z, X, C, V, B)
   {
-    { L"Z", L"√",   L"z", false },
-    { L"X", L"xnt", L"x", false },
-    { L"C", L"^",   L"c", false },
-    { L"V", L"π",   L"v", false },
-    { L"B", L"log", L"b", false },
+    { L"Z", L"√",   L"z", L"Z", false },
+    { L"X", L"xnt", L"x", L"X", false },
+    { L"C", L"i",   L"c", L"C", false },
+    { L"V", L"π",   L"v", L"V", false },
+    { L"B", L"log", L"b", L"B", false },
   }
 };
 
 static constexpr KeyCapSpec kRightHandGrid[3][5] = {
   // 上段右 (Y, U, I, O, P)
   {
-    { L"Y", L"6", L"y", true },
-    { L"U", L"7", L"u", true },
-    { L"I", L"8", L"i", true },
-    { L"O", L"9", L"o", true },
-    { L"P", L"0", L"p", true },
+    { L"Y", L"6", L"y", L"Y", true },
+    { L"U", L"7", L"u", L"U", true },
+    { L"I", L"8", L"i", L"I", true },
+    { L"O", L"9", L"o", L"O", true },
+    { L"P", L"0", L"p", L"P", true },
   },
   // 中段右 (H, J, K, L + 余白1枠)
   {
-    { L"H", L"x^n", L"h", false },
-    { L"J", L"e",   L"j", false },
-    { L"K", L"ANS", L"k", false },
-    { L"L", L"STO", L"l", false },
-    { nullptr, nullptr, nullptr, false },
+    { L"H", L"x^n", L"h", L"H", false },
+    { L"J", L"e",   L"j", L"J", false },
+    { L"K", L"ANS", L"k", L"K", false },
+    { L"L", L"STO", L"l", L"L", false },
+    { nullptr, nullptr, nullptr, nullptr, false },
   },
   // 下段右 (N, M, ー + 余白2枠)
   {
-    { L"N",  L",", L"n", false },
-    { L"M",  L".", L"m", false },
-    { L"ー", L"-", L"-", false },
-    { nullptr, nullptr, nullptr, false },
-    { nullptr, nullptr, nullptr, false },
+    { L"N",  L",", L"n", L"N", false },
+    { L"M",  L".", L"m", L"M", false },
+    { L"ー", L"-", L"-", L"_", false },
+    { nullptr, nullptr, nullptr, nullptr, false },
+    { nullptr, nullptr, nullptr, nullptr, false },
   }
 };
 
-static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec grid[3][5], bool numOn) {
+static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec grid[3][5], Keyboard::InputMode mode) {
   constexpr int kCols = 5;
   constexpr int kRows = 3;
   constexpr int kKeyW = 28;
   constexpr int kKeyH = 34;
   constexpr int kGapX = 2;
   constexpr int kGapY = 4;
+  bool numOn = (mode == Keyboard::InputMode::Number);
 
   for (int r = 0; r < kRows; r++) {
     int ky = startY + r * (kKeyH + kGapY);
@@ -186,7 +188,14 @@ static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec g
         continue;
       }
 
-      const wchar_t * activeLabel = numOn ? spec.numLabel : spec.abcLabel;
+      const wchar_t * activeLabel = nullptr;
+      if (mode == Keyboard::InputMode::Number) {
+        activeLabel = spec.numLabel;
+      } else if (mode == Keyboard::InputMode::AlphaLower) {
+        activeLabel = spec.abcLabel;
+      } else {
+        activeLabel = spec.upperLabel;
+      }
 
       // NumWorksに合わせた明るいトーン（キー枠: 白、枠線: 薄グレー、文字: 濃グレー）
       COLORREF bgColor = RGB(255, 255, 255);
@@ -240,10 +249,10 @@ static void renderJapaneseHelpPanel(HDC hdc, const HelpEntry * help) {
   // 1. ヘッダー案内枠 (Y = 6..54)
   drawBox(hdc, sx, 6, sw, 48, RGB(255, 255, 255), RGB(190, 199, 210));
   SelectObject(hdc, sUiFontBold);
-  drawTextLine(hdc, sx + 4, 10, sw - 8, 20, RGB(28, 92, 152), L"【 関数ガイド 】",
+  drawTextLine(hdc, sx + 4, 10, sw - 8, 20, RGB(28, 92, 152), L"【 日本語ガイド 】",
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx + 4, 30, sw - 8, 20, RGB(65, 74, 86), L"Esc/F10: 戻る",
+  drawTextLine(hdc, sx + 4, 30, sw - 8, 20, RGB(65, 74, 86), L"▲▼:選択  Enter:決定",
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
   // 2. 日本語タイトル枠 (Y = 58..102)
@@ -295,7 +304,7 @@ static void renderRightSidebar(HDC hdc) {
 
   const int sx = kSidebarX + 6;      // 646
   const int sw = kSidebarWidth - 12; // 148
-  bool numOn = Keyboard::isNumberInputEnabled();
+  Keyboard::InputMode inputMode = Keyboard::currentInputMode();
 
   // ===========================================================================
   // 1. モード表示ボックス (Y = 6..60)
@@ -303,14 +312,22 @@ static void renderRightSidebar(HDC hdc) {
   drawBox(hdc, sx, 6, sw, 54, RGB(255, 255, 255), RGB(190, 199, 210));
 
   SelectObject(hdc, sUiFontBold);
-  drawTextLine(hdc, sx + 4, 9, sw - 8, 22,
-               numOn ? RGB(28, 92, 152) : RGB(145, 78, 24),
-               numOn ? L"モード:12x (数字)" : L"モード:abc (通常)");
+  COLORREF modeColor = RGB(28, 92, 152);
+  const wchar_t * modeTitle = L"モード:12x (数字)";
+  const wchar_t * modeSub = L"F2/Shift:切替  EXE";
+  if (inputMode == Keyboard::InputMode::AlphaLower) {
+    modeColor = RGB(145, 78, 24);
+    modeTitle = L"モード:abc (通常)";
+    modeSub = L"F2/Shift:切替   OK";
+  } else if (inputMode == Keyboard::InputMode::AlphaUpper) {
+    modeColor = RGB(105, 42, 138);
+    modeTitle = L"モード:ABC (大文字)";
+    modeSub = L"F2/Shift:切替   OK";
+  }
+  drawTextLine(hdc, sx + 4, 9, sw - 8, 22, modeColor, modeTitle);
 
   SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx + 4, 33, sw - 8, 22,
-               RGB(65, 74, 86),
-               numOn ? L"F2:切替   Ent:EXE" : L"F2:切替   Ent:OK");
+  drawTextLine(hdc, sx + 4, 33, sw - 8, 22, RGB(65, 74, 86), modeSub);
 
   // ===========================================================================
   // 2. 特殊キー（銀色キー）ヒント枠 (Y = 66..136)
@@ -318,23 +335,22 @@ static void renderRightSidebar(HDC hdc) {
   drawBox(hdc, sx, 66, sw, 70, RGB(255, 255, 255), RGB(196, 204, 214));
   SelectObject(hdc, sUiFontSmall);
   drawTextLine(hdc, sx + 4, 70,  sw - 8, 20, RGB(45, 52, 62), L"F1:関数   F9:変数");
-  drawTextLine(hdc, sx + 4, 91,  sw - 8, 20, RGB(65, 74, 86), L"F10/HOME: ホーム");
-  drawTextLine(hdc, sx + 4, 112, sw - 8, 20, RGB(45, 52, 62),
-               numOn ? L"PgUp:(    PgDn:)" : L"PgUp拡大 PgDn縮小");
+  drawTextLine(hdc, sx + 4, 91,  sw - 8, 20, RGB(65, 74, 86), L"F3:OK     F4:消去");
+  drawTextLine(hdc, sx + 4, 112, sw - 8, 20, RGB(45, 52, 62), L"PgUp:(    PgDn:)");
 
   // ===========================================================================
   // 3. 左手側キー 5列×3段グリッド (Y = 142..276)
   // ===========================================================================
   SelectObject(hdc, sUiFontSmall);
   drawTextLine(hdc, sx, 142, sw, 18, RGB(58, 66, 78), L"■左手側 (Q-T/A-G)");
-  drawKeyGridBlock(hdc, sx, 163, kLeftHandGrid, numOn);
+  drawKeyGridBlock(hdc, sx, 163, kLeftHandGrid, inputMode);
 
   // ===========================================================================
   // 4. 右手側キー 5列×3段グリッド (Y = 282..416)
   // ===========================================================================
   SelectObject(hdc, sUiFontSmall);
   drawTextLine(hdc, sx, 282, sw, 18, RGB(58, 66, 78), L"■右手側 (Y-P/H-L)");
-  drawKeyGridBlock(hdc, sx, 303, kRightHandGrid, numOn);
+  drawKeyGridBlock(hdc, sx, 303, kRightHandGrid, inputMode);
 
   // ===========================================================================
   // 5. 最下部「終了」ボタン (Y = 434..472) - 控えめなフラットボタン
@@ -439,9 +455,9 @@ bool isExitConfirmOpen() {
   return sExitConfirmOpen;
 }
 
-void showExitConfirm() {
+void showExitConfirm(int defaultFocus) {
   sExitConfirmOpen = true;
-  sExitConfirmFocus = 0; // デフォルトは「終了する」にフォーカス
+  sExitConfirmFocus = (defaultFocus == 0) ? 0 : 1;
   sCalcDirty = true;
   sDirtyMinX = 0;
   sDirtyMinY = 0;

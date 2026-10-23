@@ -11,6 +11,7 @@ public:
     KDColor textColor = Palette::PrimaryText, KDColor backgroundColor = Palette::ListCellBackground);
   void setText(const char * text) override;
   void setMessage(I18n::Message message);
+  I18n::Message message() const { return m_message; }
   const char * text() const override;
   KDSize minimalSizeForOptimalDisplay() const override;
 private:

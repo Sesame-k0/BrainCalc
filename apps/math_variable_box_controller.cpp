@@ -1,3 +1,6 @@
+#if TARGET_BRAIN
+#include <ion/display.h>
+#endif
 #include "math_variable_box_controller.h"
 #include "shared/global_context.h"
 #include "shared/continuous_function.h"
@@ -36,6 +39,9 @@ void MathVariableBoxController::viewWillAppear() {
 
 void MathVariableBoxController::viewDidDisappear() {
   AlternateEmptyNestedMenuController::viewDidDisappear();
+#if TARGET_BRAIN
+  Ion::Display::clearHelpMessage();
+#endif
 
   /* NestedMenuController::viewDidDisappear might need cell heights, which would
    * use the MathVariableBoxController cell heights memoization. We thus reset the

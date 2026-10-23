@@ -1,19 +1,415 @@
 {
+  "CalculApp": {
+    "en_label": "Calculation",
+    "en_desc": "Perform standard arithmetic, algebra, calculus, and matrix computations.",
+    "ja_title": "計算アプリ",
+    "ja_desc": "四則演算、代数計算、\n微積分、三角関数、\n行列演算などの基本計算\nを行います。\n\n【Enter】で計算実行\n【Ans】で直前の結果引用\n【F1】で関数パレット\n【F9】で変数一覧"
+  },
+  "FunctionApp": {
+    "en_label": "Functions",
+    "en_desc": "Define mathematical functions, plot graphs, inspect table of values, and find extrema or intersections.",
+    "ja_title": "関数グラフ",
+    "ja_desc": "関数 y=f(x) を定義し、\nグラフ描画や数値表の\n生成を行います。\n\n【機能】\n・グラフ描画・交点探索\n・極値・変曲点・接線\n・定積分の視覚的計算\n・xとyの数値一覧表"
+  },
+  "SequenceApp": {
+    "en_label": "Sequences",
+    "en_desc": "Plot recursive and explicit sequences, view term values in a table, and calculate sums.",
+    "ja_title": "数列アプリ",
+    "ja_desc": "漸化式または一般項で\n数列 u(n), v(n) を\n定義します。\n\n【機能】\n・u(n+1) 等の漸化式定義\n・数値テーブル表示\n・項のプロット表示\n・項の累積和の計算"
+  },
+  "StatsApp": {
+    "en_label": "Statistics",
+    "en_desc": "Analyze one-variable or two-variable datasets with histograms, box plots, and summary statistics.",
+    "ja_title": "統計アプリ",
+    "ja_desc": "度数分布やデータリスト\nを入力し、統計分析を\n行います。\n\n【機能】\n・ヒストグラム表示\n・箱ひげ図 (Box plot)\n・平均値・中央値・四分位\n・分散・標準偏差の算出"
+  },
+  "RegressionApp": {
+    "en_label": "Regression",
+    "en_desc": "Fit scatter plots with linear, logarithmic, exponential, or polynomial regression models.",
+    "ja_title": "回帰分析",
+    "ja_desc": "2組のデータ (X, Y) の\n散布図に対して回帰曲線を\n当てはめます。\n\n【機能】\n・線形・指数・対数回帰\n・多項式・累乗回帰\n・決定係数 R^2・相関係数\n・予測値 y の推定計算"
+  },
+  "ProbaApp": {
+    "en_label": "Probability",
+    "en_desc": "Calculate probabilities and graph density/cumulative functions for various distributions.",
+    "ja_title": "確率アプリ",
+    "ja_desc": "各種の連続・離散確率分布\nの計算とグラフ表示を\n行います。\n\n【対応分布】\n・二項分布 / 正規分布\n・Student-t / 幾何分布\n・ポアソン / カイ二乗分布\n・累積確率・区間確率計算"
+  },
+  "SolverApp": {
+    "en_label": "Equations",
+    "en_desc": "Solve linear systems and polynomial or numerical equations.",
+    "ja_title": "方程式ソルバー",
+    "ja_desc": "方程式の解 (求根) や\n連立一次方程式の解を\n求めます。\n\n【機能】\n・1次〜3次方程式の代数解\n・最大6元連立方程式\n・ニュートン法による\n　数値方程式の求根"
+  },
+  "SettingsApp": {
+    "en_label": "Settings",
+    "en_desc": "Configure system preferences, angle units, display modes, brightness, and clock.",
+    "ja_title": "環境設定",
+    "ja_desc": "計算機の動作環境を\n設定します。\n\n【主な設定項目】\n・角度単位 (度/rad)\n・数値表示 (小数/指数)\n・複素数表示形式\n・画面輝度・時計設定"
+  },
+  "RpnApp": {
+    "en_label": "RPN Calculator",
+    "en_desc": "Reverse Polish Notation calculator utilizing an operand stack.",
+    "ja_title": "RPN 電卓",
+    "ja_desc": "スタックを用いた\n逆ポーランド記法電卓です。\n\n【操作】\n数値を入力して Enter で\nスタックにプッシュし、\n演算子キーで計算します。\nかっこ不要で素早く\n連続計算が可能です。"
+  },
+  "AtomicApp": {
+    "en_label": "Periodic Table",
+    "en_desc": "Interactive periodic table with physical and atomic properties of elements.",
+    "ja_title": "元素周期表",
+    "ja_desc": "化学元素の周期表と\n各元素の物理特性を\n閲覧できます。\n\n【表示情報】\n・原子番号・原子量\n・電子配置・価電子\n・融点・沸点・密度\n・電気陰性度・イオン化E"
+  },
+  "ReaderApp": {
+    "en_label": "Document Reader",
+    "en_desc": "Read text files and documentation stored on the SD card.",
+    "ja_title": "リーダー",
+    "ja_desc": "テキストファイルや\n説明書ドキュメントを\n閲覧するビューアです。"
+  },
+  "MathOptions": {
+    "en_label": "Math options",
+    "en_desc": "Configure mathematical display, angle units, complex format, and input modes.",
+    "ja_title": "計算設定",
+    "ja_desc": "数学計算に関する基本環境\nを設定します。\n\n【設定項目】\n・角度の単位 (度/rad)\n・数値表示モード\n・数式入力形式 (2D/1行)\n・複素数の表示形式\n・掛け算記号の表記"
+  },
+  "AngleUnit": {
+    "en_label": "Angle measure",
+    "en_desc": "Select the unit for angles in trigonometric functions.",
+    "ja_title": "角度の単位",
+    "ja_desc": "三角関数 (sin, cos, tan)\nや極座標で用いる\n角度の単位を選択します。\n\n・度 (Degrees: °)\n・ラジアン (Radians: rad)\n・グラード (Gradians: gon)"
+  },
+  "Degrees": {
+    "en_label": "Degrees",
+    "en_desc": "Degrees angle unit (360 degrees in a full circle).",
+    "ja_title": "度 (Degrees)",
+    "ja_desc": "直角を 90°、円周を 360°\nとする角度の単位です。\n日常生活や初等幾何で\n広く使われます。"
+  },
+  "Radian": {
+    "en_label": "Radians",
+    "en_desc": "Radians angle unit (2*pi radians in a full circle).",
+    "ja_title": "ラジアン (rad)",
+    "ja_desc": "円の半径と等しい長さの\n円弧の中心角を 1 rad\nとする国際標準単位です。\n微積分や高等数学では\n通常ラジアンを用います。"
+  },
+  "Gradians": {
+    "en_label": "Gradians",
+    "en_desc": "Gradians angle unit (400 gradians in a full circle).",
+    "ja_title": "グラード (gon)",
+    "ja_desc": "直角を 100 gon、\n円周を 400 gon とする\n測量等で用いられる\n角度の単位です。"
+  },
+  "DisplayMode": {
+    "en_label": "Display mode",
+    "en_desc": "Select float display format: Decimal, Scientific, Engineering, or Significant figures.",
+    "ja_title": "数値表示モード",
+    "ja_desc": "計算結果の数値を画面に\n表示する際の形式を\n指定します。\n\n・小数 (Decimal)\n・科学表記 (Scientific)\n・工学表記 (Engineering)\n・有効数字 (Sig. figures)"
+  },
+  "Decimal": {
+    "en_label": "Decimal",
+    "en_desc": "Standard decimal number format.",
+    "ja_title": "小数 (Decimal)",
+    "ja_desc": "通常の 10進数表記で\n数値を表示します。\n\n【例】\n1234.56\n0.0078"
+  },
+  "Scientific": {
+    "en_label": "Scientific",
+    "en_desc": "Scientific exponential notation (a * 10^b).",
+    "ja_title": "科学表記 (Sci)",
+    "ja_desc": "10 のべき乗を用いた\n指数表記で表示します。\n\n【例】\n1.23456E3\n7.8E-3"
+  },
+  "Engineering": {
+    "en_label": "Engineering",
+    "en_desc": "Engineering notation with exponent multiples of 3.",
+    "ja_title": "工学表記 (Eng)",
+    "ja_desc": "指数が 3 の倍数\n(k, M, m, μ 等に対応)\nとなる指数表記で表示します。\n\n【例】\n1.234E3, 780E-6"
+  },
+  "SignificantFigures": {
+    "en_label": "Significant figures",
+    "en_desc": "Display values rounded to a specified number of significant digits.",
+    "ja_title": "有効数字",
+    "ja_desc": "指定した桁数の有効数字で\n丸めて数値を表示します。"
+  },
+  "EditionMode": {
+    "en_label": "Writing format",
+    "en_desc": "Choose between 2D textbook math layout and 1-line linear text format.",
+    "ja_title": "数式入力形式",
+    "ja_desc": "数式の入力スタイルを\n選択します。\n\n・2D: 分数や累乗を教科書\n　通りに視覚的に表示\n・1行: プログラミング風\n　の1行テキストで入力"
+  },
+  "Edition2D": {
+    "en_label": "2D natural math",
+    "en_desc": "Two-dimensional textbook style math layout.",
+    "ja_title": "2D 自然表示",
+    "ja_desc": "分数、根号、累乗などを\n教科書の印刷と同じ\n美しい 2次元レイアウトで\n視覚的に入力します。"
+  },
+  "EditionLinear": {
+    "en_label": "Linear (1-line)",
+    "en_desc": "Single-line linear text format.",
+    "ja_title": "1行入力 (Linear)",
+    "ja_desc": "コンピュータのソース\nコードのように 1行の\nテキスト形式で\n数式を入力します。"
+  },
+  "SymbolFunction": {
+    "en_label": "Function notation",
+    "en_desc": "Format for defining functions: f(x) or y.",
+    "ja_title": "関数の表記形式",
+    "ja_desc": "関数アプリでの\n関数の定義形式を\nf(x) または y から\n選択します。"
+  },
+  "SymbolDefaultFunction": {
+    "en_label": "f(x)",
+    "en_desc": "Standard function notation f(x).",
+    "ja_title": "f(x) 形式",
+    "ja_desc": "関数を f(x) の形式で\n定義・表示します。"
+  },
+  "SymbolArgDefaultFunction": {
+    "en_label": "f(x) with argument",
+    "en_desc": "Function with explicit argument.",
+    "ja_title": "f(x) 引数明示",
+    "ja_desc": "引数を明示した関数\n形式で表示します。"
+  },
+  "SymbolArgFunction": {
+    "en_label": "y =",
+    "en_desc": "Cartesian y = notation.",
+    "ja_title": "y = 形式",
+    "ja_desc": "関数を y = ... の\n方程式形式で定義・\n表示します。"
+  },
+  "ComplexFormat": {
+    "en_label": "Complex format",
+    "en_desc": "Format for complex numbers: Real only, Cartesian (a+bi), or Polar (r*e^(i*theta)).",
+    "ja_title": "複素数形式",
+    "ja_desc": "複素数の計算結果の\n表示スタイルを選択します。\n\n・実数 (Real): 実数のみ\n・直交 (Cartesian): a+bi\n・極形式 (Polar): r*e^(iθ)"
+  },
+  "Real": {
+    "en_label": "Real",
+    "en_desc": "Real numbers only; negative square roots return an error.",
+    "ja_title": "実数のみ (Real)",
+    "ja_desc": "負の数の平方根などを\nエラーとして扱い、\n実数の範囲内でのみ\n計算を行います。"
+  },
+  "Cartesian": {
+    "en_label": "Cartesian (a+bi)",
+    "en_desc": "Cartesian form a+bi with real and imaginary parts.",
+    "ja_title": "直交形式 (a+bi)",
+    "ja_desc": "実部 a と虚部 b を用いて\na + bi の形式で\n複素数を表示します。\n\n【例】\n3 + 4i"
+  },
+  "Polar": {
+    "en_label": "Polar (r*e^(i*theta))",
+    "en_desc": "Polar exponential form r * e^(i*theta).",
+    "ja_title": "極形式 (r*e^(iθ))",
+    "ja_desc": "絶対値 r と偏角 θ を用いた\n極形式 r*e^(iθ) で\n複素数を表示します。\n\n【例】\n2*e^(i*π/3)"
+  },
+  "SymbolMultiplication": {
+    "en_label": "Multiplication symbol",
+    "en_desc": "Choose display symbol for multiplication (*, x, or dot).",
+    "ja_title": "掛け算記号",
+    "ja_desc": "乗算の表示記号を\n選択します。\n\n・× (クロス記号)\n・・ (中黒記号)\n・* (アスタリスク)\n・自動"
+  },
+  "SymbolMultiplicationCross": {
+    "en_label": "Cross (x)",
+    "en_desc": "Multiplication displayed as cross symbol.",
+    "ja_title": "× (クロス)",
+    "ja_desc": "教科書でおなじみの\n「×」記号で乗算を\n表示します。"
+  },
+  "SymbolMultiplicationMiddleDot": {
+    "en_label": "Middle dot (·)",
+    "en_desc": "Multiplication displayed as a middle dot.",
+    "ja_title": "・ (中黒)",
+    "ja_desc": "数式で一般的な\n「・」記号で乗算を\n表示します。"
+  },
+  "SymbolMultiplicationStar": {
+    "en_label": "Star (*)",
+    "en_desc": "Multiplication displayed as asterisk.",
+    "ja_title": "* (星印)",
+    "ja_desc": "プログラミング等で\n用いられる「*」記号で\n乗算を表示します。"
+  },
+  "SymbolMultiplicationAutoSymbol": {
+    "en_label": "Auto multiplication",
+    "en_desc": "Automatically choose multiplication symbol.",
+    "ja_title": "自動判別",
+    "ja_desc": "文脈に応じて掛け算記号\nを自動選択します。"
+  },
+  "BrightnessSettings": {
+    "en_label": "Brightness & sleep",
+    "en_desc": "Adjust display backlight level and sleep timeout intervals.",
+    "ja_title": "明るさと省電力",
+    "ja_desc": "画面のバックライト輝度と\n自動減光・スリープまでの\n待機時間を設定します。"
+  },
+  "Brightness": {
+    "en_label": "Brightness",
+    "en_desc": "Adjust display backlight brightness level.",
+    "ja_title": "画面の明るさ",
+    "ja_desc": "液晶画面の明るさを\n調節します。\n\n左右キーで輝度を変更でき、\n省電力化にも役立ちます。"
+  },
+  "IdleTimeBeforeDimming": {
+    "en_label": "Dimming timeout",
+    "en_desc": "Seconds of inactivity before dimming screen backlight.",
+    "ja_title": "自動減光時間",
+    "ja_desc": "無操作のまま画面を\n暗くするまでの時間 (秒)\nを設定します。"
+  },
+  "IdleTimeBeforeSuspend": {
+    "en_label": "Suspend timeout",
+    "en_desc": "Seconds of inactivity before device goes into suspend mode.",
+    "ja_title": "スリープ待機時間",
+    "ja_desc": "無操作のまま本機が\nスリープ (省電力休止)\nに入るまでの待機時間 (秒)\nを設定します。"
+  },
+  "BrightnessShortcut": {
+    "en_label": "Brightness shortcut",
+    "en_desc": "Configure keyboard shortcut for brightness adjustment.",
+    "ja_title": "輝度ショートカット",
+    "ja_desc": "キーボードから画面輝度\nを素早く変更する\nショートカットの有無を\n設定します。"
+  },
+  "DateTime": {
+    "en_label": "Date and time",
+    "en_desc": "Set system date, clock time, and status bar clock display.",
+    "ja_title": "日付と時刻",
+    "ja_desc": "計算機のシステム時計の\n西暦、日付、時刻、\nおよび時計表示を\n設定します。"
+  },
+  "ActivateClock": {
+    "en_label": "Show clock",
+    "en_desc": "Toggle real-time clock display in the top header bar.",
+    "ja_title": "時計表示の有効化",
+    "ja_desc": "画面上部のヘッダーバーに\n現在時刻を表示するかどうか\nを切り替えます。"
+  },
+  "Date": {
+    "en_label": "Date",
+    "en_desc": "Set current year, month, and day.",
+    "ja_title": "日付設定",
+    "ja_desc": "本機の西暦・月・日を\n入力して更新します。"
+  },
+  "Time": {
+    "en_label": "Time",
+    "en_desc": "Set current hour, minute, and second.",
+    "ja_title": "時刻設定",
+    "ja_desc": "本機の時・分・秒を\n入力して更新します。"
+  },
+  "Language": {
+    "en_label": "Language",
+    "en_desc": "Select calculator system language (English, French, etc.).",
+    "ja_title": "システム言語",
+    "ja_desc": "計算機のメニュー表示言語\nを選択します。\n(右側サイドバーには常に\n日本語ガイドが表示されます)"
+  },
+  "Country": {
+    "en_label": "Country",
+    "en_desc": "Select country preferences (decimal separator, exam regulations).",
+    "ja_title": "国・地域設定",
+    "ja_desc": "小数点の表記形式や\n各国の教育基準規約\nを設定します。"
+  },
+  "ExternalApps": {
+    "en_label": "External applications",
+    "en_desc": "Manage external applications and file permissions.",
+    "ja_title": "外部アプリ",
+    "ja_desc": "外部アドインアプリの\n有効化やストレージへの\n書き込み権限を設定します。"
+  },
+  "Accessibility": {
+    "en_label": "Accessibility",
+    "en_desc": "Configure screen contrast, color inversion, and accessibility options.",
+    "ja_title": "アクセシビリティ",
+    "ja_desc": "画面の見やすさを向上させる\n視覚補助設定です。\n\n・白黒・色反転表示\n・文字拡大\n・画面ガンマ値の調整"
+  },
+  "About": {
+    "en_label": "About",
+    "en_desc": "View software version, memory usage, serial number, and battery status.",
+    "ja_title": "本機について",
+    "ja_desc": "本機のシステム情報、\nソフトウェアバージョン、\nメモリ使用量、\nバッテリー残量などを\n確認します。"
+  },
+  "Username": {
+    "en_label": "Username",
+    "en_desc": "Owner name registered to this device.",
+    "ja_title": "ユーザー名",
+    "ja_desc": "本機に登録されている\n所有者の名前です。\n名前を変更することも\n可能です。"
+  },
+  "UpsilonVersion": {
+    "en_label": "Upsilon version",
+    "en_desc": "Installed Upsilon OS release version.",
+    "ja_title": "Upsilon OS版数",
+    "ja_desc": "本機に組み込まれている\nUpsilon OS のバージョン\n番号です。"
+  },
+  "OmegaVersion": {
+    "en_label": "Omega version",
+    "en_desc": "Omega base system version.",
+    "ja_title": "Omega 版数",
+    "ja_desc": "ベースとなった Omega OS\nのバージョン情報です。"
+  },
+  "SoftwareVersion": {
+    "en_label": "Software version",
+    "en_desc": "NumWorks / Epsilon base software release.",
+    "ja_title": "ソフトウェア版数",
+    "ja_desc": "NumWorks Epsilon の\n基本ソフトウェア版数です。"
+  },
+  "MicroPythonVersion": {
+    "en_label": "MicroPython version",
+    "en_desc": "Embedded MicroPython interpreter version.",
+    "ja_title": "Python 版数",
+    "ja_desc": "内蔵 MicroPython の\nバージョン情報です。"
+  },
+  "Battery": {
+    "en_label": "Battery",
+    "en_desc": "Current battery level percentage and charging status.",
+    "ja_title": "バッテリー残量",
+    "ja_desc": "電池残量パーセンテージと\n給電・充電ステータスを\n表示します。"
+  },
+  "MemUse": {
+    "en_label": "Memory usage",
+    "en_desc": "RAM and Flash storage memory usage.",
+    "ja_title": "メモリ使用状況",
+    "ja_desc": "システムメモリ (RAM) と\nユーザーデータ領域の\n使用容量および空き容量を\n表示します。"
+  },
+  "SerialNumber": {
+    "en_label": "Serial number",
+    "en_desc": "Unique hardware serial number.",
+    "ja_title": "シリアル番号",
+    "ja_desc": "ハードウェア固有の\n製造識別番号です。"
+  },
+  "FccId": {
+    "en_label": "FCC ID",
+    "en_desc": "Regulatory compliance identification.",
+    "ja_title": "認証 ID",
+    "ja_desc": "電波法・通信規格等の\n認証情報です。"
+  },
+  "Contributors": {
+    "en_label": "Contributors",
+    "en_desc": "List of open-source contributors to NumWorks, Omega, and Upsilon.",
+    "ja_title": "開発貢献者",
+    "ja_desc": "NumWorks, Omega, Upsilon\nおよび BrainCalc 移植の\n開発者・コントリビューター\n一覧です。"
+  },
+  "Variables": {
+    "en_label": "Variables",
+    "en_desc": "Manage stored numeric variables, expressions, functions, and sequences.",
+    "ja_title": "変数と定義式",
+    "ja_desc": "保存された変数、関数、\n数列の定義式を\n一覧表示・管理します。\n\n【選択してEnter】で\n数式欄に変数名を挿入\n【Clear】で選択変数を削除"
+  },
+  "Expressions": {
+    "en_label": "Expressions",
+    "en_desc": "Numeric values and expressions saved into variables (A-Z, ans, etc.).",
+    "ja_title": "数値・式 (変数)",
+    "ja_desc": "STO (->) コマンドで\n変数 A〜Z や ans に\n保存された数値・式の\n一覧です。\n\n【例】\n5 -> A\nans + 10 -> B"
+  },
+  "Functions": {
+    "en_label": "Functions",
+    "en_desc": "Mathematical functions defined in the Functions app.",
+    "ja_title": "関数定義一覧",
+    "ja_desc": "関数アプリで定義した\nf(x), g(x) などの式一覧\nです。\n\n計算画面で f(3) のように\n呼び出して計算できます。"
+  },
+  "Sequences": {
+    "en_label": "Sequences",
+    "en_desc": "Sequences defined in the Sequences app.",
+    "ja_title": "数列定義一覧",
+    "ja_desc": "数列アプリで定義した\nu(n), v(n) などの漸化式・\n一般項の一覧です。\n\n計算画面で u(5) のように\n特定項の値を計算できます。"
+  },
+  "Calculation": {
+    "en_label": "Calculus",
+    "en_desc": "Numerical derivative, definite integral, summation, and product.",
+    "ja_title": "微積分・解析",
+    "ja_desc": "微分係数、定積分、\n総和 (Σ)、総乗 (Π) などの\n解析計算を行います。\n\n【主な関数】\n・diff: 微分係数\n・int: 定積分\n・sum: 総和\n・prod: 総乗\n・inf: 無限大"
+  },
   "DiffCommandWithArg": {
     "en_label": "diff(f(x),x,a)",
-    "en_desc": "Derivative value",
+    "en_desc": "Derivative value at point a",
     "ja_title": "微分係数",
     "ja_desc": "f(x)の x=a における\n微分係数を計算します。\n\n【書式】\ndiff(式, 変数, 値)\n\n【例】\ndiff(x^2, x, 3) → 6"
   },
   "IntCommandWithArg": {
     "en_label": "int(f(x),x,a,b)",
-    "en_desc": "Integral",
+    "en_desc": "Definite integral",
     "ja_title": "定積分",
     "ja_desc": "区間[a, b]における\n関数の定積分を\n数値計算します。\n\n【書式】\nint(式, 変数, a, b)\n\n【例】\nint(x^2, x, 0, 1)\n→ 1/3"
   },
   "SumCommandWithArg": {
     "en_label": "sum(f(n),n,a,b)",
-    "en_desc": "Sum",
+    "en_desc": "Summation",
     "ja_title": "総和 (シグマ)",
     "ja_desc": "n=a から b までの\nf(n) の総和を\n計算します。\n\n【書式】\nsum(式, 変数, a, b)\n\n【例】\nsum(n, n, 1, 10)\n→ 55"
   },
@@ -29,15 +425,21 @@
     "ja_title": "無限大",
     "ja_desc": "極限や定積分の区間\nなどに使用する\n正の無限大記号です。\n\n【例】\nint(1/x^2, x, 1, inf)\n→ 1"
   },
+  "ComplexNumber": {
+    "en_label": "Complex numbers",
+    "en_desc": "Absolute value, argument, real/imaginary parts, and complex conjugate.",
+    "ja_title": "複素数計算",
+    "ja_desc": "複素数の絶対値、偏角、\n実部、虚部、共役複素数\nなどを計算します。\n\n【主な関数】\n・abs: 絶対値 |z|\n・arg: 偏角 arg(z)\n・re: 実部 Re(z)\n・im: 虚部 Im(z)\n・conj: 共役複素数"
+  },
   "AbsCommandWithArg": {
     "en_label": "abs(z)",
-    "en_desc": "Absolute value",
+    "en_desc": "Absolute value or modulus",
     "ja_title": "絶対値 / 大きさ",
     "ja_desc": "実数の絶対値、または\n複素数 z の大きさ\n|z| を計算します。\n\n【例】\nabs(3+4i) → 5"
   },
   "ArgCommandWithArg": {
     "en_label": "arg(z)",
-    "en_desc": "Argument",
+    "en_desc": "Argument in radians",
     "ja_title": "偏角 (ラジアン)",
     "ja_desc": "複素数 z の偏角\nθ = arg(z) を\n計算します。\n\n【例】\narg(1+i) → π/4"
   },
@@ -55,69 +457,33 @@
   },
   "ConjCommandWithArg": {
     "en_label": "conj(z)",
-    "en_desc": "Conjugate",
+    "en_desc": "Complex conjugate",
     "ja_title": "共役複素数",
     "ja_desc": "複素数 z = a + bi の\n共役複素数 a - bi を\n計算します。\n\n【例】\nconj(3+4i) → 3-4i"
   },
-  "BinomialCommandWithArg": {
-    "en_label": "binomial(n,k)",
-    "en_desc": "Combination (nCr)",
-    "ja_title": "組合せ (nCr)",
-    "ja_desc": "異なる n 個から k 個を\n選ぶ組合せの数\nnCk を計算します。\n\n【書式】\nbinomial(n, k)\n\n【例】\nbinomial(5, 2) → 10"
+  "RootCommandWithArg": {
+    "en_label": "root(x,n)",
+    "en_desc": "N-th root",
+    "ja_title": "n 乗根",
+    "ja_desc": "数 x の n 乗根\n(x の 1/n 乗) を\n計算します。\n\n【書式】\nroot(x, n)\n\n【例】\nroot(8, 3) → 2"
   },
-  "PermuteCommandWithArg": {
-    "en_label": "permute(n,k)",
-    "en_desc": "Permutation (nPr)",
-    "ja_title": "順列 (nPr)",
-    "ja_desc": "異なる n 個から k 個を\n並べる順列の数\nnPr を計算します。\n\n【書式】\npermute(n, k)\n\n【例】\npermute(5, 2) → 20"
+  "LogCommandWithArg": {
+    "en_label": "log(x,a)",
+    "en_desc": "Base-a logarithm",
+    "ja_title": "底 a の対数",
+    "ja_desc": "底を a とする x の対数\nlog_a(x) を計算します。\n(第2引数を省略すると常用対数 log10 になります)\n\n【書式】\nlog(x, 底)\n\n【例】\nlog(8, 2) → 3"
   },
-  "FactorialCommandWithArg": {
-    "en_label": "n!",
-    "en_desc": "Factorial",
-    "ja_title": "階乗",
-    "ja_desc": "正の整数 n の階乗\nn! = n*(n-1)*...*1\nを計算します。\n\n【例】\n5! → 120"
+  "Unit": {
+    "en_label": "Units and constants",
+    "en_desc": "Physical constants and measurement units (time, distance, mass, energy, etc.).",
+    "ja_title": "単位・物理定数",
+    "ja_desc": "長さ、質量、時間、\nエネルギーなどの単位と\n物理定数を入力できます。\n\n自動単位換算や\n物理量の計算に便利です。"
   },
-  "NormCDFCommandWithArg": {
-    "en_label": "normcdf(a,μ,σ)",
-    "en_desc": "Cumulative normal",
-    "ja_title": "累積正規分布",
-    "ja_desc": "平均 μ、標準偏差 σ の\n正規分布において、\n負の無限大から a までの\n累積確率を計算します。"
-  },
-  "NormCDF2CommandWithArg": {
-    "en_label": "normcdf(a,b,μ,σ)",
-    "en_desc": "Cumulative normal range",
-    "ja_title": "区間累積正規分布",
-    "ja_desc": "平均 μ、標準偏差 σ の\n正規分布において、\n区間 [a, b] の\n確率 P(a≦X≦b) を\n計算します。"
-  },
-  "InvNormCommandWithArg": {
-    "en_label": "invnorm(p,μ,σ)",
-    "en_desc": "Inverse normal",
-    "ja_title": "逆正規分布",
-    "ja_desc": "累積確率が p となる\n確率変数 x の境界値\nを計算します。"
-  },
-  "NormPDFCommandWithArg": {
-    "en_label": "normpdf(x,μ,σ)",
-    "en_desc": "Normal PDF",
-    "ja_title": "正規分布の確率密度",
-    "ja_desc": "平均 μ、標準偏差 σ の\n正規分布における\nx の確率密度関数の値\nを計算します。"
-  },
-  "BinomialPDFCommandWithArg": {
-    "en_label": "binompdf(m,n,p)",
-    "en_desc": "Binomial PDF",
-    "ja_title": "二項分布の確率",
-    "ja_desc": "試行回数 n、確率 p の\n二項分布において、\n成功回数が丁度 m 回と\nなる確率を計算します。"
-  },
-  "BinomialCDFCommandWithArg": {
-    "en_label": "binomcdf(m,n,p)",
-    "en_desc": "Cumulative binomial",
-    "ja_title": "累積二項分布",
-    "ja_desc": "試行回数 n、確率 p の\n二項分布において、\n成功回数が 0 から m 回\n以下となる確率を計算します。"
-  },
-  "InvBinomialCommandWithArg": {
-    "en_label": "invbinom(α,n,p)",
-    "en_desc": "Inverse binomial",
-    "ja_title": "逆二項分布",
-    "ja_desc": "累積確率が α 以上と\nなる最小の成功回数 m\nを計算します。"
+  "Arithmetic": {
+    "en_label": "Arithmetic",
+    "en_desc": "GCD, LCM, integer division, remainder, prime factorization, and rounding.",
+    "ja_title": "整数・数論",
+    "ja_desc": "最大公約数 (GCD)、\n最小公倍数 (LCM)、\n素因数分解、商と余り\nなどの整数計算を行います。\n\n【主な関数】\n・gcd: 最大公約数\n・lcm: 最小公倍数\n・factor: 素因数分解\n・rem: 剰余 (余り)\n・quo: 整数の商"
   },
   "GcdCommandWithArg": {
     "en_label": "gcd(a,b)",
@@ -131,15 +497,21 @@
     "ja_title": "最小公倍数 (LCM)",
     "ja_desc": "2つ以上の整数の\n最小公倍数を\n計算します。\n\n【例】\nlcm(12, 18) → 36"
   },
+  "FactorCommandWithArg": {
+    "en_label": "factor(n)",
+    "en_desc": "Prime factorization",
+    "ja_title": "素因数分解",
+    "ja_desc": "正の整数 n を素数の積\n(素因数分解) に\n分解します。\n\n【書式】\nfactor(整数)\n\n【例】\nfactor(60)\n→ 2^2 * 3 * 5"
+  },
   "RemCommandWithArg": {
     "en_label": "rem(a,b)",
-    "en_desc": "Remainder",
+    "en_desc": "Remainder of division",
     "ja_title": "剰余 (余り)",
     "ja_desc": "整数 a を b で割った\nときの余り (a mod b)\nを計算します。\n\n【例】\nrem(17, 5) → 2"
   },
   "QuoCommandWithArg": {
     "en_label": "quo(a,b)",
-    "en_desc": "Quotient",
+    "en_desc": "Integer quotient",
     "ja_title": "商 (整数の商)",
     "ja_desc": "整数 a を b で割った\nときの整数の商\n(切り捨て) を計算します。\n\n【例】\nquo(17, 5) → 3"
   },
@@ -163,13 +535,43 @@
   },
   "RoundCommandWithArg": {
     "en_label": "round(x,n)",
-    "en_desc": "Round",
+    "en_desc": "Round to n digits",
     "ja_title": "四捨五入",
     "ja_desc": "数 x を小数点以下\nn 桁に四捨五入します。\n\n【書式】\nround(x, 桁数)\n\n【例】\nround(3.14159, 2)\n→ 3.14"
   },
+  "MatricesAndVectors": {
+    "en_label": "Matrices and vectors",
+    "en_desc": "Matrix inverse, determinant, transpose, trace, row echelon forms, and vector dot/cross products.",
+    "ja_title": "行列とベクトル",
+    "ja_desc": "行列式、逆行列、転置、\n連立一次方程式の掃き出し、\nベクトルの内積・外積など\nの線形代数計算を行います。\n\n【主な関数】\n・det, inverse, transpose\n・ref, rref (掃き出し)\n・dot, cross, norm"
+  },
+  "Matrices": {
+    "en_label": "Matrices",
+    "en_desc": "Matrix determinants, inverses, eigenvalues, trace, and row reductions.",
+    "ja_title": "行列演算",
+    "ja_desc": "正方行列の行列式、\n逆行列、単位行列の生成、\n行基本変形 (REF/RREF)\nを行います。"
+  },
+  "Vectors": {
+    "en_label": "Vectors",
+    "en_desc": "Vector dot product, cross product, and Euclidean norm.",
+    "ja_title": "ベクトル演算",
+    "ja_desc": "ベクトルの内積 (dot)、\n外積 (cross)、\nノルム (長さ norm) を\n計算します。"
+  },
+  "MatrixCommandWithArg": {
+    "en_label": "[[a,b],[c,d]]",
+    "en_desc": "New matrix template",
+    "ja_title": "新規行列の作成",
+    "ja_desc": "新しい行列のひな型を\n数式欄に挿入します。\n\n矢印キーで各要素に\n移動して数値を\n入力できます。"
+  },
+  "IndentityCommandWithArg": {
+    "en_label": "identity(n)",
+    "en_desc": "Identity matrix of size n",
+    "ja_title": "単位行列 (identity)",
+    "ja_desc": "対角成分がすべて 1、\n他が 0 の n×n の\n単位行列を生成します。\n\n【書式】\nidentity(サイズ)\n\n【例】\nidentity(2)\n→ [[1,0],[0,1]]"
+  },
   "DeterminantCommandWithArg": {
     "en_label": "det(M)",
-    "en_desc": "Determinant",
+    "en_desc": "Matrix determinant",
     "ja_title": "行列式 (det)",
     "ja_desc": "正方行列 M の\n行列式 det(M) を\n計算します。\n\n【例】\ndet([[1,2],[3,4]])\n→ -2"
   },
@@ -181,19 +583,19 @@
   },
   "TransposeCommandWithArg": {
     "en_label": "transpose(M)",
-    "en_desc": "Transpose",
+    "en_desc": "Matrix transpose",
     "ja_title": "転置行列",
     "ja_desc": "行列 M の行と列を\n入れ替えた転置行列\n^t M を計算します。"
   },
   "TraceCommandWithArg": {
     "en_label": "trace(M)",
-    "en_desc": "Trace",
+    "en_desc": "Matrix trace",
     "ja_title": "トレース (対角和)",
     "ja_desc": "正方行列 M の\n主対角成分の総和\n(対角和) を計算します。"
   },
   "DimensionCommandWithArg": {
     "en_label": "dim(M)",
-    "en_desc": "Dimension / size",
+    "en_desc": "Matrix or vector dimensions",
     "ja_title": "行列・ベクトルの次元",
     "ja_desc": "行列 M の行数・列数、\nまたはベクトルの長さを\nリスト {行, 列} で\n返します。"
   },
@@ -227,16 +629,292 @@
     "ja_title": "被約行階段形 (RREF)",
     "ja_desc": "連立方程式の解を求める\n掃き出し法（ガウス・ジョルダン法）\nを行い、被約行階段形に変換します。"
   },
+  "Combinatorics": {
+    "en_label": "Combinatorics",
+    "en_desc": "Combinations (nCr), permutations (nPr), and factorials (n!).",
+    "ja_title": "順列と組合せ",
+    "ja_desc": "場合の数、組合せ (nCr)、\n順列 (nPr)、階乗 (n!)\nを計算します。\n\n【主な関数】\n・binomial(n, k): nCk\n・permute(n, k): nPr\n・n!: 階乗"
+  },
+  "BinomialCommandWithArg": {
+    "en_label": "binomial(n,k)",
+    "en_desc": "Combination (nCr)",
+    "ja_title": "組合せ (nCr)",
+    "ja_desc": "異なる n 個から k 個を\n選ぶ組合せの数\nnCk を計算します。\n\n【書式】\nbinomial(n, k)\n\n【例】\nbinomial(5, 2) → 10"
+  },
+  "PermuteCommandWithArg": {
+    "en_label": "permute(n,k)",
+    "en_desc": "Permutation (nPr)",
+    "ja_title": "順列 (nPr)",
+    "ja_desc": "異なる n 個から k 個を\n並べる順列の数\nnPr を計算します。\n\n【書式】\npermute(n, k)\n\n【例】\npermute(5, 2) → 20"
+  },
+  "FactorialCommandWithArg": {
+    "en_label": "n!",
+    "en_desc": "Factorial",
+    "ja_title": "階乗",
+    "ja_desc": "正の整数 n の階乗\nn! = n*(n-1)*...*1\nを計算します。\n\n【例】\n5! → 120"
+  },
+  "Probability": {
+    "en_label": "Probability",
+    "en_desc": "Normal and binomial probability distributions and inverse cumulative functions.",
+    "ja_title": "確率・分布",
+    "ja_desc": "正規分布や二項分布の\n確率密度関数、累積分布、\n逆確率の計算を行います。"
+  },
+  "NormalDistribution": {
+    "en_label": "Normal distribution",
+    "en_desc": "Continuous Gaussian / normal probability distribution.",
+    "ja_title": "正規分布",
+    "ja_desc": "平均 μ、標準偏差 σ の\n正規分布 (ガウス分布) の\n確率・累積確率・逆確率\nを計算します。"
+  },
+  "NormCDFCommandWithArg": {
+    "en_label": "normcdf(a,μ,σ)",
+    "en_desc": "Cumulative normal",
+    "ja_title": "累積正規分布",
+    "ja_desc": "平均 μ、標準偏差 σ の\n正規分布において、\n負の無限大から a までの\n累積確率を計算します。"
+  },
+  "NormCDF2CommandWithArg": {
+    "en_label": "normcdf(a,b,μ,σ)",
+    "en_desc": "Cumulative normal range [a,b]",
+    "ja_title": "区間累積正規分布",
+    "ja_desc": "平均 μ、標準偏差 σ の\n正規分布において、\n区間 [a, b] の\n確率 P(a≦X≦b) を\n計算します。"
+  },
+  "InvNormCommandWithArg": {
+    "en_label": "invnorm(p,μ,σ)",
+    "en_desc": "Inverse cumulative normal",
+    "ja_title": "逆正規分布",
+    "ja_desc": "累積確率が p となる\n確率変数 x の境界値\nを計算します。"
+  },
+  "NormPDFCommandWithArg": {
+    "en_label": "normpdf(x,μ,σ)",
+    "en_desc": "Normal probability density function",
+    "ja_title": "正規分布の確率密度",
+    "ja_desc": "平均 μ、標準偏差 σ の\n正規分布における\nx の確率密度関数の値\nを計算します。"
+  },
+  "BinomialDistribution": {
+    "en_label": "Binomial distribution",
+    "en_desc": "Discrete binomial probability distribution.",
+    "ja_title": "二項分布",
+    "ja_desc": "試行回数 n、成功確率 p の\n二項分布における\n確率・累積確率・逆確率\nを計算します。"
+  },
+  "BinomialPDFCommandWithArg": {
+    "en_label": "binompdf(m,n,p)",
+    "en_desc": "Binomial probability P(X=m)",
+    "ja_title": "二項分布の確率",
+    "ja_desc": "試行回数 n、確率 p の\n二項分布において、\n成功回数が丁度 m 回と\nなる確率を計算します。"
+  },
+  "BinomialCDFCommandWithArg": {
+    "en_label": "binomcdf(m,n,p)",
+    "en_desc": "Cumulative binomial P(X<=m)",
+    "ja_title": "累積二項分布",
+    "ja_desc": "試行回数 n、確率 p の\n二項分布において、\n成功回数が 0 から m 回\n以下となる確率を計算します。"
+  },
+  "InvBinomialCommandWithArg": {
+    "en_label": "invbinom(α,n,p)",
+    "en_desc": "Inverse binomial",
+    "ja_title": "逆二項分布",
+    "ja_desc": "累積確率が α 以上と\nなる最小の成功回数 m\nを計算します。"
+  },
+  "RandomAndApproximation": {
+    "en_label": "Random & rounding",
+    "en_desc": "Random numbers, floor, ceiling, fractional part, and rounding functions.",
+    "ja_title": "乱数と端数処理",
+    "ja_desc": "整数の乱数、実数乱数、\nおよび四捨五入、切り捨て、\n切り上げなどの端数処理\nを行います。\n\n【主な関数】\n・randint: 整数乱数\n・random: 0〜1の実数乱数\n・round: 四捨五入\n・floor, ceil, frac"
+  },
   "RandintCommandWithArg": {
     "en_label": "randint(a,b)",
-    "en_desc": "Random integer",
+    "en_desc": "Random integer in [a,b]",
     "ja_title": "整数の乱数",
     "ja_desc": "a 以上 b 以下の\nランダムな整数を\n1つ生成します。\n\n【書式】\nrandint(最小, 最大)\n\n【例】\nrandint(1, 6) → 4"
   },
   "RandomCommandWithArg": {
     "en_label": "random()",
-    "en_desc": "Random float",
+    "en_desc": "Random float in [0,1)",
     "ja_title": "実数の乱数 (0〜1)",
     "ja_desc": "区間 [0, 1) の一様な\n疑似乱数（実数）を\n1つ生成します。"
+  },
+  "HyperbolicTrigonometry": {
+    "en_label": "Hyperbolic trigonometry",
+    "en_desc": "Hyperbolic functions (sinh, cosh, tanh) and inverse hyperbolic functions.",
+    "ja_title": "双曲線関数",
+    "ja_desc": "双曲線三角関数\n(sinh, cosh, tanh) と\nその逆関数\n(asinh, acosh, atanh)\nを計算します。"
+  },
+  "SinhCommandWithArg": {
+    "en_label": "sinh(x)",
+    "en_desc": "Hyperbolic sine",
+    "ja_title": "双曲線正弦 (sinh)",
+    "ja_desc": "双曲線正弦関数\nsinh(x) = (e^x - e^(-x))/2\nを計算します。"
+  },
+  "CoshCommandWithArg": {
+    "en_label": "cosh(x)",
+    "en_desc": "Hyperbolic cosine",
+    "ja_title": "双曲線余弦 (cosh)",
+    "ja_desc": "双曲線余弦関数\ncosh(x) = (e^x + e^(-x))/2\nを計算します。\n(懸垂線の形状を表します)"
+  },
+  "TanhCommandWithArg": {
+    "en_label": "tanh(x)",
+    "en_desc": "Hyperbolic tangent",
+    "ja_title": "双曲線正接 (tanh)",
+    "ja_desc": "双曲線正接関数\ntanh(x) = sinh(x)/cosh(x)\nを計算します。"
+  },
+  "AsinhCommandWithArg": {
+    "en_label": "asinh(x)",
+    "en_desc": "Inverse hyperbolic sine",
+    "ja_title": "逆双曲線正弦",
+    "ja_desc": "双曲線正弦 sinh(x) の\n逆関数 asinh(x) を\n計算します。"
+  },
+  "AcoshCommandWithArg": {
+    "en_label": "acosh(x)",
+    "en_desc": "Inverse hyperbolic cosine",
+    "ja_title": "逆双曲線余弦",
+    "ja_desc": "双曲線余弦 cosh(x) の\n逆関数 acosh(x) を\n計算します (x ≧ 1)。"
+  },
+  "AtanhCommandWithArg": {
+    "en_label": "atanh(x)",
+    "en_desc": "Inverse hyperbolic tangent",
+    "ja_title": "逆双曲線正接",
+    "ja_desc": "双曲線正接 tanh(x) の\n逆関数 atanh(x) を\n計算します (|x| < 1)。"
+  },
+  "Fluctuation": {
+    "en_label": "Fluctuation & prediction",
+    "en_desc": "Confidence intervals and prediction interval computations.",
+    "ja_title": "推測・信頼区間",
+    "ja_desc": "統計的な予測区間や\n95%信頼区間の計算を\n行います。"
+  },
+  "Prediction95CommandWithArg": {
+    "en_label": "prediction95(x)",
+    "en_desc": "95% prediction interval",
+    "ja_title": "95% 予測区間",
+    "ja_desc": "標本データに基づいて\n母集団の比率や平均の\n95% 予測区間を\n計算します。"
+  },
+  "PredictionCommandWithArg": {
+    "en_label": "prediction(x)",
+    "en_desc": "Prediction value",
+    "ja_title": "回帰の予測値",
+    "ja_desc": "回帰モデルに基づき、\n特定の説明変数 x に対する\n予測値 y を計算します。"
+  },
+  "ConfidenceCommandWithArg": {
+    "en_label": "confidence(x)",
+    "en_desc": "Confidence interval",
+    "ja_title": "信頼区間",
+    "ja_desc": "推定統計における\n母数の信頼区間を\n計算します。"
+  },
+  "Chemistry": {
+    "en_label": "Chemistry",
+    "en_desc": "Molar masses of chemical elements and compounds.",
+    "ja_title": "化学・モル質量",
+    "ja_desc": "各元素の原子量や\n化学物質のモル質量定数を\n呼び出します。"
+  },
+  "Physics": {
+    "en_label": "Physics",
+    "en_desc": "Fundamental physical constants (speed of light, Planck constant, etc.).",
+    "ja_title": "物理定数",
+    "ja_desc": "真空中の光速度 c、\nプランク定数 h、\n万有引力定数 G、\n素電荷 e などの物理基礎定数\nを呼び出します。"
+  },
+  "Logic": {
+    "en_label": "Logic and bits",
+    "en_desc": "Bitwise logical operations: and, or, xor, not, shifts, and bit rotations.",
+    "ja_title": "論理・ビット演算",
+    "ja_desc": "ビット単位の論理積、\n論理和、排他的論理和、\nビットシフト、回転などを\n行います。\n\n【主な演算】\n・and, or, xor, not\n・shl, shr (論理シフト)\n・sra (算術シフト)\n・rol, ror (回転)"
+  },
+  "ExplicitNumberOfBits": {
+    "en_label": "Explicit bit size",
+    "en_desc": "Bitwise operations with explicitly specified word size.",
+    "ja_title": "ビット幅指定演算",
+    "ja_desc": "8ビット、16ビット、\n32ビットなど語長を\n明示してビット演算を\n行います。"
+  },
+  "LogicalAndCommandWithArg": {
+    "en_label": "a and b",
+    "en_desc": "Bitwise AND",
+    "ja_title": "ビット論理積 (AND)",
+    "ja_desc": "2つの整数の各ビットごとの\n論理積 (AND) を\n計算します。\n\n【例】\n0b1100 and 0b1010\n→ 0b1000 (8)"
+  },
+  "LogicalOrCommandWithArg": {
+    "en_label": "a or b",
+    "en_desc": "Bitwise OR",
+    "ja_title": "ビット論理和 (OR)",
+    "ja_desc": "2つの整数の各ビットごとの\n論理和 (OR) を\n計算します。\n\n【例】\n0b1100 or 0b1010\n→ 0b1110 (14)"
+  },
+  "LogicalXorCommandWithArg": {
+    "en_label": "a xor b",
+    "en_desc": "Bitwise XOR",
+    "ja_title": "排他的論理和 (XOR)",
+    "ja_desc": "2つの整数の各ビットごとの\n排他的論理和 (XOR) を\n計算します。\n\n【例】\n0b1100 xor 0b1010\n→ 0b0110 (6)"
+  },
+  "LogicalNotCommandWithArg": {
+    "en_label": "not a",
+    "en_desc": "Bitwise NOT",
+    "ja_title": "ビット反転 (NOT)",
+    "ja_desc": "整数の全ビットを\n反転 (1の補数) します。"
+  },
+  "LogicalShiftLeftCommandWithArg": {
+    "en_label": "shl(a,n)",
+    "en_desc": "Logical shift left",
+    "ja_title": "左論理シフト",
+    "ja_desc": "整数 a のビット列を\n左に n ビットシフトします。\n(a * 2^n に相当)\n\n【書式】\nshl(値, ビット数)"
+  },
+  "LogicalShiftRightCommandWithArg": {
+    "en_label": "shr(a,n)",
+    "en_desc": "Logical shift right",
+    "ja_title": "右論理シフト",
+    "ja_desc": "整数 a のビット列を\n右に n ビットシフトし、\n最上位に 0 を詰めます。\n\n【書式】\nshr(値, ビット数)"
+  },
+  "LogicalShiftRightArithmeticCommandWithArg": {
+    "en_label": "sra(a,n)",
+    "en_desc": "Arithmetic shift right",
+    "ja_title": "右算術シフト",
+    "ja_desc": "符号ビットを維持したまま\nビット列を右にシフトします。\n(負数の 2除算に対応)\n\n【書式】\nsra(値, ビット数)"
+  },
+  "LogicalRotateLeftCommandWithArg": {
+    "en_label": "rol(a,n)",
+    "en_desc": "Rotate left",
+    "ja_title": "左ビット回転",
+    "ja_desc": "ビット列を左に巡回回転\n(はみ出たビットが右端に入る)\nさせます。"
+  },
+  "LogicalRotateRightCommandWithArg": {
+    "en_label": "ror(a,n)",
+    "en_desc": "Rotate right",
+    "ja_title": "右ビット回転",
+    "ja_desc": "ビット列を右に巡回回転\n(はみ出たビットが左端に入る)\nさせます。"
+  },
+  "LogicalBitGetCommandWithArg": {
+    "en_label": "bitget(a,n)",
+    "en_desc": "Get bit at index n",
+    "ja_title": "特定ビット取得",
+    "ja_desc": "整数 a の下位から\nn 番目のビット (0 または 1)\nを取得します。"
+  },
+  "LogicalBitSetCommandWithArg": {
+    "en_label": "bitset(a,n)",
+    "en_desc": "Set bit at index n to 1",
+    "ja_title": "特定ビットセット",
+    "ja_desc": "整数 a の n 番目のビットを\n1 に設定します。"
+  },
+  "LogicalBitClearCommandWithArg": {
+    "en_label": "bitclear(a,n)",
+    "en_desc": "Clear bit at index n to 0",
+    "ja_title": "特定ビットクリア",
+    "ja_desc": "整数 a の n 番目のビットを\n0 にクリアします。"
+  },
+  "LogicalBitFlipCommandWithArg": {
+    "en_label": "bitflip(a,n)",
+    "en_desc": "Toggle bit at index n",
+    "ja_title": "特定ビット反転",
+    "ja_desc": "整数 a の n 番目のビットを\n反転 (0↔1) させます。"
+  },
+  "LogicalBitsClearCommandWithArg": {
+    "en_label": "bitsclear(a,n)",
+    "en_desc": "Clear lowest n bits",
+    "ja_title": "下位ビットクリア",
+    "ja_desc": "整数 a の下位 n ビットを\nすべて 0 にクリアします。"
+  },
+  "TwosComplementToBitsCommandWithArg": {
+    "en_label": "twos_complement(a,n)",
+    "en_desc": "2's complement with n bits",
+    "ja_title": "2の補数表現",
+    "ja_desc": "負数 a を n ビットの\n2の補数表現に変換します。"
+  },
+  "CeilingLog2CommandWithArg": {
+    "en_label": "ceil(log2(n))",
+    "en_desc": "Ceil of base-2 log",
+    "ja_title": "必要ビット数 (log2)",
+    "ja_desc": "整数 n を表現するために\n最低限必要なビット幅\nceil(log2(n)) を計算します。"
   }
 }

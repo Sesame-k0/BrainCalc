@@ -49,7 +49,7 @@ HWND windowHandle();
 
 // Exit confirmation dialog controls
 bool isExitConfirmOpen();
-void showExitConfirm();
+void showExitConfirm(int defaultFocus = 1);
 void closeExitConfirm();
 bool handleExitConfirmKey(WPARAM vkCode);
 bool handleExitConfirmClick(int x, int y);
