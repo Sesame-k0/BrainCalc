@@ -278,6 +278,192 @@ static void renderRightSidebar(HDC hdc) {
   SelectObject(hdc, oldFont);
 }
 
+// =============================================================================
+// 終了確認ポップアップダイアログ (画面中央 400x216)
+// =============================================================================
+static constexpr int kDialogW = 400;
+static constexpr int kDialogH = 216;
+static constexpr int kDialogX = (kBrainScreenWidth - kDialogW) / 2;   // 200
+static constexpr int kDialogY = (kBrainScreenHeight - kDialogH) / 2;  // 132
+
+static constexpr int kBtnExitX = kDialogX + 35;  // 235
+static constexpr int kBtnExitY = kDialogY + 114; // 246
+static constexpr int kBtnExitW = 150;
+static constexpr int kBtnExitH = 44;
+
+static constexpr int kBtnCancelX = kDialogX + 215; // 415
+static constexpr int kBtnCancelY = kDialogY + 114; // 246
+static constexpr int kBtnCancelW = 150;
+static constexpr int kBtnCancelH = 44;
+
+static bool sExitConfirmOpen = false;
+static int  sExitConfirmFocus = 0; // 0: 終了する, 1: キャンセル
+
+static void renderExitConfirmDialog(HDC hdc) {
+  // 1. ドロップシャドウ (X+4, Y+4)
+  drawBox(hdc, kDialogX + 4, kDialogY + 4, kDialogW, kDialogH,
+          RGB(136, 153, 166), RGB(136, 153, 166));
+
+  // 2. ダイアログ本体外枠
+  drawBox(hdc, kDialogX, kDialogY, kDialogW, kDialogH,
+          RGB(246, 248, 252), RGB(165, 178, 194));
+
+  // 3. ヘッダータイトル枠 (H = 38)
+  drawBox(hdc, kDialogX, kDialogY, kDialogW, 38,
+          RGB(232, 238, 245), RGB(195, 205, 218));
+  SelectObject(hdc, sUiFontBold);
+  drawTextLine(hdc, kDialogX, kDialogY + 9, kDialogW, 20,
+               RGB(36, 48, 64), L"【 終了の確認 】",
+               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+  // 4. メッセージ文
+  drawTextLine(hdc, kDialogX, kDialogY + 52, kDialogW, 20,
+               RGB(42, 50, 60), L"BrainCalc を終了して",
+               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  SelectObject(hdc, sUiFontSmall);
+  drawTextLine(hdc, kDialogX, kDialogY + 76, kDialogW, 20,
+               RGB(70, 80, 92), L"電子辞書のホーム画面に戻りますか？",
+               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+  // 5. ボタン群
+  SelectObject(hdc, sUiFontBold);
+  // [ 終了する ] ボタン
+  if (sExitConfirmFocus == 0) {
+    drawBox(hdc, kBtnExitX, kBtnExitY, kBtnExitW, kBtnExitH,
+            RGB(224, 68, 52), RGB(170, 40, 28));
+    drawTextLine(hdc, kBtnExitX, kBtnExitY, kBtnExitW, kBtnExitH,
+                 RGB(255, 255, 255), L"終了する",
+                 DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  } else {
+    drawBox(hdc, kBtnExitX, kBtnExitY, kBtnExitW, kBtnExitH,
+            RGB(255, 240, 238), RGB(225, 180, 175));
+    drawTextLine(hdc, kBtnExitX, kBtnExitY, kBtnExitW, kBtnExitH,
+                 RGB(190, 50, 40), L"終了する",
+                 DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  }
+
+  // [ キャンセル ] ボタン
+  if (sExitConfirmFocus == 1) {
+    drawBox(hdc, kBtnCancelX, kBtnCancelY, kBtnCancelW, kBtnCancelH,
+            RGB(28, 92, 152), RGB(18, 65, 115));
+    drawTextLine(hdc, kBtnCancelX, kBtnCancelY, kBtnCancelW, kBtnCancelH,
+                 RGB(255, 255, 255), L"キャンセル",
+                 DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  } else {
+    drawBox(hdc, kBtnCancelX, kBtnCancelY, kBtnCancelW, kBtnCancelH,
+            RGB(255, 255, 255), RGB(192, 200, 212));
+    drawTextLine(hdc, kBtnCancelX, kBtnCancelY, kBtnCancelW, kBtnCancelH,
+                 RGB(55, 65, 78), L"キャンセル",
+                 DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  }
+
+  // 6. 操作ガイド
+  SelectObject(hdc, sUiFontTiny);
+  drawTextLine(hdc, kDialogX, kDialogY + 180, kDialogW, 18,
+               RGB(125, 135, 148), L"[Enter]:決定   [Esc/戻る]:閉じる   [←/→]:選択",
+               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+}
+
+bool isExitConfirmOpen() {
+  return sExitConfirmOpen;
+}
+
+void showExitConfirm() {
+  sExitConfirmOpen = true;
+  sExitConfirmFocus = 0; // デフォルトは「終了する」にフォーカス
+  sCalcDirty = true;
+  sDirtyMinX = 0;
+  sDirtyMinY = 0;
+  sDirtyMaxX = Ion::Display::Width;
+  sDirtyMaxY = Ion::Display::Height;
+  sSidebarDirty = true;
+  draw();
+}
+
+void closeExitConfirm() {
+  sExitConfirmOpen = false;
+  sCalcDirty = true;
+  sDirtyMinX = 0;
+  sDirtyMinY = 0;
+  sDirtyMaxX = Ion::Display::Width;
+  sDirtyMaxY = Ion::Display::Height;
+  sSidebarDirty = true;
+  draw();
+}
+
+static void updateExitConfirmFocus(int focus) {
+  if (sExitConfirmFocus != focus) {
+    sExitConfirmFocus = focus;
+    HDC hdc = GetDC(sHwnd);
+    if (hdc && sMemDC) {
+      renderExitConfirmDialog(sMemDC);
+      BitBlt(hdc, kDialogX, kDialogY, kDialogW + 8, kDialogH + 8, sMemDC, kDialogX, kDialogY, SRCCOPY);
+      ReleaseDC(sHwnd, hdc);
+    }
+  }
+}
+
+bool handleExitConfirmKey(WPARAM vkCode) {
+  if (!sExitConfirmOpen) {
+    return false;
+  }
+  switch (vkCode) {
+    case VK_LEFT:
+    case VK_UP:
+      updateExitConfirmFocus(0); // 終了する
+      return true;
+    case VK_RIGHT:
+    case VK_DOWN:
+    case VK_TAB:
+      updateExitConfirmFocus(1); // キャンセル
+      return true;
+    case VK_RETURN:
+      if (sExitConfirmFocus == 0) {
+        Main::restoreTaskBar();
+        Keyboard::requestTermination();
+        PostQuitMessage(0);
+      } else {
+        closeExitConfirm();
+      }
+      return true;
+    case VK_ESCAPE:
+    case VK_BACK:
+    case VK_HOME:
+    case VK_F10:
+      closeExitConfirm();
+      return true;
+    default:
+      return true; // モーダル表示中は他のキー入力をブロック
+  }
+}
+
+bool handleExitConfirmClick(int x, int y) {
+  if (!sExitConfirmOpen) {
+    return false;
+  }
+  // 「終了する」ボタン押下
+  if (x >= kBtnExitX && x < kBtnExitX + kBtnExitW &&
+      y >= kBtnExitY && y < kBtnExitY + kBtnExitH) {
+    Main::restoreTaskBar();
+    Keyboard::requestTermination();
+    PostQuitMessage(0);
+    return true;
+  }
+  // 「キャンセル」ボタン押下
+  if (x >= kBtnCancelX && x < kBtnCancelX + kBtnCancelW &&
+      y >= kBtnCancelY && y < kBtnCancelY + kBtnCancelH) {
+    closeExitConfirm();
+    return true;
+  }
+  // ダイアログ外のタップ／クリックはキャンセルとして閉じる
+  if (x < kDialogX || x >= kDialogX + kDialogW ||
+      y < kDialogY || y >= kDialogY + kDialogH) {
+    closeExitConfirm();
+    return true;
+  }
+  return true;
+}
+
 static void renderCalculatorRect(int x0, int y0, int x1, int y1) {
   const KDColor * src = Framebuffer::address();
   if (!src || !sDibPixels) {
@@ -405,7 +591,7 @@ static HFONT createFontWithFallback(const wchar_t * faceName, int height, LONG w
   lf.lfCharSet = DEFAULT_CHARSET;
   lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
   lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
-  lf.lfQuality = NONANTIALIASED_QUALITY; // アンチエイリアス無効 (3: サブピクセル偽色・黄緑/水色の滲みを完全カット)
+  lf.lfQuality = ANTIALIASED_QUALITY; // 明示的に 4 を指定 (ClearTypeはBrain実機で滲むため禁止)
   lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
   wcsncpy(lf.lfFaceName, faceName, LF_FACESIZE - 1);
   lf.lfFaceName[LF_FACESIZE - 1] = L'\0';
@@ -536,6 +722,25 @@ void draw() {
     renderRightSidebar(sMemDC);
     if (hdc) {
       BitBlt(hdc, kSidebarX, 0, kSidebarWidth, kBrainScreenHeight, sMemDC, kSidebarX, 0, SRCCOPY);
+    }
+  }
+
+  // 3. 終了確認ポップアップダイアログ表示時
+  if (sExitConfirmOpen) {
+    // 画面全体を薄く暗転 (輝度70%) させて中央にダイアログを描画
+    for (int y = 0; y < kBrainScreenHeight; y++) {
+      uint32_t * row = sDibPixels + y * kBrainScreenWidth;
+      for (int x = 0; x < kBrainScreenWidth; x++) {
+        uint32_t c = row[x];
+        uint32_t r = (((c >> 16) & 0xFF) * 180) >> 8;
+        uint32_t g = (((c >> 8)  & 0xFF) * 180) >> 8;
+        uint32_t b = ((c & 0xFF)         * 180) >> 8;
+        row[x] = (r << 16) | (g << 8) | b;
+      }
+    }
+    renderExitConfirmDialog(sMemDC);
+    if (hdc) {
+      BitBlt(hdc, 0, 0, kBrainScreenWidth, kBrainScreenHeight, sMemDC, 0, 0, SRCCOPY);
     }
   }
 

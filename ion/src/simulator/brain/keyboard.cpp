@@ -167,6 +167,11 @@ static bool handleNormalAlphaModeKey(WPARAM vkCode) {
 }
 
 void onKeyDown(WPARAM vkCode, LPARAM lParam) {
+  if (Display::isExitConfirmOpen()) {
+    Display::handleExitConfirmKey(vkCode);
+    return;
+  }
+
   bool isRepeat = (lParam & (1 << 30)) != 0;
 
   // KEY-MAPPING.md Section 2:
@@ -318,16 +323,23 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
 }
 
 void onKeyUp(WPARAM vkCode, LPARAM /*lParam*/) {
+  if (Display::isExitConfirmOpen()) {
+    return;
+  }
   if (vkCode == VK_ESCAPE || vkCode == VK_HOME || vkCode == VK_F10) {
     sBackKeyHeld = false;
   }
 }
 
 void onTouchClick(int x, int y) {
+  if (Display::isExitConfirmOpen()) {
+    Display::handleExitConfirmClick(x, y);
+    return;
+  }
   // 最下部「終了」ボタンのタッチ／クリック判定
   if (x >= Display::kExitButtonX && x < Display::kExitButtonX + Display::kExitButtonW &&
       y >= Display::kExitButtonY && y < Display::kExitButtonY + Display::kExitButtonH) {
-    requestTermination();
+    Display::showExitConfirm();
   }
 }
 

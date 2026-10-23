@@ -45,6 +45,13 @@ void markCalcRectDirty(KDRect r);
 void markSidebarDirty();
 HWND windowHandle();
 
+// Exit confirmation dialog controls
+bool isExitConfirmOpen();
+void showExitConfirm();
+void closeExitConfirm();
+bool handleExitConfirmKey(WPARAM vkCode);
+bool handleExitConfirmClick(int x, int y);
+
 }
 }
 }
