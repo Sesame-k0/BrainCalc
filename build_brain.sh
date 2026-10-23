@@ -48,9 +48,9 @@ cp -f "${OUT_DIR}/epsilon.exe" "${OUT_DIR}/AppMain.exe"
 cp -f "${OUT_DIR}/AppMain.exe" "${DIST_DIR}/AppMain.exe"
 touch "${DIST_DIR}/AppMain.cfg" "${DIST_DIR}/index.din"
 
-# Copy bundled TrueType font (font.ttf) next to AppMain.exe and into BrainCalc SD bundle
+# Copy bundled TrueType font (font.ttf / dotgothic16.ttf) next to AppMain.exe and into BrainCalc SD bundle
 FONT_SRC=""
-for candidate in "ion/src/simulator/brain/font.ttf" "font.ttf" "../MisakiFont/misaki_gothic.ttf"; do
+for candidate in "ion/src/simulator/brain/dotgothic16.ttf" "ion/src/simulator/brain/font.ttf" "../DotGothic16-Regular.ttf" "font.ttf" "../MisakiFont/misaki_gothic.ttf"; do
   if [[ -f "$candidate" ]]; then
     FONT_SRC="$candidate"
     break
@@ -58,14 +58,16 @@ for candidate in "ion/src/simulator/brain/font.ttf" "font.ttf" "../MisakiFont/mi
 done
 
 if [[ -n "$FONT_SRC" ]]; then
-  if ! cmp -s "$FONT_SRC" "${OUT_DIR}/font.ttf" 2>/dev/null; then
-    cp -f "$FONT_SRC" "${OUT_DIR}/font.ttf" 2>/dev/null || true
-  fi
-  if ! cmp -s "$FONT_SRC" "${DIST_DIR}/font.ttf" 2>/dev/null; then
-    cp -f "$FONT_SRC" "${DIST_DIR}/font.ttf" 2>/dev/null || true
-  fi
+  for fname in "font.ttf" "dotgothic16.ttf"; do
+    if ! cmp -s "$FONT_SRC" "${OUT_DIR}/${fname}" 2>/dev/null; then
+      cp -f "$FONT_SRC" "${OUT_DIR}/${fname}" 2>/dev/null || true
+    fi
+    if ! cmp -s "$FONT_SRC" "${DIST_DIR}/${fname}" 2>/dev/null; then
+      cp -f "$FONT_SRC" "${DIST_DIR}/${fname}" 2>/dev/null || true
+    fi
+  done
 else
-  echo "[WARN] font.ttf source not found; skipping font bundle copy."
+  echo "[WARN] bundled font source not found; skipping font bundle copy."
 fi
 
 echo "=============================================================================="

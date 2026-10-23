@@ -247,9 +247,9 @@ static void renderRightSidebar(HDC hdc) {
   drawBox(hdc, sx, 66, sw, 70, RGB(255, 255, 255), RGB(196, 204, 214));
   SelectObject(hdc, sUiFontSmall);
   drawTextLine(hdc, sx + 4, 70,  sw - 8, 20, RGB(45, 52, 62), L"F1:関数   F9:変数");
-  drawTextLine(hdc, sx + 4, 91,  sw - 8, 20, RGB(65, 74, 86), L"F10 / HOME: ホーム");
+  drawTextLine(hdc, sx + 4, 91,  sw - 8, 20, RGB(65, 74, 86), L"F10/HOME: ホーム");
   drawTextLine(hdc, sx + 4, 112, sw - 8, 20, RGB(45, 52, 62),
-               numOn ? L"PgUp:(    PgDn:)" : L"PgUp拡大  PgDn縮小");
+               numOn ? L"PgUp:(    PgDn:)" : L"PgUp拡大 PgDn縮小");
 
   // ===========================================================================
   // 3. 左手側キー 5列×3段グリッド (Y = 142..276)
@@ -376,10 +376,13 @@ static bool isFontFamilyAvailable(HDC hdc, const wchar_t * faceName) {
 
 static const wchar_t * resolvePreferredFontFace(HDC hdc) {
   // 多重フォールバック優先順位:
-  //   1. 同梱フォントのファミリ名 (font.ttf の内部フォント名: MisakiGothic / 美咲ゴシック)
-  //   2. Brain実機ROM内蔵フォント (DFGHSGothic-W5-SH)
-  //   3. PC環境フォールバック (MS Gothic または Meiryo)
+  //   1. 同梱フォント (DotGothic16 / DotGothic16 Regular)
+  //   2. 旧同梱フォント (MisakiGothic / 美咲ゴシック)
+  //   3. Brain実機ROM内蔵フォント (DFGHSGothic-W5-SH)
+  //   4. PC環境フォールバック (MS Gothic または Meiryo)
   static constexpr const wchar_t * kFontCandidates[] = {
+    L"DotGothic16",
+    L"DotGothic16 Regular",
     L"MisakiGothic",
     L"美咲ゴシック",
     L"DFGHSGothic-W5-SH",
@@ -473,13 +476,14 @@ void init() {
   sOldBitmap = SelectObject(sMemDC, sDibBitmap);
 
   // Resolve preferred font face with multi-stage fallback and ANTIALIASED_QUALITY (4)
-  // 美咲フォント (8x8ドット) 使用時は整数倍サイズ (-16 = 2倍, -8 = 1倍) かつ FW_NORMAL で
+  // ドットフォント (DotGothic16 / 美咲) 使用時は整数倍サイズ (-16 = 原寸/2倍, -8 = 1倍) かつ FW_NORMAL で
   // ドット潰れ・端数滲みのない完全なピクセル描画にする
   const wchar_t * faceName = resolvePreferredFontFace(sMemDC);
+  bool isDotGothic = (wcsstr(faceName, L"DotGothic") != nullptr);
   bool isMisaki = (wcscmp(faceName, L"MisakiGothic") == 0 || wcscmp(faceName, L"美咲ゴシック") == 0);
-  sUiFontBold  = createFontWithFallback(faceName, isMisaki ? -16 : -14, isMisaki ? FW_NORMAL : FW_BOLD);
-  sUiFontSmall = createFontWithFallback(faceName, isMisaki ? -16 : -12, FW_NORMAL);
-  sUiFontTiny  = createFontWithFallback(faceName, isMisaki ? -8  : -10, FW_NORMAL);
+  sUiFontBold  = createFontWithFallback(faceName, (isDotGothic || isMisaki) ? -16 : -14, (isDotGothic || isMisaki) ? FW_NORMAL : FW_BOLD);
+  sUiFontSmall = createFontWithFallback(faceName, (isDotGothic || isMisaki) ? -16 : -12, FW_NORMAL);
+  sUiFontTiny  = createFontWithFallback(faceName, (isDotGothic || isMisaki) ? -8  : -10, FW_NORMAL);
 
   sCalcDirty = true;
   sDirtyMinX = 0;

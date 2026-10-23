@@ -52,43 +52,75 @@ namespace Simulator {
 namespace Main {
 
 static bool sNeedsRefresh = false;
-static wchar_t sExeDirFontPath[MAX_PATH] = L"";
-static bool sExeDirFontLoaded = false;
+static wchar_t sLoadedFontPath[MAX_PATH] = L"";
+static bool sFontLoaded = false;
 static HWND sTaskBarHwnd = NULL;
 
 static void loadBundledFont() {
-  // 1. カレントディレクトリの font.ttf を一時登録
-  int addedRelative = AddFontResourceW(L"font.ttf");
+  static constexpr const wchar_t * kFontFileCandidates[] = {
+    L"dotgothic16.ttf",
+    L"font.ttf"
+  };
 
-  // 2. Windows CE（カレントディレクトリの概念がない）や別ディレクトリからの起動に対応するため、
-  //    実行ファイルと同じディレクトリにある font.ttf もフルパスで解決・登録する
-  sExeDirFontPath[0] = L'\0';
-  sExeDirFontLoaded = false;
-  if (addedRelative == 0) {
-    wchar_t modulePath[MAX_PATH] = L"";
-    if (GetModuleFileNameW(NULL, modulePath, MAX_PATH) > 0) {
-      wchar_t * lastSlash = wcsrchr(modulePath, L'\\');
-      if (!lastSlash) {
-        lastSlash = wcsrchr(modulePath, L'/');
+  wchar_t exeDir[MAX_PATH] = L"";
+  if (GetModuleFileNameW(NULL, exeDir, MAX_PATH) > 0) {
+    wchar_t * lastSlash = wcsrchr(exeDir, L'\\');
+    if (!lastSlash) {
+      lastSlash = wcsrchr(exeDir, L'/');
+    }
+    if (lastSlash) {
+      *(lastSlash + 1) = L'\0';
+    }
+  }
+
+  for (const wchar_t * fname : kFontFileCandidates) {
+    // 1. カレントディレクトリ
+#ifndef _WIN32_WCE
+    if (AddFontResourceExW(fname, 0x10 /* FR_PRIVATE */, 0) > 0) {
+      wcsncpy(sLoadedFontPath, fname, MAX_PATH - 1);
+      sFontLoaded = true;
+      return;
+    }
+#else
+    if (AddFontResourceW(fname) > 0) {
+      wcsncpy(sLoadedFontPath, fname, MAX_PATH - 1);
+      sFontLoaded = true;
+      return;
+    }
+#endif
+
+    // 2. 実行ファイルのあるディレクトリ (Windows CE や別ディレクトリ起動用)
+    if (exeDir[0] != L'\0') {
+      wchar_t fullPath[MAX_PATH] = L"";
+      wcsncpy(fullPath, exeDir, MAX_PATH - 1);
+      wcsncat(fullPath, fname, MAX_PATH - wcslen(fullPath) - 1);
+#ifndef _WIN32_WCE
+      if (AddFontResourceExW(fullPath, 0x10 /* FR_PRIVATE */, 0) > 0) {
+        wcsncpy(sLoadedFontPath, fullPath, MAX_PATH - 1);
+        sFontLoaded = true;
+        return;
       }
-      if (lastSlash) {
-        *(lastSlash + 1) = L'\0';
-        wcsncat(modulePath, L"font.ttf", MAX_PATH - wcslen(modulePath) - 1);
-        wcscpy(sExeDirFontPath, modulePath);
-        if (AddFontResourceW(sExeDirFontPath) > 0) {
-          sExeDirFontLoaded = true;
-        }
+#else
+      if (AddFontResourceW(fullPath) > 0) {
+        wcsncpy(sLoadedFontPath, fullPath, MAX_PATH - 1);
+        sFontLoaded = true;
+        return;
       }
+#endif
     }
   }
 }
 
 static void unloadBundledFont() {
-  if (sExeDirFontLoaded && sExeDirFontPath[0] != L'\0') {
-    RemoveFontResourceW(sExeDirFontPath);
-    sExeDirFontLoaded = false;
+  if (sFontLoaded && sLoadedFontPath[0] != L'\0') {
+#ifndef _WIN32_WCE
+    RemoveFontResourceExW(sLoadedFontPath, 0x10 /* FR_PRIVATE */, 0);
+#else
+    RemoveFontResourceW(sLoadedFontPath);
+#endif
+    sFontLoaded = false;
+    sLoadedFontPath[0] = L'\0';
   }
-  RemoveFontResourceW(L"font.ttf");
 }
 
 void hideTaskBar() {
