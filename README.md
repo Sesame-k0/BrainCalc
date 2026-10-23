@@ -1,534 +1,121 @@
-<p align="center"><img src="https://github.com/TildeEthDoUsPart/UpsilonDesign/blob/89a15953ae128aef8aa7d066dcaaf8d5c70f02a5/UPSILogo.png" /></p>
+# BrainCalc 🧮
 
-<p align="center">
-  <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="cc by-nc-sa 4.0" src="https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-525252.svg?labelColor=292929&logo=creative%20commons&style=for-the-badge" /></a>
-  <a href="https://github.com/UpsilonNumworks/Upsilon/issues"><img alt="Issues" src="https://img.shields.io/github/issues/UpsilonNumworks/Upsilon.svg?labelColor=292929&logo=git&style=for-the-badge" /></a>
-  <br/>
-  <a href="https://discord.gg/hnEqPzAJzn"><img alt="Discord" src="https://img.shields.io/discord/663420259851567114?color=blue&labelColor=292929&label=chat%20-%20discord&logo=discord&style=for-the-badge" /></a>
-</p>
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![Platform](https://img.shields.io/badge/Platform-SHARP%20Brain%20(Windows%20CE%206.0)-blue.svg)]()
+[![Base](https://img.shields.io/badge/Base-Upsilon%20%2F%20NumWorks%20Epsilon-orange.svg)](https://github.com/UpsilonNumworks/Upsilon)
 
-> 🇫🇷 Vous ne comprenez pas l'anglais ? Vous êtes francophone ? Regardez le [*LISEZ-MOI* français](./README.fr.md) ! 🇫🇷
+**BrainCalc** は、フランス NumWorks 社の高性能グラフ関数電卓 OS（[Upsilon](https://github.com/UpsilonNumworks/Upsilon) / [Epsilon](https://github.com/numworks/epsilon)）を、SHARP 製電子辞書「**Brain**」（Windows Embedded CE 6.0 搭載モデル）向けに移植したネイティブアプリケーションです。
 
-## About
-
-Upsilon is a fork of Omega, an user-made OS that runs on the NumWorks calculator, which brings many features to it, but was discontinued because of a policy change from NumWorks. Upsilon is for the people who want to see a future for user-made OSes for NumWorks, even after the closure and archiving of Omega.
-
-### Some new features
-
-- Enhancements for the Kandinsky python module
-- Support for wallpapers
-- External apps
-- A custom theme
-- Operator overload for python
-- Improvements for the Periodic table application
-- *And everything that has been added to Omega before its termination!* [See Omega's changelog here](https://github.com/Omega-Numworks/Omega/wiki/Changelog) | [Main Omega features + screenshots](https://github.com/Omega-Numworks/Omega/wiki/Main-features).
-
-<br>
-
-## Installation
-
-### Installer
-
-Go to the [Upsilon website](https://getupsilon.web.app/) to the "Install" section.
-If your calculator is recognized, contains a version of Epsilon lower than 16 and your browser accepts WebUSB, the page will suggest you to install Upsilon.
-Do not disconnect your calculator until the installation is complete.
-
-### Manual
-
- *You can refer to this [website](https://www.numworks.com/resources/engineering/software/build/) for the first step if you get errors.*
-
-### 1. Install SDK
-
-<br>
-
-<details>
-
-<summary><b>1.1 Linux</b></summary>
-
-<br>
-
-<details>
-
-<summary>Debian or Ubuntu</summary>
-
-<br>
-
-You just have to install dependencies by running these command with superuser privileges in a Terminal:
-
-```bash
-apt-get install build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi
-```
-
-And there you can go to step 2!
-
-<br>
-
-</details>
-
-<details>
-
-<summary>Fedora</summary>
-
-<br>
-
-To install all dependencies:
-
-```bash
-dnf install make automake gcc gcc-c++ kernel-devel git ImageMagick libX11-devel libXext-devel freetype-devel libpng-devel libjpeg-devel pkg-config arm-none-eabi-gcc-cs arm-none-eabi-gcc-cs-c++
-```
-
-<br>
-
-</details>
-
-<details>
-
-<summary>Nix or Nixos</summary>
-
-<br>
-
-To install all dependencies:
-
-```bash
-nix-shell -p gcc libpng libjpeg xorg.libX11 pkg-config freetype xorg.libXext python3 imagemagick python310Packages.lz4 python310Packages.pypng python310Packages.pypng gcc-arm-embedded
-```
-
-<br>
-
-</details>
-
-<br>
-
-</details>
-
-<details>
-
-<summary><b>1.2 Mac</b></summary>
-
-<br>
-
-It's recommended to use [Homebrew](https://brew.sh/). Once it's installed, just run:
-
-```bash
-brew install freetype imagemagick libpng libusb pkg-config python3
-python3 -m venv .venv
-.venv/bin/pip3 install setuptools lz4 pypng stringcase
-```
-
-and all dependencies will be installed.
-
-<br>
-
-And there you can go to step 2!
-
-<br>
-
-</details>
-
-<details>
-
-<summary><b>1.3 Windows</b></summary>
-
-<br>
-
-<details>
-
-<summary>With Msys2/Mingw (officialized by NumWorks but with a lot of bugs)</summary>
-
-[Msys2](https://www.msys2.org/) environment is recommended by NumWorks to get most of the required tools on Windows easily. It's where you'll paste all the commands of this tutorial. Once it's installed, paste these commands into the Msys2 terminal.
-
-```bash
-pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-freetype mingw-w64-x86_64-pkg-config mingw-w64-x86_64-libusb git make python
-echo "export PATH=/mingw64/bin:$PATH" >> .bashrc
-```
-
-Next, you'll need to install the [GCC toolchain for ARM](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-rm/downloads). When prompted for an install location, choose `C:\msys64\home\User\gcc-arm\`. You'll then need to add this folder to your $PATH. Just enter:
-
-```bash
-echo "export PATH=$PATH:$HOME/gcc-arm/bin" >> .bashrc
-```
-
-Just restart terminal and you can go to step 2!
-
-</details>
-
-<details>
-
-<summary>With WSL 2</summary>
-
-You need a Windows version >= 1903.
-
-#### WSL Installation
-
-1. Use simultaneously Win + X keys and then click on "admin powershell".
-
-```powershell
-dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
-```
-
-This command activate WSL functionalities.
-
-```powershell
-dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
-```
-
-This one allows virtual machines developed by Microsoft.
-
-2. Restart your computer.
-
-3. Download [this file](https://wslstorestorage.blob.core.windows.net/wslblob/wsl_update_x64.msi) and follow instructions.
-
-4. Now open powershell admin like before and type:
-
-```powershell
-wsl --set-default-version 2
-```
-
-5. Download [Ubuntu](https://www.microsoft.com/store/apps/9n6svws3rx71) from Microsoft store.
-
-WSL is now installed.
-
-6. Then Install GCC cross compiler for ARM. In your Ubuntu teminal, run:
-<!-- TODO: Test if `wsl --install` works better, and if WSL2 has not became the
-default -->
-
-```bash
-sudo apt-get update
-sudo apt-get install build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi
-```
-
-### Usbipd installation to connect your calculator
-
-If you want to connect to the calculator, you have to connect to install this
-[tool](https://github.com/dorssel/usbipd-win/releases/download/v5.0.0/usbipd-win_5.0.0_x64.msi).
-This will allow you to connect WSL to the calculator through internet. Follow
-the on screen information to install.
-
-#### Ubuntu
-
-1. In a WSL Ubuntu command prompt, type:
-
-```bash
-sudo apt install linux-tools-generic hwdata
-```
-
-<!-- 2. Edit /etc/sudoers so that root can find the usbip command. On Ubuntu, run this command.
-
-```bash
-sudo visudo
-```
-
-3. Add `/usr/lib/linux-tools/5.4.0-77-generic` to the beginning of secure_path. After editing, the line should look similar to this.
-`Defaults secure_path="/usr/lib/linux-tools/5.4.0-77-generic:/usr/local/sbin:..."` -->
-
-#### Debian
-
-1. If you use Debian for your WSL distro, use this command instead:
-
-```bash
-sudo apt install usbip hwdata usbutils
-```
-
-And that's all for installation and set up.
-
-### To connect your calculator
-
-1. Open an admin PowerShell and type:
-
-```powershell
-usbipd list
-```
-
-This will list your USB devices connected. Look at the BUSID column and remember the one for your calculator (it should be called "Numworks Calculator").
-2. Now run this command replacing `<BUSID>` by your calculator's USB port id:
-
-```powershell
-usbipd bind --busid <BUSID>
-usbipd attach --wsl --busid <BUSID>
-
-```
-
-It will ask you to type your WSL's password and will connect your calculator to WSL.
-
-You can now go to step 2!
-
-</details>
-
-</details>
-
-<br>
-
-### 2. Set up repo
-
-Clone repo and use 'upsilon-dev' branch by pasting these two commands:
-
-```bash
-git clone --recursive https://github.com/UpsilonNumworks/Upsilon.git
-cd Upsilon
-git checkout upsilon-dev
-```
-
-<br>
-
-### 3. Choose the target
-
-<details>
-
-<summary><b>Model n0100</b></summary>
-
-(note: you can change the `EPSILON_I18N=en` flag to `fr`, `nl`, `pt`, `it`, `de`, `es` or `hu`).
-
-```bash
-make MODEL=n0100 clean
-make MODEL=n0100 EPSILON_I18N=en OMEGA_USERNAME="{Your name, max 15 characters}" -j$(nproc)
-```
-
-Now, run either:
-
-```bash
-make MODEL=n0100 epsilon_flash
-```
-
-to directly flash the calculator after pressing simultaneously `reset` and `6` buttons and plugging in.
-
-<br>
-
-or:
-
-```bash
-make MODEL=n0100 OMEGA_USERNAME="" binpack -j$(nproc)
-```
-
-to make binpack which you can flash to the calculator from [TI-Planet's WebDFU](https://ti-planet.github.io/webdfu_numworks/n0100/). Binpacks are a great way to share a custom build of Upsilon to friends.
-
-</details>
-
-<details>
-
-<summary><b>Model n0110</b></summary>
-
-The bootloader allows you to install 2 firmwares in separated "slots". If so, external apps won't have all the space but half. Bootloader will allow use of all of the memory if only one slot is flashed. In legacy mode, external apps use all the space available.
-
-<details>
-<summary>Bootloader</summary>
-
-Your calculator must already have been flashed with [Upsilon](https://getupsilon.web.app)'s or [Omega](https://getomega.dev)'s bootloader.
-Then, build with:
-
-```bash
-make clean
-make OMEGA_USERNAME="{Your name, max 15 characters}" -j$(nproc)
-```
-
-Now, run either:
-
-```bash
-make epsilon.A_flash
-```
-
-to directly flash the calculator into the current slot, or thought bootloader's slot flasher with RESET, then 4 (flash), and 1 (flash slots) for other slots.
-
-<br>
-
-or:
-
-```bash
-make OMEGA_USERNAME="" binpack -j$(nproc)
-```
-
-to make binpack which you can flash to the calculator from [TI-Planet's webDFU](https://ti-planet.github.io/webdfu_numworks/n0110/). You'll find them at `output/release/device/bootloader/`. Binpacks are a great way to share a custom build of Upsilon to friends.
-</details>
-
-
-
-<details>
-<summary>Model N0110 legacy (deprecated, use bootloader instead for Epsilon protection)</summary>
-
-```bash
-make MODEL=n0110 clean
-make MODEL=n0110 OMEGA_USERNAME="{Your name, max 15 characters}" -j$(nproc)
-```
-
-Now, run either:
-
-```bash
-make MODEL=n0110 epsilon_flash
-```
-
-to directly flash the calculator after pressing simultaneously `reset` and `6` buttons and plugging in.
-
-<br>
-
-or:
-
-```bash
-make MODEL=n0110 OMEGA_USERNAME="" binpack -j$(nproc)
-```
-
-to make binpack which you can flash to the calculator from [Ti-Planet's WebDFU](https://ti-planet.github.io/webdfu_numworks/n0110/). You'll find them at `output/release/device/bootloader/`. Binpacks are a great way to share a custom build of Upsilon to friends.
-</details>
-
-</details>
-
-
-<details>
-
-<summary><b>Native simulator</b></summary>
-
-Run this command:
-```bash
-make clean
-```
-You can either build using the following command that will automatically detect your platform:
-```bash
-make PLATFORM=simulator
-```
-or, choose the command corresponding to your platform:
-```bash
-make PLATFORM=simulator TARGET=android
-make PLATFORM=simulator TARGET=ios
-make PLATFORM=simulator TARGET=macos
-make PLATFORM=simulator TARGET=web
-make PLATFORM=simulator TARGET=windows
-make PLATFORM=simulator TARGET=3ds
-```
-
-You'll find simulator files in `output/release/simulator/`.
-
-</details>
-
-
-<details>
-
-<summary><b>Web simulator</b></summary>
-
-First, install emsdk :
-
-```bash
-git clone https://github.com/emscripten-core/emsdk.git
-cd emsdk
-./emsdk install 4.0.22
-./emsdk activate 4.0.22
-source emsdk_env.sh
-```
-
-Then, compile Upsilon :
-
-```bash
-make clean
-make PLATFORM=simulator TARGET=web OMEGA_USERNAME="{Your name, max 15 characters}" -j$(nproc)
-```
-
-The simulator is now in `output/release/simulator/web/simulator.zip`
-
-</details>
-
-<details>
-
-<summary><b>3DS Simulator</b></summary>
-
-You need devkitPro and devkitARM installed and in your path (instructions [here](https://devkitpro.org/wiki/Getting_Started))
-
-```bash
-git clone --recursive https://github.com/UpsilonNumworks/Upsilon.git
-cd Upsilon
-git checkout upsilon-dev
-make PLATFORM=simulator TARGET=3ds -j$(nproc)
-```
-
-You can then put epsilon.3dsx on a SD card to run it from the HBC or use 3dslink to launch it over the network:
-
-```bash
-3dslink output/release/simulator/3ds/epsilon.3dsx -a <3DS' IP ADDRESS>
-```
-
-</details>
-
-<details>
-
-<summary><b>Android Simulator</b></summary>
-
-Make sure you have JDK 25 installed.
-Then, download the Android toolchain r27d as following :
-```
-export ANDROID_HOME=$PWD/android-sdk
-wget -nv https://gitlab.com/fdroid/sdkmanager/-/raw/master/sdkmanager.py
-python3 sdkmanager.py --licenses
-python3 sdkmanager.py --install "ndk-bundle;r27d"
-```
-All you have to do is run this command to compile Upsilon.
-```
-make -j$(nproc) PLATFORM=simulator TARGET=android
-```
-The compiled file named `epsilon.apk` will be the one to install on the phone from your file manager. Should work on Android 5+.
-
-</details>
-
-<details>
-  <summary><b>Casio fx-CG-series Port</b></summary>
-
-First, install gint and fxsdk along with a cross compiler for the calculator. There are instructions for this (in French, but Google Translate works well enough) [here](https://www.planet-casio.com/Fr/forums/topic16614-last-giteapc-installer-et-mettre-a-jour-automatiquement-des-projets-gitea.html).
-
-Next:
-```bash
-git clone --recursive https://github.com/UpsilonNumworks/Upsilon.git
-cd Upsilon
-git checkout upsilon-dev
-make PLATFORM=simulator TARGET=fxcg -j$(nproc)
-```
-Then copy the file at `./output/release/simulator/fxcg/epsilon.g3a` to the calculator over USB.
-
-</details>
-
-Important: Don't forget the `--recursive` tag, because Upsilon relies on submodules.
-Also, you can change the number of processes that run in parallel during the build by changing the value of the `-j` flag.
-Don't forget to put your pseudo instead of `{your pseudo, max 15 char}`. If you don't want one, just remove the `OMEGA_USERNAME=""` argument.
-
-<br>
-
-If you need help, you can join our Discord server here : <https://discord.gg/NFvzdCBTQn>
-
-<a href="https://discord.gg/NFvzdCBTQn"><p align="center"><img alt="Omega Banner Discord" src="https://user-images.githubusercontent.com/12123721/86287349-54ef5800-bbe8-11ea-80c1-34eb1f93eebd.png" /></p></a>
+高校・大学レベルの高等数学計算、2D 関数グラフ描画、数値計算、統計、確率分布、方程式ソルバーなどの電卓機能を、Brain のキーボードと大画面カラー液晶で快適に利用できます。
 
 ---
 
-## Useful links
+## 🌟 主な特徴 (Features)
 
-- [Upsilon external (to install additional apps and wallpapers)](https://upsilonnumworks.github.io/Upsilon-External/)
-- [Ulab documentation](https://micropython-ulab.readthedocs.io/en/latest/)
+- **Brain の画面仕様に最適化した 800×480 解像度**:
+  - 右端 54px のフレキシブルタッチキー領域を除外した有効領域（800×480）で描画。
+  - 左側（640×480）: 電卓画面（320×240 を自前の整数 2 倍最近傍補間で高速展開）。
+  - 右側（160×480）: NumWorks デザインに統一したライトテーマの入力支援サイドバー。
+- **美しく視認性の高い「DotGothic16」フォント採用**:
+  - フォントワークス社のレトロ調 16 ドットフォント「[DotGothic16](https://github.com/fontworks-fonts/DotGothic16)」をアプリ内に同梱。
+  - Brain 実機と PC シミュレータで全く同じくっきりとした日本語・数学記号を表示。
+- **実機キーボードに合わせた専用キーマッピング**:
+  - `[Brain English / 国語 (F2)]` キーで **数字モード (12x)** と **通常モード (abc)** をワンタッチ切り替え。
+  - 数字モード時は QWERTY 配列がそのまま直感的なテンキー・四則演算・累乗・平方根・定数ショートカットに変化。
+  - 銀色キー対応: `F1` (関数ツールボックス), `F9` (変数メニュー), `F10 / HOME` (ホーム画面), `PgUp / PgDn` (グラフ拡大・縮小)。
+- **実機バッテリー残量のリアルタイム連動**:
+  - Windows CE の `GetSystemPowerStatusEx2()` API と連動し、Brain 本体のバッテリー残量を電卓画面上部のタイトルバーに正確に表示。
+- **軽量・高速なレスポンス設計**:
+  - `pushRect` 差分矩形更新により、画面全体の無駄な再描画と転送バス帯域を大幅削減。
+  - ノンブロッキングなメッセージ処理（`MsgWaitForMultipleObjects`）により、キー入力の遅延や取りこぼしを徹底解消。
+  - 起動時に OS タスクバー（`HHTaskBar`）を自動非表示化し、完全な全画面最前面（`HWND_TOPMOST`）で実行。終了時に安全に復帰。
 
-## Contributing
+---
 
-To contribute, please refer to [Omega's Wiki](https://github.com/Omega-Numworks/Omega/wiki/Contributing), the same rules apply here.
+## 📱 対応機種 (Target Devices)
 
-## Related repositories
+- **OS**: Microsoft Windows Embedded CE 6.0 Core
+- **CPU**: ARM926EJ-S / i.MX28 (Armv5TEJ)
+- **対象シリーズ**:
+  - 高校生・中学生・大学生・ビジネス向け SHARP Brain 各機種
+  - PW-SH3, SH4, SH5, SH6, SH7
+  - PW-H7700, PW-SBシリーズ, PW-SAシリーズ 等
 
-Here are the main links toward Omega's different websites and repositories, that have been used for the creation of Upsilon.
+---
 
-- [Omega Themes](https://github.com/Omega-Numworks/Omega-Themes)
-- [Omega Website](https://github.com/Omega-Numworks/Omega-Website)
-- [Omega RPN `APP`](https://github.com/Omega-Numworks/Omega-RPN)
-- [Omega Atomic `APP`](https://github.com/Omega-Numworks/Omega-Atomic)
-- [Omega Design](https://github.com/Omega-Numworks/Omega-Design)
-- [Omega Discord Bot](https://github.com/Omega-Numworks/Omega-Discord-Bot)
-- [Omega App Template `BETA`](https://github.com/Omega-Numworks/Omega-App-Template)
-- [External Apps](https://github.com/Omega-Numworks/External-Apps)
+## 🚀 インストール方法 (How to Install)
 
-## About Epsilon
+1. [Releases](../../releases) から最新の `BrainCalc.zip` をダウンロードして解凍します。
+2. 解凍して生成された `BrainCalc` フォルダ（以下のファイルが含まれます）を、microSD カードのアプリ配置先（例: `アプリ` フォルダ）にそのままコピーします。
+   ```text
+   BrainCalc/
+   ├── AppMain.exe          # 電卓本体バイナリ (WinCE ARM)
+   ├── AppMain.cfg          # 設定ファイル
+   ├── index.din            # アプリアイコン・定義ファイル
+   ├── dotgothic16.ttf      # 同梱日本語フォント
+   └── font.ttf             # 同梱日本語フォント (互換エイリアス)
+   ```
+3. microSD カードを Brain に挿入し、ホームメニューの「追加アプリ」等から **BrainCalc** を起動してください。
 
-Upsilon is a fork of Omega, after the project's discontinuation.
+---
 
-Omega is a fork of Epsilon, a high-performance graphing calculator operating system. It includes eight apps that cover the high school mathematics curriculum.
+## ⌨️ 操作方法・キーボード対応表
 
-You can try Epsilon straight from your browser in the [online simulator](https://www.numworks.com/simulator/).
+詳細な仕様は [KEY-MAPPING.md](file:///c:/K0Project/Program/BrainCalc/資料/KEY-MAPPING.md) を参照してください。
 
-## License
+### モード切替
+- **`[F2]`（Brain English / 国語キー）**: 「**数字モード (12x)**」と「**通常モード (abc)**」をトグル切替
 
-NumWorks is a registered trademark of NumWorks SAS, 24 Rue Godot de Mauroy, 75009 Paris, France.
-Nintendo and Nintendo 3DS are registered trademarks of Nintendo of America Inc, 4600 150th Ave NE, Redmond, WA 98052, USA.
-Casio is a registered trademark of Casio Computer Co., Ltd. CORPORATION JAPAN 6-2, Hon-machi 1-chome Shibuya-ku, Tokyo JAPAN 151-8543.
-NumWorks SAS, Nintendo of America Inc and Casio aren't associated in any shape or form with this project.
+### 基本キー
+| キー | 動作 |
+|---|---|
+| `[決定 / Enter]` | 数字モード時は `EXE`（計算実行）、通常モード時は `OK` |
+| `[戻る / Esc]` | 1 つ前の画面に戻る / 計算キャンセル |
+| `[削除 / BackSpace]` | 1 文字削除 |
+| `[スペース]` | 空白入力 |
+| `[矢印キー (▲▼◀▶)]` | カーソル移動 / グラフのスクロール |
+| `[>>↑ / PageUp]` | 数字モード: `(` / 通常モード: グラフ拡大 |
+| `[>>↓ / PageDown]` | 数字モード: `)` / 通常モード: グラフ縮小 |
 
-- NumWorks Epsilon is released under a [CC BY-NC-SA License](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
-- Omega is released under a [CC BY-NC-SA License](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
-- Upsilon is released under a [CC BY-NC-SA License](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
+### 銀色キー・機能キー
+| キー | 割り当て |
+|---|---|
+| `[調べる / F1]` | **Toolbox**（数学関数・コマンド一覧パレット） |
+| `[ツール / F9]` | **Var**（変数ストア・一覧メニュー） |
+| `[HOME / F10]` | **Home**（電卓ホーム画面へ戻る） |
+
+### 数字モード（12x）時の配列
+- **上段 (Q〜P)**: `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `0`
+- **中段 (A〜L)**: `+`, `-`, `*`, `/`, `=`, `x^n`, `ℯ`, `ANS`, `STO`
+- **下段 (Z〜ー)**: `√`, `x,n,t`, `^`, `π`, `log`, `,`, `.`, `-`
+
+---
+
+## 🛠️ ビルド方法 (How to Build)
+
+### 開発環境
+- **OS**: Windows 10 / 11 (MSYS2 MinGW64 環境)
+- **クロスコンパイラ**: [CeGCC](https://sourceforge.net/projects/cegcc/) (`arm-mingw32ce-g++`)
+
+### 1. PC ホスト検証版のビルド (Windows 上で動作確認)
+```bash
+./build_brain.sh --host
+```
+ビルド完了後、`output/release/simulator/brain-host/AppMain.exe` を直接起動して動作を確認できます。
+
+### 2. SHARP Brain 実機向けパッケージのビルド
+```bash
+./build_brain.sh
+```
+ビルド完了後、`output/release/simulator/brain/BrainCalc/` に実機用パッケージ一式が出力されます。
+
+---
+
+## 📜 ライセンス (License & Credits)
+
+- **NumWorks Epsilon / Upsilon**:
+  - [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+  - Copyright (c) NumWorks SAS & Upsilon Project Contributors.
+- **DotGothic16**:
+  - [SIL Open Font License 1.1](https://scripts.sil.org/OFL)
+  - Copyright (c) 2020 The DotGothic16 Project Authors / Fontworks Inc.
