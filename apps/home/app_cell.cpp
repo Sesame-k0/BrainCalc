@@ -75,10 +75,6 @@ void AppCell::setBackgroundView(const BackgroundView * backgroundView) {
   m_backgroundView = backgroundView;
 }
 
-void AppCell::setHighlighted(bool highlight) {
-  HighlightCell::setHighlighted(highlight);
-}
-
 void AppCell::reloadCell() {
   m_nameView.setTextColor(isHighlighted() ? (m_external_app ? Palette::HomeCellTextExternalActive : Palette::HomeCellTextActive) : (m_external_app ? Palette::HomeCellTextExternal : Palette::HomeCellText));
   m_nameView.setBackgroundColor(isHighlighted() ? Palette::HomeCellBackgroundActive : Palette::HomeCellBackground);

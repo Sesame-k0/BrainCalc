@@ -14,24 +14,65 @@ namespace Display {
 static KDFrameBuffer sFrameBuffer = KDFrameBuffer(sPixels, KDSize(Ion::Display::Width, Ion::Display::Height));
 
 void pushRect(KDRect r, const KDColor * pixels) {
-  if (sFrameBufferActive) {
-    sFrameBuffer.pushRect(r, pixels);
-    Simulator::Display::markCalcRectDirty(r);
-    Simulator::Main::setNeedsRefresh();
+  if (!sFrameBufferActive || !pixels) {
+    return;
   }
+  KDRect screenBounds(0, 0, Ion::Display::Width, Ion::Display::Height);
+  KDRect clipped = r.intersectedWith(screenBounds);
+  if (clipped.isEmpty()) {
+    return;
+  }
+  if (clipped == r) {
+    sFrameBuffer.pushRect(r, pixels);
+  } else {
+    int srcStride = r.width();
+    int offsetX = clipped.x() - r.x();
+    int offsetY = clipped.y() - r.y();
+    const KDColor * srcLine = pixels + offsetY * srcStride + offsetX;
+    for (int j = 0; j < clipped.height(); j++) {
+      KDRect lineRect(clipped.x(), clipped.y() + j, clipped.width(), 1);
+      sFrameBuffer.pushRect(lineRect, srcLine);
+      srcLine += srcStride;
+    }
+  }
+  Simulator::Display::markCalcRectDirty(clipped);
+  Simulator::Main::setNeedsRefresh();
 }
 
 void pushRectUniform(KDRect r, KDColor c) {
-  if (sFrameBufferActive) {
-    sFrameBuffer.pushRectUniform(r, c);
-    Simulator::Display::markCalcRectDirty(r);
+  if (!sFrameBufferActive) {
+    return;
+  }
+  KDRect screenBounds(0, 0, Ion::Display::Width, Ion::Display::Height);
+  KDRect clipped = r.intersectedWith(screenBounds);
+  if (!clipped.isEmpty()) {
+    sFrameBuffer.pushRectUniform(clipped, c);
+    Simulator::Display::markCalcRectDirty(clipped);
     Simulator::Main::setNeedsRefresh();
   }
 }
 
 void pullRect(KDRect r, KDColor * pixels) {
-  if (sFrameBufferActive) {
+  if (!sFrameBufferActive || !pixels) {
+    return;
+  }
+  KDRect screenBounds(0, 0, Ion::Display::Width, Ion::Display::Height);
+  KDRect clipped = r.intersectedWith(screenBounds);
+  if (clipped.isEmpty()) {
+    return;
+  }
+  if (clipped == r) {
     sFrameBuffer.pullRect(r, pixels);
+  } else {
+    int dstStride = r.width();
+    int offsetX = clipped.x() - r.x();
+    int offsetY = clipped.y() - r.y();
+    KDColor * dstLine = pixels + offsetY * dstStride + offsetX;
+    for (int j = 0; j < clipped.height(); j++) {
+      KDRect lineRect(clipped.x(), clipped.y() + j, clipped.width(), 1);
+      sFrameBuffer.pullRect(lineRect, dstLine);
+      dstLine += dstStride;
+    }
   }
 }
 

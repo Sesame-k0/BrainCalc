@@ -8,9 +8,9 @@ WINDRES = $(CEGCC_TOOLCHAIN_PREFIX)windres
 
 SFLAGS := $(filter-out -fPIE -Os,$(SFLAGS))
 SFLAGS += -O3 -D_USE_MATH_DEFINES -D_GLIBCXX_USE_C99_MATH=1 -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -DNOMINMAX -DUNICODE -D_UNICODE
-SFLAGS += -march=armv5tej -mcpu=arm926ej-s -mno-unaligned-access
+SFLAGS += -march=armv5tej -mcpu=arm926ej-s
 CXXFLAGS := $(filter-out -std=c++11,$(CXXFLAGS)) -std=gnu++17
 
-LDFLAGS += -march=armv5tej -mcpu=arm926ej-s -Wl,--stack,0x400000 -static -s -lcommctrl -lcommdlg -lm
+LDFLAGS += -march=armv5tej -mcpu=arm926ej-s -static -s -lcommctrl -lcommdlg -lm
 
 initializer_list = $(shell printf '%s' "$(1)" | od -An -tx1 | sed 's/ *\([0-9a-f][0-9a-f]\)/0x\1,/g' | tr -d '\n ')0
