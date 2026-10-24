@@ -1,6 +1,3 @@
-#if TARGET_BRAIN
-#include <ion/display.h>
-#endif
 #include "history_controller.h"
 #include "app.h"
 #include <poincare/exception_checkpoint.h>
@@ -56,9 +53,6 @@ void HistoryController::viewWillAppear() {
 }
 
 void HistoryController::didBecomeFirstResponder() {
-#if TARGET_BRAIN
-  Ion::Display::clearHelpMessage();
-#endif
   selectCellAtLocation(0, numberOfRows()-1);
   Container::activeApp()->setFirstResponder(&m_selectableTableView);
 }

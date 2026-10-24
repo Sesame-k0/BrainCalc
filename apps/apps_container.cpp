@@ -313,9 +313,6 @@ bool AppsContainer::processEvent(Ion::Events::Event event) {
 }
 
 bool AppsContainer::switchTo(App::Snapshot * snapshot) {
-#if TARGET_BRAIN
-  Ion::Display::clearHelpMessage();
-#endif
   // Get app index of the snapshot
   int m_appIndexToSwitch = appIndexFromSnapshot(snapshot);
   // If the app is home, skip app index saving

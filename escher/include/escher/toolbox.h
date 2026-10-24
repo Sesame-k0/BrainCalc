@@ -12,11 +12,6 @@ public:
 
   // StackViewController
   void viewWillAppear() override;
-  void viewDidDisappear() override;
-  void tableViewDidChangeSelection(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection) override;
-#if TARGET_BRAIN
-  void updateHelpForSelection();
-#endif
 
   //ListViewDataSource
   int numberOfRows() const override;

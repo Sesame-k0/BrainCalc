@@ -1,6 +1,3 @@
-#if TARGET_BRAIN
-#include <ion/display.h>
-#endif
 #include "edit_expression_controller.h"
 #include "app.h"
 #include <ion/display.h>
@@ -57,9 +54,6 @@ void EditExpressionController::insertTextBody(const char * text) {
 }
 
 void EditExpressionController::didBecomeFirstResponder() {
-#if TARGET_BRAIN
-  Ion::Display::clearHelpMessage();
-#endif
   m_contentView.mainView()->scrollToBottom();
   m_contentView.expressionField()->setEditing(true, false);
   Container::activeApp()->setFirstResponder(m_contentView.expressionField());

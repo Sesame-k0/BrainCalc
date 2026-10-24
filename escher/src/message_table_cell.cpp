@@ -1,6 +1,3 @@
-#if TARGET_BRAIN
-#include <ion/display.h>
-#endif
 #include <escher/message_table_cell.h>
 #include <escher/palette.h>
 #include <escher/slideable_message_text_view.h>
@@ -28,11 +25,6 @@ void MessageTableCell<SlideableMessageTextView>::setHighlighted(bool highlight) 
   if (highlight) {
     m_messageTextView.willStartAnimation();
     s_animationTimer.setAnimated(&m_messageTextView);
-#if TARGET_BRAIN
-    if (m_messageTextView.message() != (I18n::Message)0) {
-      Ion::Display::setHelpMessage(m_messageTextView.message());
-    }
-#endif
   } else {
     s_animationTimer.removeAnimated(&m_messageTextView);
     m_messageTextView.didStopAnimation();
@@ -44,22 +36,12 @@ void MessageTableCell<MessageTextView>::setHighlighted(bool highlight) {
   HighlightCell::setHighlighted(highlight);
   KDColor backgroundColor = highlight? Palette::ListCellBackgroundSelected : Palette::ListCellBackground;
   m_messageTextView.setBackgroundColor(backgroundColor);
-#if TARGET_BRAIN
-  if (highlight && m_messageTextView.message() != (I18n::Message)0) {
-    Ion::Display::setHelpMessage(m_messageTextView.message());
-  }
-#endif
 }
 
 template<class T>
 void MessageTableCell<T>::setMessage(I18n::Message text) {
   m_messageTextView.setMessage(text);
   layoutSubviews();
-#if TARGET_BRAIN
-  if (isHighlighted() && text != (I18n::Message)0) {
-    Ion::Display::setHelpMessage(text);
-  }
-#endif
 }
 
 template<class T>

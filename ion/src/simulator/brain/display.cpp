@@ -226,25 +226,13 @@ static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec g
 static ::I18n::Message sCurrentHelpMessage = (::I18n::Message)0;
 
 void setHelpMessage(::I18n::Message messageId) {
-  if (sCurrentHelpMessage != messageId) {
-    sCurrentHelpMessage = messageId;
-    markSidebarDirty();
-    if (sHwnd && sMemDC) {
-      draw();
-    }
-  }
+  (void)messageId;
 }
 
 void clearHelpMessage() {
-  if (sCurrentHelpMessage != (::I18n::Message)0) {
-    sCurrentHelpMessage = (::I18n::Message)0;
-    markSidebarDirty();
-    if (sHwnd && sMemDC) {
-      draw();
-    }
-  }
 }
 
+#if 0
 static void renderJapaneseHelpPanel(HDC hdc, const HelpEntry * help) {
   if (!hdc || !help || !help->jaTitle || !help->jaDesc) {
     return;
@@ -292,6 +280,7 @@ static void renderJapaneseHelpPanel(HDC hdc, const HelpEntry * help) {
 
   SelectObject(hdc, oldFont);
 }
+#endif
 
 static void renderRightSidebar(HDC hdc) {
   if (!hdc || !sDibPixels) {
@@ -308,12 +297,13 @@ static void renderRightSidebar(HDC hdc) {
 
   SetBkMode(hdc, TRANSPARENT);
 
-  // ガイド表示対象の項目が選択されている場合は、日本語解説パネルを描画
+  /* Temporarily bypassed for hardware stability isolation:
   const HelpEntry * help = (sCurrentHelpMessage != (::I18n::Message)0) ? findHelpEntry(sCurrentHelpMessage) : nullptr;
   if (help != nullptr && help->jaTitle != nullptr && help->jaDesc != nullptr) {
     renderJapaneseHelpPanel(hdc, help);
     return;
   }
+  */
   HGDIOBJ oldFont = SelectObject(hdc, sUiFontBold);
 
   const int sx = kSidebarX + 6;      // 646

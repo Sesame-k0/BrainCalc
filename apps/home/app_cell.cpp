@@ -1,6 +1,3 @@
-#if TARGET_BRAIN
-#include <ion/display.h>
-#endif
 #include "app_cell.h"
 #include <assert.h>
 #include <apps/i18n.h>
@@ -80,11 +77,6 @@ void AppCell::setBackgroundView(const BackgroundView * backgroundView) {
 
 void AppCell::setHighlighted(bool highlight) {
   HighlightCell::setHighlighted(highlight);
-#if TARGET_BRAIN
-  if (highlight && m_nameView.message() != (I18n::Message)0) {
-    Ion::Display::setHelpMessage(m_nameView.message());
-  }
-#endif
 }
 
 void AppCell::reloadCell() {

@@ -1,9 +1,6 @@
 #include "function_list_controller.h"
 #include "function_app.h"
 #include "function_expression_cell.h"
-#if TARGET_BRAIN
-#include <ion/display.h>
-#endif
 #include <algorithm>
 
 namespace Shared {
@@ -150,9 +147,6 @@ Button * FunctionListController::buttonAtIndex(int index, ButtonRowController::P
 /* Responder */
 
 void FunctionListController::didBecomeFirstResponder() {
-#if TARGET_BRAIN
-  Ion::Display::clearHelpMessage();
-#endif
   if (selectedRow() == -1) {
     selectCellAtLocation(1, 0);
   } else {
