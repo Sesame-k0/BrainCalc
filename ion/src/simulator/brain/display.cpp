@@ -229,7 +229,9 @@ void setHelpMessage(::I18n::Message messageId) {
   if (sCurrentHelpMessage != messageId) {
     sCurrentHelpMessage = messageId;
     markSidebarDirty();
-    draw();
+    if (sHwnd && sMemDC) {
+      draw();
+    }
   }
 }
 
@@ -237,11 +239,19 @@ void clearHelpMessage() {
   if (sCurrentHelpMessage != (::I18n::Message)0) {
     sCurrentHelpMessage = (::I18n::Message)0;
     markSidebarDirty();
-    draw();
+    if (sHwnd && sMemDC) {
+      draw();
+    }
   }
 }
 
 static void renderJapaneseHelpPanel(HDC hdc, const HelpEntry * help) {
+  if (!hdc || !help || !help->jaTitle || !help->jaDesc) {
+    return;
+  }
+  if (!sUiFontBold || !sUiFontSmall || !sUiFontTiny) {
+    return;
+  }
   HGDIOBJ oldFont = SelectObject(hdc, sUiFontBold);
   const int sx = kSidebarX + 6;      // 646
   const int sw = kSidebarWidth - 12; // 148
@@ -259,6 +269,7 @@ static void renderJapaneseHelpPanel(HDC hdc, const HelpEntry * help) {
   drawBox(hdc, sx, 58, sw, 46, RGB(240, 246, 252), RGB(175, 195, 220));
   SelectObject(hdc, sUiFontBold);
   wchar_t titleBuf[64];
+  titleBuf[0] = L'\0';
   _snwprintf(titleBuf, sizeof(titleBuf)/sizeof(wchar_t), L"【 %s 】", help->jaTitle);
   titleBuf[sizeof(titleBuf)/sizeof(wchar_t) - 1] = L'\0';
   drawTextLine(hdc, sx + 4, 70, sw - 8, 22, RGB(24, 75, 130), titleBuf,
@@ -283,6 +294,9 @@ static void renderJapaneseHelpPanel(HDC hdc, const HelpEntry * help) {
 }
 
 static void renderRightSidebar(HDC hdc) {
+  if (!hdc || !sDibPixels) {
+    return;
+  }
   // Clear right sidebar area (X = 640..799, Y = 0..479) with #EDF1F5 in 32-bit DIB buffer
   for (int y = 0; y < kBrainScreenHeight; y++) {
     uint32_t * row = sDibPixels + y * kBrainScreenWidth;
@@ -296,7 +310,7 @@ static void renderRightSidebar(HDC hdc) {
 
   // ガイド表示対象の項目が選択されている場合は、日本語解説パネルを描画
   const HelpEntry * help = (sCurrentHelpMessage != (::I18n::Message)0) ? findHelpEntry(sCurrentHelpMessage) : nullptr;
-  if (help != nullptr) {
+  if (help != nullptr && help->jaTitle != nullptr && help->jaDesc != nullptr) {
     renderJapaneseHelpPanel(hdc, help);
     return;
   }

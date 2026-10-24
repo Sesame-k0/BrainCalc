@@ -1,5 +1,8 @@
 #include "graph_controller.h"
 #include "../app.h"
+#if TARGET_BRAIN
+#include <ion/display.h>
+#endif
 #include <algorithm>
 
 using namespace Poincare;
@@ -26,6 +29,9 @@ I18n::Message GraphController::emptyMessage() {
 }
 
 void GraphController::viewWillAppear() {
+#if TARGET_BRAIN
+  Ion::Display::clearHelpMessage();
+#endif
   m_view.drawTangent(false);
 #ifdef GRAPH_CURSOR_SPEEDUP
   m_cursorView.resetMemoization();

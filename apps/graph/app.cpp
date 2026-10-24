@@ -2,6 +2,9 @@
 #include "../apps_container.h"
 #include "graph_icon.h"
 #include <apps/i18n.h>
+#if TARGET_BRAIN
+#include <ion/display.h>
+#endif
 
 using namespace Poincare;
 using namespace Shared;
@@ -71,6 +74,9 @@ App::App(Snapshot * snapshot) :
   m_tabViewController(&m_inputViewController, snapshot, &m_listStackViewController, &m_graphStackViewController, &m_valuesStackViewController),
   m_inputViewController(&m_modalViewController, &m_tabViewController, this, this, this)
 {
+#if TARGET_BRAIN
+  Ion::Display::clearHelpMessage();
+#endif
 }
 
 CodePoint App::XNT() {
