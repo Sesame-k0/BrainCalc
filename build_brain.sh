@@ -11,10 +11,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Automatically add CeGCC installation directories to PATH if present
-for cegcc_dir in "/opt/cegcc/bin" "/c/msys64/opt/cegcc/bin" "$HOME/cegcc/bin"; do
-  if [[ -d "$cegcc_dir" ]] && [[ ":$PATH:" != *":$cegcc_dir:"* ]]; then
-    export PATH="${cegcc_dir}:${PATH}"
+# Automatically add toolchain and MSYS2 directories (python3, gcc) to PATH if present
+for tool_dir in "/mingw64/bin" "/usr/bin" "/opt/cegcc/bin" "/c/msys64/opt/cegcc/bin" "$HOME/cegcc/bin"; do
+  if [[ -d "$tool_dir" ]] && [[ ":$PATH:" != *":$tool_dir:"* ]]; then
+    export PATH="${tool_dir}:${PATH}"
   fi
 done
 
