@@ -86,6 +86,11 @@ public:
   void getAvailableSpaceFromEndOfRecord(Record r, size_t recordAvailableSpace);
   uint32_t checksum();
 
+  // Snapshot buffer access for persistence (brain_state.bin)
+  const char * bufferData() const { return m_buffer; }
+  size_t bufferSize() const { return k_storageSize; }
+  bool restoreBuffer(const char * buffer, size_t size);
+
   // Delegate
   void setDelegate(StorageDelegate * delegate) { m_delegate = delegate; }
   void notifyChangeToDelegate(const Record r = Record()) const;

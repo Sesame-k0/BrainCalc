@@ -132,7 +132,7 @@ static constexpr KeyCapSpec kLeftHandGrid[3][5] = {
   {
     { L"Z", L"√",   L"z", false },
     { L"X", L"xnt", L"x", false },
-    { L"C", L"^",   L"c", false },
+    { L"C", L"i",   L"c", false },
     { L"V", L"π",   L"v", false },
     { L"B", L"log", L"b", false },
   }
@@ -165,7 +165,7 @@ static constexpr KeyCapSpec kRightHandGrid[3][5] = {
   }
 };
 
-static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec grid[3][5], bool numOn) {
+static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec grid[3][5], Keyboard::InputMode mode) {
   constexpr int kCols = 5;
   constexpr int kRows = 3;
   constexpr int kKeyW = 28;
@@ -185,12 +185,17 @@ static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec g
         continue;
       }
 
-      const wchar_t * activeLabel = numOn ? spec.numLabel : spec.abcLabel;
+      const wchar_t * activeLabel = spec.numLabel;
+      if (mode == Keyboard::InputMode::AlphaLower) {
+        activeLabel = spec.abcLabel;
+      } else if (mode == Keyboard::InputMode::AlphaUpper) {
+        activeLabel = (spec.keyName && wcscmp(spec.keyName, L"ー") == 0) ? L"_" : spec.keyName;
+      }
 
       // NumWorksに合わせた明るいトーン（キー枠: 白、枠線: 薄グレー、文字: 濃グレー）
       COLORREF bgColor = RGB(255, 255, 255);
       COLORREF borderColor = RGB(196, 204, 214);
-      COLORREF textColor = (numOn && spec.isDigitInNumMode)
+      COLORREF textColor = (mode == Keyboard::InputMode::Number && spec.isDigitInNumMode)
                              ? RGB(32, 82, 145)
                              : RGB(45, 52, 62);
 
@@ -224,22 +229,32 @@ static void renderRightSidebar(HDC hdc) {
 
   const int sx = kSidebarX + 6;      // 646
   const int sw = kSidebarWidth - 12; // 148
-  bool numOn = Keyboard::isNumberInputEnabled();
+  Keyboard::InputMode mode = Keyboard::currentInputMode();
 
   // ===========================================================================
   // 1. モード表示ボックス (Y = 6..60)
   // ===========================================================================
   drawBox(hdc, sx, 6, sw, 54, RGB(255, 255, 255), RGB(190, 199, 210));
 
+  const wchar_t * modeTitle = L"モード: 12x";
+  COLORREF modeColor = RGB(28, 92, 152);
+  const wchar_t * modeHint = L"F2:切替   Ent:EXE";
+
+  if (mode == Keyboard::InputMode::AlphaLower) {
+    modeTitle = L"モード: abc";
+    modeColor = RGB(145, 78, 24);
+    modeHint = L"F2:切替   Ent:OK";
+  } else if (mode == Keyboard::InputMode::AlphaUpper) {
+    modeTitle = L"モード: ABC";
+    modeColor = RGB(160, 48, 80);
+    modeHint = L"F2:切替   Ent:OK";
+  }
+
   SelectObject(hdc, sUiFontBold);
-  drawTextLine(hdc, sx + 4, 9, sw - 8, 22,
-               numOn ? RGB(28, 92, 152) : RGB(145, 78, 24),
-               numOn ? L"モード:12x (数字)" : L"モード:abc (通常)");
+  drawTextLine(hdc, sx + 4, 9, sw - 8, 22, modeColor, modeTitle);
 
   SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx + 4, 33, sw - 8, 22,
-               RGB(65, 74, 86),
-               numOn ? L"F2:切替   Ent:EXE" : L"F2:切替   Ent:OK");
+  drawTextLine(hdc, sx + 4, 33, sw - 8, 22, RGB(65, 74, 86), modeHint);
 
   // ===========================================================================
   // 2. 特殊キー（銀色キー）ヒント枠 (Y = 66..136)
@@ -248,22 +263,21 @@ static void renderRightSidebar(HDC hdc) {
   SelectObject(hdc, sUiFontSmall);
   drawTextLine(hdc, sx + 4, 70,  sw - 8, 20, RGB(45, 52, 62), L"F1:関数   F9:変数");
   drawTextLine(hdc, sx + 4, 91,  sw - 8, 20, RGB(65, 74, 86), L"F10/HOME: ホーム");
-  drawTextLine(hdc, sx + 4, 112, sw - 8, 20, RGB(45, 52, 62),
-               numOn ? L"PgUp:(    PgDn:)" : L"PgUp拡大 PgDn縮小");
+  drawTextLine(hdc, sx + 4, 112, sw - 8, 20, RGB(45, 52, 62), L"PgUp:(    PgDn:)");
 
   // ===========================================================================
   // 3. 左手側キー 5列×3段グリッド (Y = 142..276)
   // ===========================================================================
   SelectObject(hdc, sUiFontSmall);
   drawTextLine(hdc, sx, 142, sw, 18, RGB(58, 66, 78), L"■左手側 (Q-T/A-G)");
-  drawKeyGridBlock(hdc, sx, 163, kLeftHandGrid, numOn);
+  drawKeyGridBlock(hdc, sx, 163, kLeftHandGrid, mode);
 
   // ===========================================================================
   // 4. 右手側キー 5列×3段グリッド (Y = 282..416)
   // ===========================================================================
   SelectObject(hdc, sUiFontSmall);
   drawTextLine(hdc, sx, 282, sw, 18, RGB(58, 66, 78), L"■右手側 (Y-P/H-L)");
-  drawKeyGridBlock(hdc, sx, 303, kRightHandGrid, numOn);
+  drawKeyGridBlock(hdc, sx, 303, kRightHandGrid, mode);
 
   // ===========================================================================
   // 5. 最下部「終了」ボタン (Y = 434..472) - 控えめなフラットボタン

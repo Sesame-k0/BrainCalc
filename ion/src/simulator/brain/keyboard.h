@@ -18,10 +18,20 @@ namespace Ion {
 namespace Simulator {
 namespace Keyboard {
 
+enum class InputMode {
+  Number = 0,     // 12x (数字モード)
+  AlphaLower = 1, // abc (通常モード・小文字)
+  AlphaUpper = 2, // ABC (大文字モード)
+};
+
 void onKeyDown(WPARAM vkCode, LPARAM lParam);
 void onKeyUp(WPARAM vkCode, LPARAM lParam);
 void onTouchClick(int x, int y);
 void pumpMessages();
+
+InputMode currentInputMode();
+void setInputMode(InputMode mode);
+void cycleInputMode();
 
 bool isNumberInputEnabled();
 void setNumberInputEnabled(bool enabled);

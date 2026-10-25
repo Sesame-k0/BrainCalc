@@ -12,6 +12,9 @@ void hideTaskBar();
 void restoreTaskBar();
 void quit();
 
+bool restoreBrainState();
+void saveBrainState();
+
 }
 }
 }

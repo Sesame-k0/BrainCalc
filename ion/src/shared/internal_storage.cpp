@@ -346,6 +346,19 @@ InternalStorage::InternalStorage() {
   assert(m_magicFooter == Magic);
 }
 
+bool InternalStorage::restoreBuffer(const char * buffer, size_t size) {
+  if (!buffer || size != k_storageSize) {
+    return false;
+  }
+  memcpy(m_buffer, buffer, k_storageSize);
+  m_magicHeader = Magic;
+  m_magicFooter = Magic;
+  m_lastRecordRetrieved = nullptr;
+  m_lastRecordRetrievedPointer = nullptr;
+  notifyChangeToDelegate();
+  return true;
+}
+
 // PRIVATE
 
 const char * InternalStorage::fullNameOfRecord(const Record record) {
