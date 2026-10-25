@@ -72,7 +72,7 @@ bool AboutController::handleEvent(Ion::Events::Event event) {
       if (childLabel == I18n::Message::UpsilonVersion) {
         MessageTableCellWithBuffer * myCell = (MessageTableCellWithBuffer *)m_selectableTableView.selectedCell();
         if (strcmp(myCell->accessoryText(), Ion::upsilonVersion()) == 0) {
-          myCell->setAccessoryText(MP_STRINGIFY(OMEGA_STATE)); //Change for public/dev
+          myCell->setAccessoryText("Lilium (Brain)");
           return true;
         }
         myCell->setAccessoryText(Ion::upsilonVersion());

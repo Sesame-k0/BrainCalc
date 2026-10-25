@@ -37,7 +37,7 @@ elif ! command -v arm-mingw32ce-g++ >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "[INFO] Building BrainCalc (PLATFORM=simulator TARGET=brain TOOLCHAIN=${TOOLCHAIN_OPT}) with -j${JOBS}..."
+echo "[INFO] Building Lilium (PLATFORM=simulator TARGET=brain TOOLCHAIN=${TOOLCHAIN_OPT}) with -j${JOBS}..."
 if [[ "${TOOLCHAIN_OPT}" == "cegcc" ]] && command -v arm-mingw32ce-c++filt >/dev/null 2>&1; then
   # Keep a persistent Cygwin process alive during parallel Make so cygwin1.dll
   # shared memory and mount table stay initialized across all worker processes.
@@ -47,7 +47,7 @@ if [[ "${TOOLCHAIN_OPT}" == "cegcc" ]] && command -v arm-mingw32ce-c++filt >/dev
 fi
 make PLATFORM=simulator TARGET=brain TOOLCHAIN="${TOOLCHAIN_OPT}" -j"${JOBS}"
 
-DIST_DIR="${OUT_DIR}/BrainCalc"
+DIST_DIR="${OUT_DIR}/Lilium"
 mkdir -p "$DIST_DIR"
 
 # アプリ本体 (epsilon.exe) を AppMain_.exe として出力 (SHARP Brain PW-SB4 必須仕様)
@@ -60,10 +60,18 @@ if [[ -f "${LOADER_DIR}/AppMain.exe" ]]; then
   if [[ ! -f "${DIST_DIR}/AppMain.exe" ]]; then
     cp -f "${LOADER_DIR}/AppMain.exe" "${DIST_DIR}/AppMain.exe"
   fi
+elif [[ -f "${OUT_DIR}/BrainCalc/AppMain.exe" ]]; then
+  if [[ ! -f "${DIST_DIR}/AppMain.exe" ]]; then
+    cp -f "${OUT_DIR}/BrainCalc/AppMain.exe" "${DIST_DIR}/AppMain.exe"
+  fi
 fi
 if [[ -f "${LOADER_DIR}/AppMain.cfg" ]]; then
   if [[ ! -f "${DIST_DIR}/AppMain.cfg" ]]; then
     cp -f "${LOADER_DIR}/AppMain.cfg" "${DIST_DIR}/AppMain.cfg"
+  fi
+elif [[ -f "${OUT_DIR}/BrainCalc/AppMain.cfg" ]]; then
+  if [[ ! -f "${DIST_DIR}/AppMain.cfg" ]]; then
+    cp -f "${OUT_DIR}/BrainCalc/AppMain.cfg" "${DIST_DIR}/AppMain.cfg"
   fi
 fi
 
@@ -75,7 +83,7 @@ fi
 
 touch "${DIST_DIR}/index.din"
 
-# Copy bundled TrueType font (font.ttf = MisakiGothic) next to executables and into BrainCalc SD bundle
+# Copy bundled TrueType font (font.ttf = MisakiGothic) next to executables and into Lilium SD bundle
 FONT_SRC=""
 for candidate in "ion/src/simulator/brain/font.ttf" "../MisakiFont/misaki_gothic.ttf" "misaki_gothic.ttf"; do
   if [[ -f "$candidate" ]]; then

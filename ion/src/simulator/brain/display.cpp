@@ -196,7 +196,7 @@ static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec g
       COLORREF bgColor = RGB(255, 255, 255);
       COLORREF borderColor = RGB(196, 204, 214);
       COLORREF textColor = (mode == Keyboard::InputMode::Number && spec.isDigitInNumMode)
-                             ? RGB(32, 82, 145)
+                             ? RGB(22, 122, 110)
                              : RGB(45, 52, 62);
 
       drawBox(hdc, kx, ky, kKeyW, kKeyH, bgColor, borderColor);
@@ -234,10 +234,10 @@ static void renderRightSidebar(HDC hdc) {
   // ===========================================================================
   // 1. モード表示ボックス (Y = 6..60)
   // ===========================================================================
-  drawBox(hdc, sx, 6, sw, 54, RGB(255, 255, 255), RGB(190, 199, 210));
+  drawBox(hdc, sx, 6, sw, 54, RGB(255, 255, 255), RGB(180, 208, 203));
 
   const wchar_t * modeTitle = L"モード: 12x";
-  COLORREF modeColor = RGB(28, 92, 152);
+  COLORREF modeColor = RGB(24, 128, 116);
   const wchar_t * modeHint = L"F2:切替   Ent:EXE";
 
   if (mode == Keyboard::InputMode::AlphaLower) {
@@ -269,14 +269,14 @@ static void renderRightSidebar(HDC hdc) {
   // 3. 左手側キー 5列×3段グリッド (Y = 142..276)
   // ===========================================================================
   SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx, 142, sw, 18, RGB(58, 66, 78), L"■左手側 (Q-T/A-G)");
+  drawTextLine(hdc, sx, 142, sw, 18, RGB(38, 115, 104), L"■左手側 (Q-T/A-G)");
   drawKeyGridBlock(hdc, sx, 163, kLeftHandGrid, mode);
 
   // ===========================================================================
   // 4. 右手側キー 5列×3段グリッド (Y = 282..416)
   // ===========================================================================
   SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx, 282, sw, 18, RGB(58, 66, 78), L"■右手側 (Y-P/H-L)");
+  drawTextLine(hdc, sx, 282, sw, 18, RGB(38, 115, 104), L"■右手側 (Y-P/H-L)");
   drawKeyGridBlock(hdc, sx, 303, kRightHandGrid, mode);
 
   // ===========================================================================
@@ -324,15 +324,15 @@ static void renderExitConfirmDialog(HDC hdc) {
 
   // 3. ヘッダータイトル枠 (H = 38)
   drawBox(hdc, kDialogX, kDialogY, kDialogW, 38,
-          RGB(232, 238, 245), RGB(195, 205, 218));
+          RGB(230, 244, 241), RGB(180, 215, 210));
   SelectObject(hdc, sUiFontBold);
   drawTextLine(hdc, kDialogX, kDialogY + 9, kDialogW, 20,
-               RGB(36, 48, 64), L"【 終了の確認 】",
+               RGB(25, 75, 68), L"【 終了の確認 】",
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
   // 4. メッセージ文
   drawTextLine(hdc, kDialogX, kDialogY + 52, kDialogW, 20,
-               RGB(42, 50, 60), L"BrainCalc を終了して",
+               RGB(42, 50, 60), L"Lilium を終了して",
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   SelectObject(hdc, sUiFontSmall);
   drawTextLine(hdc, kDialogX, kDialogY + 76, kDialogW, 20,
@@ -359,7 +359,7 @@ static void renderExitConfirmDialog(HDC hdc) {
   // [ キャンセル ] ボタン
   if (sExitConfirmFocus == 1) {
     drawBox(hdc, kBtnCancelX, kBtnCancelY, kBtnCancelW, kBtnCancelH,
-            RGB(28, 92, 152), RGB(18, 65, 115));
+            RGB(79, 191, 175), RGB(55, 152, 138));
     drawTextLine(hdc, kBtnCancelX, kBtnCancelY, kBtnCancelW, kBtnCancelH,
                  RGB(255, 255, 255), L"キャンセル",
                  DT_CENTER | DT_VCENTER | DT_SINGLELINE);
