@@ -50,40 +50,28 @@ make PLATFORM=simulator TARGET=brain TOOLCHAIN="${TOOLCHAIN_OPT}" -j"${JOBS}"
 DIST_DIR="${OUT_DIR}/Lilium"
 mkdir -p "$DIST_DIR"
 
-# アプリ本体 (epsilon.exe) を AppMain_.exe として出力 (SHARP Brain PW-SB4 必須仕様)
-cp -f "${OUT_DIR}/epsilon.exe" "${OUT_DIR}/AppMain_.exe"
-cp -f "${OUT_DIR}/epsilon.exe" "${DIST_DIR}/AppMain_.exe"
+# アプリ本体 (epsilon.exe) を DIST_DIR/AppMain_.exe として出力 (SHARP Brain PW-SB4 必須仕様)
+if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
+  # PCホスト検証用 (--host) の場合は AppMain.exe として出力
+  cp -f "${OUT_DIR}/epsilon.exe" "${DIST_DIR}/AppMain.exe"
+else
+  # Brain実機向けの場合は AppMain_.exe として出力
+  cp -f "${OUT_DIR}/epsilon.exe" "${DIST_DIR}/AppMain_.exe"
+fi
 
-# PW-SB4 動作必須のローダー (188KB AppMain.exe) と AppMain.cfg (8バイト) を保持・復元
+# PW-SB4 動作必須のローダー (188KB AppMain.exe) と AppMain.cfg (8バイト) をリポジトリ内から確実に配置
 LOADER_DIR="ion/src/simulator/brain/loader"
-if [[ -f "${LOADER_DIR}/AppMain.exe" ]]; then
-  if [[ ! -f "${DIST_DIR}/AppMain.exe" ]]; then
+if [[ "${TOOLCHAIN_OPT}" != "windows" ]]; then
+  if [[ -f "${LOADER_DIR}/AppMain.exe" ]]; then
     cp -f "${LOADER_DIR}/AppMain.exe" "${DIST_DIR}/AppMain.exe"
   fi
-elif [[ -f "${OUT_DIR}/BrainCalc/AppMain.exe" ]]; then
-  if [[ ! -f "${DIST_DIR}/AppMain.exe" ]]; then
-    cp -f "${OUT_DIR}/BrainCalc/AppMain.exe" "${DIST_DIR}/AppMain.exe"
-  fi
-fi
-if [[ -f "${LOADER_DIR}/AppMain.cfg" ]]; then
-  if [[ ! -f "${DIST_DIR}/AppMain.cfg" ]]; then
+  if [[ -f "${LOADER_DIR}/AppMain.cfg" ]]; then
     cp -f "${LOADER_DIR}/AppMain.cfg" "${DIST_DIR}/AppMain.cfg"
   fi
-elif [[ -f "${OUT_DIR}/BrainCalc/AppMain.cfg" ]]; then
-  if [[ ! -f "${DIST_DIR}/AppMain.cfg" ]]; then
-    cp -f "${OUT_DIR}/BrainCalc/AppMain.cfg" "${DIST_DIR}/AppMain.cfg"
-  fi
+  touch "${DIST_DIR}/index.din"
 fi
 
-# PCホスト検証用 (--host) の場合は PC 上で直接起動できるよう AppMain.exe も同期出力
-if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
-  cp -f "${OUT_DIR}/epsilon.exe" "${OUT_DIR}/AppMain.exe"
-  cp -f "${OUT_DIR}/epsilon.exe" "${DIST_DIR}/AppMain.exe"
-fi
-
-touch "${DIST_DIR}/index.din"
-
-# Copy bundled TrueType font (font.ttf = MisakiGothic) next to executables and into Lilium SD bundle
+# Copy bundled TrueType font (font.ttf = MisakiGothic) into Lilium bundle
 FONT_SRC=""
 for candidate in "ion/src/simulator/brain/font.ttf" "../MisakiFont/misaki_gothic.ttf" "misaki_gothic.ttf"; do
   if [[ -f "$candidate" ]]; then
@@ -94,9 +82,6 @@ done
 
 if [[ -n "$FONT_SRC" ]]; then
   for fname in "font.ttf" "misaki_gothic.ttf"; do
-    if ! cmp -s "$FONT_SRC" "${OUT_DIR}/${fname}" 2>/dev/null; then
-      cp -f "$FONT_SRC" "${OUT_DIR}/${fname}" 2>/dev/null || true
-    fi
     if ! cmp -s "$FONT_SRC" "${DIST_DIR}/${fname}" 2>/dev/null; then
       cp -f "$FONT_SRC" "${DIST_DIR}/${fname}" 2>/dev/null || true
     fi
@@ -108,7 +93,7 @@ fi
 echo "=============================================================================="
 echo "[SUCCESS] Build completed!"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
-  echo "  Executable : ${OUT_DIR}/AppMain.exe"
+  echo "  Executable : ${DIST_DIR}/AppMain.exe"
   echo "  Bundle     : ${DIST_DIR}/ (AppMain.exe, font.ttf)"
 else
   echo "  App Binary : ${DIST_DIR}/AppMain_.exe"
