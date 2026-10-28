@@ -3,6 +3,8 @@
 #include <escher/slideable_message_text_view.h>
 #include <assert.h>
 
+extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText);
+
 template<class T>
 MessageTableCell<T>::MessageTableCell(I18n::Message label, const KDFont * font, Layout layout) :
   TableCell(layout),
@@ -23,6 +25,7 @@ void MessageTableCell<SlideableMessageTextView>::setHighlighted(bool highlight) 
   m_messageTextView.setBackgroundColor(backgroundColor);
   static AnimationTimer s_animationTimer = AnimationTimer();
   if (highlight) {
+    BrainNotifyHelpText(m_messageTextView.text(), nullptr);
     m_messageTextView.willStartAnimation();
     s_animationTimer.setAnimated(&m_messageTextView);
   } else {
@@ -36,11 +39,17 @@ void MessageTableCell<MessageTextView>::setHighlighted(bool highlight) {
   HighlightCell::setHighlighted(highlight);
   KDColor backgroundColor = highlight? Palette::ListCellBackgroundSelected : Palette::ListCellBackground;
   m_messageTextView.setBackgroundColor(backgroundColor);
+  if (highlight) {
+    BrainNotifyHelpText(m_messageTextView.text(), nullptr);
+  }
 }
 
 template<class T>
 void MessageTableCell<T>::setMessage(I18n::Message text) {
   m_messageTextView.setMessage(text);
+  if (isHighlighted()) {
+    BrainNotifyHelpText(m_messageTextView.text(), nullptr);
+  }
   layoutSubviews();
 }
 

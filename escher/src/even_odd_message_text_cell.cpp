@@ -1,6 +1,8 @@
 #include <escher/even_odd_message_text_cell.h>
 #include <assert.h>
 
+extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText);
+
 EvenOddMessageTextCell::EvenOddMessageTextCell(const KDFont * font) :
   EvenOddCell(),
   m_messageTextView(font, (I18n::Message)0, 0.5f, 0.5f)
@@ -10,6 +12,9 @@ EvenOddMessageTextCell::EvenOddMessageTextCell(const KDFont * font) :
 void EvenOddMessageTextCell::setHighlighted(bool highlight) {
   EvenOddCell::setHighlighted(highlight);
   m_messageTextView.setBackgroundColor(backgroundColor());
+  if (highlight) {
+    BrainNotifyHelpText(m_messageTextView.text(), nullptr);
+  }
 }
 
 void EvenOddMessageTextCell::setEven(bool even) {
@@ -20,6 +25,9 @@ void EvenOddMessageTextCell::setEven(bool even) {
 void EvenOddMessageTextCell::setMessage(I18n::Message title, KDColor textColor) {
   m_messageTextView.setMessage(title);
   m_messageTextView.setTextColor(textColor);
+  if (isHighlighted()) {
+    BrainNotifyHelpText(m_messageTextView.text(), nullptr);
+  }
 }
 
 void EvenOddMessageTextCell::setAlignment(float horizontalAlignment, float verticalAlignment) {

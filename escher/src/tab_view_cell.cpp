@@ -2,6 +2,8 @@
 #include <escher/palette.h>
 extern "C" {
 #include <assert.h>
+void BrainNotifyHelpText(const char * mainText, const char * subText);
+void BrainClearHelp();
 }
 
 TabViewCell::TabViewCell() :
@@ -24,6 +26,11 @@ void TabViewCell::setActive(bool active) {
 
 void TabViewCell::setSelected(bool selected) {
   m_selected = selected;
+  if (selected && m_controller != nullptr) {
+    BrainNotifyHelpText(m_controller->title(), nullptr);
+  } else if (!selected) {
+    BrainClearHelp();
+  }
   markRectAsDirty(bounds());
 }
 

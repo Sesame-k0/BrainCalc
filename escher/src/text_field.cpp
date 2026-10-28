@@ -9,6 +9,8 @@
 
 static char s_draftTextBuffer[TextField::maxBufferSize()];
 
+extern "C" void BrainClearHelp();
+
 /* TextField::ContentView */
 
 TextField::ContentView::ContentView(char * textBuffer, size_t textBufferSize, size_t draftTextBufferSize, const KDFont * font, float horizontalAlignment, float verticalAlignment, KDColor textColor, KDColor backgroundColor) :
@@ -95,6 +97,9 @@ void TextField::ContentView::setText(const char * text) {
 }
 
 void TextField::ContentView::setEditing(bool isEditing) {
+  if (isEditing) {
+    BrainClearHelp();
+  }
   if (m_isEditing == isEditing) {
     return;
   }

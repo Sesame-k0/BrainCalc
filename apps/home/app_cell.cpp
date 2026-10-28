@@ -3,6 +3,8 @@
 #include <apps/i18n.h>
 #include <escher/palette.h>
 
+extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText);
+
 namespace Home {
 
 AppCell::AppCell() :
@@ -41,6 +43,9 @@ void AppCell::setExtAppDescriptor(const char* name, const uint8_t *icon, size_t 
   m_nameView.setText(name);
   m_nameView.setTextColor(Palette::HomeCellTextExternal);
   m_nameView.setMessage(I18n::Message::Default);
+  if (isHighlighted() && m_visible) {
+    BrainNotifyHelpText(m_nameView.text(), nullptr);
+  }
   layoutSubviews();
 }
 
@@ -51,6 +56,9 @@ void AppCell::setExtAppDescriptor(const char* name, const Image* icon) {
   m_nameView.setText(name);
   m_nameView.setTextColor(Palette::HomeCellTextExternal);
   m_nameView.setMessage(I18n::Message::Default);
+  if (isHighlighted() && m_visible) {
+    BrainNotifyHelpText(m_nameView.text(), nullptr);
+  }
   layoutSubviews();
 }
 
@@ -61,6 +69,9 @@ void AppCell::setAppDescriptor(::App::Descriptor * descriptor) {
   m_nameView.setMessage(descriptor->name());
   m_nameView.setTextColor(Palette::HomeCellText);
   m_nameView.setText(nullptr);
+  if (isHighlighted() && m_visible) {
+    BrainNotifyHelpText(m_nameView.text(), nullptr);
+  }
   layoutSubviews();
 }
 
@@ -76,6 +87,9 @@ void AppCell::setBackgroundView(const BackgroundView * backgroundView) {
 }
 
 void AppCell::reloadCell() {
+  if (isHighlighted() && m_visible) {
+    BrainNotifyHelpText(m_nameView.text(), nullptr);
+  }
   m_nameView.setTextColor(isHighlighted() ? (m_external_app ? Palette::HomeCellTextExternalActive : Palette::HomeCellTextActive) : (m_external_app ? Palette::HomeCellTextExternal : Palette::HomeCellText));
   m_nameView.setBackgroundColor(isHighlighted() ? Palette::HomeCellBackgroundActive : Palette::HomeCellBackground);
 }

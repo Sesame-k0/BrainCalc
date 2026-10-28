@@ -10,6 +10,8 @@
 
 using namespace Poincare;
 
+extern "C" void BrainClearHelp();
+
 LayoutField::ContentView::ContentView() :
   m_cursor(),
   m_insertionCursor(),
@@ -24,6 +26,9 @@ LayoutField::ContentView::ContentView() :
 
 bool LayoutField::ContentView::setEditing(bool isEditing) {
   m_isEditing = isEditing;
+  if (isEditing) {
+    BrainClearHelp();
+  }
   markRectAsDirty(bounds());
   if (isEditing) {
     /* showEmptyLayoutIfNeeded is done in LayoutField::handleEvent, so no need

@@ -29,12 +29,20 @@ OUT_DIR="output/release/simulator/brain"
 
 if [[ "${1:-}" == "--host" ]]; then
   echo "[INFO] --host specified: building Brain target with host Windows MinGW toolchain for PC verification..."
+  if [[ -d "/mingw64/bin" ]] && [[ ":$PATH:" != *":/mingw64/bin:"* ]]; then
+    export PATH="/mingw64/bin:${PATH}"
+  fi
   TOOLCHAIN_OPT="windows"
   OUT_DIR="output/release/simulator/brain-host"
 elif ! command -v arm-mingw32ce-g++ >/dev/null 2>&1; then
   echo "[ERROR] arm-mingw32ce-g++ not found in PATH."
   echo "        Ensure CeGCC is installed in /opt/cegcc/bin or run './build_brain.sh --host' for PC verification."
   exit 1
+fi
+
+if [[ -f "ion/src/simulator/brain/help_dict.json" ]] && [[ "ion/src/simulator/brain/help_dict.json" -nt "ion/src/simulator/brain/help_data.h" || ! -f "ion/src/simulator/brain/help_data.h" ]]; then
+  echo "[INFO] Updating help_data.h from help_dict.json..."
+  python3 ion/src/simulator/brain/build_help_dict.py
 fi
 
 echo "[INFO] Building Lilium (PLATFORM=simulator TARGET=brain TOOLCHAIN=${TOOLCHAIN_OPT}) with -j${JOBS}..."

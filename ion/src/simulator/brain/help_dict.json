@@ -1,0 +1,3487 @@
+{
+  "App_Calculation": {
+    "en_keys": [
+      "Calculation",
+      "CALCULATION"
+    ],
+    "en_desc": "Standard arithmetic, fractions, powers, roots, trigonometry, calculus, and matrices.",
+    "ja_title": "計算アプリ",
+    "ja_desc": "四則演算や分数、\n微積分、三角関数\n行列などの計算を\n行います。\n【Enter】計算実\n行\n【F1】関数メニュ\nー\n【F9】変数一覧"
+  },
+  "App_Functions": {
+    "en_keys": [
+      "Functions",
+      "FUNCTIONS"
+    ],
+    "en_desc": "Define functions f(x), plot graphs, find roots/extrema/intersections, and view value tables.",
+    "ja_title": "関数グラフ",
+    "ja_desc": "関数f(x)を定義し\nグラフ描画や数値\n表を作成します。\n・交点や極値の探\n索\n・接線や定積分計\n算\n・極座標/媒介変\n数"
+  },
+  "App_Sequences": {
+    "en_keys": [
+      "Sequences",
+      "SEQUENCES"
+    ],
+    "en_desc": "Define explicit or recursive sequences u(n), plot terms, view tables, and compute sums.",
+    "ja_title": "数列アプリ",
+    "ja_desc": "一般項や漸化式で\n数列u(n),v(n)を\n定義します。\n・u(n+1)漸化式対\n応\n・項のグラフと数\n表\n・指定区間の総和"
+  },
+  "App_Statistics": {
+    "en_keys": [
+      "Statistics",
+      "STATISTICS"
+    ],
+    "en_desc": "Analyze 1-variable datasets with histograms, box plots, mean, standard deviation, and quartiles.",
+    "ja_title": "統計アプリ",
+    "ja_desc": "データと度数を入\n力\nし統計量を算出。\n・ヒストグラム描\n画\n・箱ひげ図の表示\n・平均/分散/標準\n偏差\n・中央値/四分位\n数"
+  },
+  "App_Regression": {
+    "en_keys": [
+      "Regression",
+      "REGRESSION"
+    ],
+    "en_desc": "Two-variable scatter plots and regression models (linear, polynomial, exponential, logarithmic).",
+    "ja_title": "回帰分析",
+    "ja_desc": "2変数データ(X,Y)\nの散布図と回帰式\nを計算します。\n・一次/多項式回\n帰\n・指数/対数/累乗\n・相関係数rと予\n測"
+  },
+  "App_Probability": {
+    "en_keys": [
+      "Probability",
+      "PROBABILITY"
+    ],
+    "en_desc": "Compute probabilities and inverses for Binomial, Normal, Student's t, Poisson, Chi-squared, etc.",
+    "ja_title": "確率分布",
+    "ja_desc": "各種確率分布の確\n率\nとグラフを計算。\n・正規分布/t分布\n・二項/ポアソン\n分布\n・カイ二乗/F分布\n・区間確率と逆確\n率"
+  },
+  "App_Solver": {
+    "en_keys": [
+      "Equations",
+      "EQUATIONS",
+      "Solver"
+    ],
+    "en_desc": "Solve polynomial equations, general numerical equations, and systems of linear equations.",
+    "ja_title": "方程式ソルバー",
+    "ja_desc": "方程式の求根およ\nび\n連立方程式を解く\nアプリです。\n・2次/3次方程式\nの解\n・連立一次方程式\n・数値解の区間探\n索"
+  },
+  "App_RPN": {
+    "en_keys": [
+      "RPN",
+      "RPN Calculator"
+    ],
+    "en_desc": "Reverse Polish Notation stack calculator.",
+    "ja_title": "RPN電卓",
+    "ja_desc": "逆ポーランド記法\nの\nスタック電卓です\n。\n数値入力後に\n【Enter】で積み\n、\n演算子キーで直前\nの\n要素を計算します\n。"
+  },
+  "App_Atomic": {
+    "en_keys": [
+      "Periodic table",
+      "Periodic Table",
+      "Elements"
+    ],
+    "en_desc": "Interactive periodic table of chemical elements with atomic mass and properties.",
+    "ja_title": "元素周期表",
+    "ja_desc": "全118元素の周期\n表\nと性質を閲覧。\n・原子番号と元素\n記号\n・モル質量(原子\n量)\n・電気陰性度と分\n類\n・電子配置の確認"
+  },
+  "App_Python": {
+    "en_keys": [
+      "Python",
+      "PYTHON"
+    ],
+    "en_desc": "MicroPython script editor and interactive shell with math, matplotlib, turtle, and kandinsky.",
+    "ja_title": "Python",
+    "ja_desc": "Pythonスクリプト\nの\n作成と実行を行う\nプログラミング環\n境\nです。\n・math/cmath計算\n・グラフや図形描\n画"
+  },
+  "App_Reader": {
+    "en_keys": [
+      "Reader",
+      "READER",
+      "Document Reader"
+    ],
+    "en_desc": "View text documents stored in the archive.",
+    "ja_title": "リーダー",
+    "ja_desc": "内蔵テキストや文\n書\nファイルを閲覧す\nる\nリーダーアプリで\nす"
+  },
+  "App_External": {
+    "en_keys": [
+      "External",
+      "EXTERNAL"
+    ],
+    "en_desc": "Run external add-in applications.",
+    "ja_title": "外部アプリ",
+    "ja_desc": "追加の外部アドイ\nン\nアプリを起動しま\nす"
+  },
+  "App_Settings": {
+    "en_keys": [
+      "Settings",
+      "SETTINGS"
+    ],
+    "en_desc": "Configure angle units, number format, writing format, complex format, and system info.",
+    "ja_title": "環境設定",
+    "ja_desc": "電卓の計算動作や\n表示形式を設定。\n・角度(度/ラジア\nン)\n・小数/科学/工学\n表記\n・2D自然表示/1行\n・複素数形式と情\n報"
+  },
+  "Set_MathOptions": {
+    "en_keys": [
+      "Math options"
+    ],
+    "en_desc": "Configure angle measure, result format, writing format, complex format, and multiplication sign.",
+    "ja_title": "計算オプション",
+    "ja_desc": "数学計算の表示や\n単位を設定します\n。\n・角度の単位\n・計算結果の表示\n形式\n・数式の入力形式\n・複素数の表示形\n式\n・掛け算記号の種\n類"
+  },
+  "Set_AngleUnit": {
+    "en_keys": [
+      "Angle measure"
+    ],
+    "en_desc": "Select the angle unit used in sin, cos, tan, and polar coordinates.",
+    "ja_title": "角度の単位",
+    "ja_desc": "三角関数や極座標\nで\n使う角度の単位を\n設定します。\n・Degrees: 度\n(°)\n・Radians: 弧度\n(rad)\n・Gradians: グラ\nード"
+  },
+  "Set_Degrees": {
+    "en_keys": [
+      "Degrees"
+    ],
+    "en_desc": "1 full circle = 360 degrees (right angle = 90 degrees).",
+    "ja_title": "度 (Degrees)",
+    "ja_desc": "円周を360°、直\n角を\n90°とする単位で\nす。\n日常計算や幾何学\nで\n標準的に使います\n。"
+  },
+  "Set_Radians": {
+    "en_keys": [
+      "Radians"
+    ],
+    "en_desc": "1 full circle = 2*pi radians (right angle = pi/2).",
+    "ja_title": "ラジアン(弧度)",
+    "ja_desc": "円周を 2π rad、\n直角を π/2 とす\nる\n弧度法です。\n微積分や高校・大\n学\n数学の標準単位で\nす"
+  },
+  "Set_Gradians": {
+    "en_keys": [
+      "Gradians"
+    ],
+    "en_desc": "1 full circle = 400 gradians (right angle = 100 gon).",
+    "ja_title": "グラード(gon)",
+    "ja_desc": "直角を100gon、\n円周を400gonとす\nる\n測量分野などで使\nわ\nれる角度単位です\n。"
+  },
+  "Set_DisplayMode": {
+    "en_keys": [
+      "Result format",
+      "Display mode"
+    ],
+    "en_desc": "Choose how numerical results are formatted: Decimal, Scientific, Engineering, or Significant figures.",
+    "ja_title": "結果の表示形式",
+    "ja_desc": "計算結果の数値表\n記\nを選択します。\n・Decimal: 通常\n小数\n・Scientific: 科\n学\n・Engineering:\n工学\n・有効数字の桁指\n定"
+  },
+  "Set_Decimal": {
+    "en_keys": [
+      "Decimal"
+    ],
+    "en_desc": "Standard decimal notation (switches to scientific only for very large/small numbers).",
+    "ja_title": "通常小数表記",
+    "ja_desc": "一般的な10進小数\nで\n結果を表示します\n。\n【例】\n1234.56\n0.0078"
+  },
+  "Set_Scientific": {
+    "en_keys": [
+      "Scientific",
+      "Scientific notation"
+    ],
+    "en_desc": "Scientific exponential notation a * 10^n (1 <= |a| < 10).",
+    "ja_title": "科学表記 (Sci)",
+    "ja_desc": "常に a×10^n の\n指数形式で数値を\n表示します。\n【例】\n1.23456ᴇ3"
+  },
+  "Set_Engineering": {
+    "en_keys": [
+      "Engineering"
+    ],
+    "en_desc": "Engineering notation where the power of 10 is always a multiple of 3.",
+    "ja_title": "工学表記 (Eng)",
+    "ja_desc": "10の指数が必ず3\nの\n倍数(k,M,m,μ対\n応)\nになる形式で表示\nします。\n【例】\n1.234ᴇ3, 780ᴇ-6"
+  },
+  "Set_SignificantFigures": {
+    "en_keys": [
+      "Significant figures"
+    ],
+    "en_desc": "Set the maximum number of significant digits displayed in results.",
+    "ja_title": "有効数字の桁数",
+    "ja_desc": "計算結果を表示す\nる\n際の有効数字の最\n大\n桁数を設定します\n。\n(標準は10桁です)"
+  },
+  "Set_EditionMode": {
+    "en_keys": [
+      "Writing format"
+    ],
+    "en_desc": "Choose between 2D natural textbook display and 1-line linear input.",
+    "ja_title": "数式の入力形式",
+    "ja_desc": "数式の入力・表示\n方法を選択します\n。\n・Natural: 2D教\n科書\n通りの自然表示\n・Linear: 1行入\n力"
+  },
+  "Set_Edition2D": {
+    "en_keys": [
+      "Natural",
+      "2D natural math"
+    ],
+    "en_desc": "Natural 2D textbook display for fractions, roots, powers, and integrals.",
+    "ja_title": "自然表示 (2D)",
+    "ja_desc": "分数やルート、累\n乗\n定積分などを教科\n書\n通りの2次元形式\nで\n視覚的に入力しま\nす"
+  },
+  "Set_EditionLinear": {
+    "en_keys": [
+      "Linear",
+      "Linear (1-line)"
+    ],
+    "en_desc": "Single-line text input mode like a programming language (or linear regression y=ax+b).",
+    "ja_title": "1行入力 / 線形",
+    "ja_desc": "【設定】数式を1\n行の\n文字列で入力しま\nす\n【回帰】1次関数\ny=a·x+b による\n線形回帰を行いま\nす"
+  },
+  "Set_ComplexFormat": {
+    "en_keys": [
+      "Complex format"
+    ],
+    "en_desc": "Select complex number mode: Real only, Cartesian (a+bi), or Polar (r*e^(i*theta)).",
+    "ja_title": "複素数の形式",
+    "ja_desc": "複素数の扱いと表\n示\n形式を選択します\n。\n・Real: 実数のみ\n・Cartesian:\na+bi\n・Polar: r·\ne^(iθ)"
+  },
+  "Set_Real": {
+    "en_keys": [
+      "Real"
+    ],
+    "en_desc": "Real numbers only; square roots of negative numbers yield Unreal result.",
+    "ja_title": "実数のみ(Real)",
+    "ja_desc": "実数の範囲のみで\n計算を行います。\n負の数の平方根な\nど\nは非実数となりま\nす"
+  },
+  "Set_Cartesian": {
+    "en_keys": [
+      "Cartesian",
+      "Cartesian (a+bi)"
+    ],
+    "en_desc": "Display complex numbers in rectangular form a + bi (or Cartesian curve y=f(x)).",
+    "ja_title": "直交形式(a+bi)",
+    "ja_desc": "複素数を実部と虚\n部\nによる a+bi 形式\nで\n表示します。\n(グラフでは直交\n座標\ny=f(x)を表します\n)"
+  },
+  "Set_Polar": {
+    "en_keys": [
+      "Polar",
+      "Polar (r*e^(i*theta))"
+    ],
+    "en_desc": "Display complex numbers in polar exponential form r*e^(i*theta) (or polar curve r=f(theta)).",
+    "ja_title": "極形式 r·e^(iθ)",
+    "ja_desc": "複素数を絶対値r\nと\n偏角θの極形式で\n表示します。\n(グラフでは極座\n標\nr=f(θ)を表しま\nす)"
+  },
+  "Set_Parametric": {
+    "en_keys": [
+      "Parametric"
+    ],
+    "en_desc": "Parametric curve defined by x(t) and y(t).",
+    "ja_title": "媒介変数表示",
+    "ja_desc": "パラメータtを用\nいた\n媒介変数曲線\n(x(t), y(t)) を\n定義・描画します\n。"
+  },
+  "Set_SymbolMultiplication": {
+    "en_keys": [
+      "Multiply",
+      "Multiplication symbol"
+    ],
+    "en_desc": "Select the symbol displayed for multiplication: Cross, Dot, Star, or Auto.",
+    "ja_title": "掛け算の記号",
+    "ja_desc": "乗算(掛け算)に使\nう\n表示記号を選びま\nす\n・Cross: × (ク\nロス)\n・Dot: · (中黒)\n・Star: * (星印)\n・Auto: 自動選択"
+  },
+  "Set_MultCross": {
+    "en_keys": [
+      "Cross"
+    ],
+    "en_desc": "Display multiplication as a cross sign (x).",
+    "ja_title": "× (クロス記号)",
+    "ja_desc": "掛け算を教科書の\n「×」記号で表示\nします。"
+  },
+  "Set_MultDot": {
+    "en_keys": [
+      "Dot"
+    ],
+    "en_desc": "Display multiplication as a middle dot (·).",
+    "ja_title": "· (ドット記号)",
+    "ja_desc": "掛け算を中黒「·\n」\n記号で表示します\n。"
+  },
+  "Set_MultStar": {
+    "en_keys": [
+      "Star"
+    ],
+    "en_desc": "Display multiplication as an asterisk (*).",
+    "ja_title": "* (アスタリスク)",
+    "ja_desc": "掛け算をプログラ\nム\n風の「*」記号で\n表示します。"
+  },
+  "Set_MultAuto": {
+    "en_keys": [
+      "Auto"
+    ],
+    "en_desc": "Automatically choose the cleanest multiplication symbol based on context.",
+    "ja_title": "自動選択(Auto)",
+    "ja_desc": "式の文脈に応じて\n見やすい掛け算記\n号\nを自動で選びます\n。"
+  },
+  "Set_SymbolFunction": {
+    "en_keys": [
+      "Expression format"
+    ],
+    "en_desc": "Choose how function names are displayed in the Functions app.",
+    "ja_title": "関数定義の表記",
+    "ja_desc": "関数グラフアプリ\nで\n関数を f(x) と表\n記\nするか y= と表記\nするかを選択しま\nす"
+  },
+  "Set_SymbolDefaultFunction": {
+    "en_keys": [
+      "Default"
+    ],
+    "en_desc": "Default function notation.",
+    "ja_title": "標準表記",
+    "ja_desc": "標準の関数表記\nf(x) を使用しま\nす。"
+  },
+  "Set_SymbolArgFunction": {
+    "en_keys": [
+      "Empty"
+    ],
+    "en_desc": "Simplified function notation without argument.",
+    "ja_title": "引数省略表記",
+    "ja_desc": "引数を省略した\n簡潔な関数表記を\n使用します。"
+  },
+  "Set_SymbolArgDefaultFunction": {
+    "en_keys": [
+      "Argument"
+    ],
+    "en_desc": "Function notation with explicit variable argument (or complex argument).",
+    "ja_title": "引数明示 / 偏角",
+    "ja_desc": "【設定】変数引数\nを\n明示して関数を表\n示\n【複素数】複素数\nzの\n偏角arg(z)を計算"
+  },
+  "Set_BrightnessSettings": {
+    "en_keys": [
+      "Brightness settings",
+      "Brightness & sleep"
+    ],
+    "en_desc": "Configure screen brightness and power-saving timeouts.",
+    "ja_title": "明るさと省電力",
+    "ja_desc": "画面輝度やスリー\nプ\nまでの待機時間を\n設定します。"
+  },
+  "Set_Brightness": {
+    "en_keys": [
+      "Brightness"
+    ],
+    "en_desc": "Adjust backlight brightness level with Left/Right keys.",
+    "ja_title": "画面の明るさ",
+    "ja_desc": "左右キーで画面の\n明るさ設定値を調\n整\nします。"
+  },
+  "Set_DimAfter": {
+    "en_keys": [
+      "Dim after (s)"
+    ],
+    "en_desc": "Seconds of inactivity before dimming the display.",
+    "ja_title": "自動減光(秒)",
+    "ja_desc": "無操作時に画面を\n暗くするまでの秒\n数\nを設定します。"
+  },
+  "Set_SuspendAfter": {
+    "en_keys": [
+      "Suspend after (s)"
+    ],
+    "en_desc": "Seconds of inactivity before entering sleep mode.",
+    "ja_title": "スリープ時間",
+    "ja_desc": "無操作時に省電力\n休止に入るまでの\n秒数を設定します\n。"
+  },
+  "Set_ShortcutSteps": {
+    "en_keys": [
+      "Shortcut steps"
+    ],
+    "en_desc": "Number of brightness adjustment steps when using shortcuts.",
+    "ja_title": "輝度調整段階",
+    "ja_desc": "ショートカット操\n作\nでの輝度変化段階\n数\nを設定します。"
+  },
+  "Set_ClearShift": {
+    "en_keys": [
+      "Shift + clear shortcut"
+    ],
+    "en_desc": "Toggle Shift+Clear shortcut functionality.",
+    "ja_title": "Shift+Clear機能",
+    "ja_desc": "Shift+Clearキー\nの\nショートカット動\n作\nの有効/無効を切\n替\nえます。"
+  },
+  "Set_DateTime": {
+    "en_keys": [
+      "Date/time",
+      "Date and time"
+    ],
+    "en_desc": "Set system date and clock time.",
+    "ja_title": "日付と時刻",
+    "ja_desc": "電卓内部の日付と\n時刻を設定します\n。"
+  },
+  "Set_ActivateClock": {
+    "en_keys": [
+      "Activate clock",
+      "Show clock"
+    ],
+    "en_desc": "Toggle real-time clock.",
+    "ja_title": "時計の有効化",
+    "ja_desc": "内部クロックの動\n作\nを切り替えます。\n(Liliumでは上部\nバー\nの時計は非表示で\nす)"
+  },
+  "Set_Date": {
+    "en_keys": [
+      "Date"
+    ],
+    "en_desc": "Set current year, month, and day.",
+    "ja_title": "日付の設定",
+    "ja_desc": "年月日を設定しま\nす"
+  },
+  "Set_Time": {
+    "en_keys": [
+      "Time"
+    ],
+    "en_desc": "Set current time or select time units in Toolbox.",
+    "ja_title": "時間・時刻",
+    "ja_desc": "【設定】現在時刻\nの\n時・分・秒を設定\n。\n【単位】秒(s)、\n分、\n時間(h)などの時\n間\n単位を入力します\n。"
+  },
+  "Set_FontSizes": {
+    "en_keys": [
+      "Python font size"
+    ],
+    "en_desc": "Choose between Large and Small font in the Python code editor.",
+    "ja_title": "Python文字サイズ",
+    "ja_desc": "Pythonエディタ内\nの\n文字サイズを大/\n小\nから選択します。\n・Large: 標準サ\nイズ\n・Small: 小文字(\n広)"
+  },
+  "Set_LargeFont": {
+    "en_keys": [
+      "Large"
+    ],
+    "en_desc": "Large readable font in Python editor.",
+    "ja_title": "大 (Large)",
+    "ja_desc": "Python画面を読み\nや\nすい標準サイズの\n文字で表示します\n。"
+  },
+  "Set_SmallFont": {
+    "en_keys": [
+      "Small"
+    ],
+    "en_desc": "Small compact font in Python editor to show more code on screen.",
+    "ja_title": "小 (Small)",
+    "ja_desc": "Python画面の文字\nを\n小さくし、1画面\nに\n多くの行を表示し\nま\nす。"
+  },
+  "Set_SyntaxHighlighting": {
+    "en_keys": [
+      "Syntax Highlighting"
+    ],
+    "en_desc": "Toggle color syntax highlighting in Python scripts.",
+    "ja_title": "構文強調表示",
+    "ja_desc": "Pythonコードの予\n約\n語や文字列を色分\nけ\n表示する機能の\nON/\nOFFを切り替えま\nす。"
+  },
+  "Set_Language": {
+    "en_keys": [
+      "Language",
+      "English",
+      "Français",
+      "Español",
+      "Deutsch",
+      "Português",
+      "Italiano",
+      "Nederlands",
+      "Magyar"
+    ],
+    "en_desc": "Select calculator UI language.",
+    "ja_title": "表示言語設定",
+    "ja_desc": "電卓本体のメニュ\nー\n言語を選択します\n。\n(Englishにしてお\nく\nと右側に日本語解\n説\nが自動表示されま\nす)"
+  },
+  "Set_Country": {
+    "en_keys": [
+      "Country",
+      "International",
+      "United States",
+      "United Kingdom",
+      "France",
+      "Germany",
+      "Spain",
+      "Italy",
+      "Canada",
+      "Netherlands",
+      "Portugal"
+    ],
+    "en_desc": "Select country mathematical conventions (quartile definitions, etc.).",
+    "ja_title": "国・数学規約",
+    "ja_desc": "国ごとの数学規約\n(四分位数の定義\n法\nなど)を選択しま\nす。\n通常は\nInternational\nまたはUSが標準で\nす"
+  },
+  "Set_Accessibility": {
+    "en_keys": [
+      "Accessibility"
+    ],
+    "en_desc": "Screen color inversion, magnification, and gamma adjustment.",
+    "ja_title": "視覚補助設定",
+    "ja_desc": "画面の色反転(ダ\nーク\n表示)やガンマ補\n正\nなどの視覚補助機\n能\nを設定します。"
+  },
+  "Set_InvertColors": {
+    "en_keys": [
+      "Invert colors"
+    ],
+    "en_desc": "Invert display colors (dark mode).",
+    "ja_title": "色の反転表示",
+    "ja_desc": "画面の白黒・色彩\nを\n反転してダーク表\n示\nに切り替えます。"
+  },
+  "Set_Magnify": {
+    "en_keys": [
+      "Magnify"
+    ],
+    "en_desc": "Toggle screen magnification.",
+    "ja_title": "画面拡大表示",
+    "ja_desc": "画面の一部を拡大\n表示する補助機能\nを\n切り替えます。"
+  },
+  "Set_Gamma": {
+    "en_keys": [
+      "Gamma correction",
+      "Red gamma",
+      "Green gamma",
+      "Blue gamma"
+    ],
+    "en_desc": "Adjust display gamma levels.",
+    "ja_title": "ガンマ補正",
+    "ja_desc": "画面のRGBガンマ\n値\nを調整します。"
+  },
+  "Set_ExamMode": {
+    "en_keys": [
+      "Exam mode",
+      "Activate exam mode",
+      "Reactivate exam mode",
+      "Standard",
+      "No sym",
+      "No sym no text",
+      "Dutch"
+    ],
+    "en_desc": "Configure or activate examination mode (restricts memory/CAS features).",
+    "ja_title": "試験モード",
+    "ja_desc": "試験監督用の制限\nモードです。\n※有効化すると保\n存\nデータが消去され\nる\nためご注意くださ\nい"
+  },
+  "Set_ExternalApps": {
+    "en_keys": [
+      "External Apps",
+      "External applications"
+    ],
+    "en_desc": "Configure visibility and flash write permissions for external apps.",
+    "ja_title": "外部アプリ設定",
+    "ja_desc": "外部アドインアプ\nリ\nの表示やメモリ書\n込\n権限を設定します\n。"
+  },
+  "Set_ExtAppShow": {
+    "en_keys": [
+      "Show"
+    ],
+    "en_desc": "Show external applications on the home screen.",
+    "ja_title": "ホームに表示",
+    "ja_desc": "ホーム画面に外部\nアプリを表示する\nか\nどうかを設定しま\nす"
+  },
+  "Set_ExtAppWrite": {
+    "en_keys": [
+      "Write allowed"
+    ],
+    "en_desc": "Allow external applications to write to persistent storage.",
+    "ja_title": "書込権限の許可",
+    "ja_desc": "外部アプリによる\nストレージへの保\n存\n書込を許可します\n。"
+  },
+  "Set_About": {
+    "en_keys": [
+      "About"
+    ],
+    "en_desc": "View system information, Lilium/Upsilon version, memory usage, and contributors.",
+    "ja_title": "バージョン情報",
+    "ja_desc": "Lilium / Upsilon\nの\nバージョンやメモ\nリ\n使用量、開発者一\n覧\nを確認します。"
+  },
+  "Set_Username": {
+    "en_keys": [
+      "Name",
+      "Username"
+    ],
+    "en_desc": "User name registered on this calculator.",
+    "ja_title": "ユーザー名",
+    "ja_desc": "本機に登録された\nユーザー名を表示\n・\n編集します。"
+  },
+  "Set_UpsilonLilium": {
+    "en_keys": [
+      "Upsilon / Lilium",
+      "Upsilon version"
+    ],
+    "en_desc": "Upsilon OS & Lilium (SHARP Brain Edition) version.",
+    "ja_title": "Lilium情報",
+    "ja_desc": "Upsilonをベース\nに\nSHARP Brain向け\nに\n最適化移植された\n関数電卓「Lilium\n」\nのバージョンです\n。"
+  },
+  "Set_OmegaVersion": {
+    "en_keys": [
+      "Omega version"
+    ],
+    "en_desc": "Underlying Omega OS version.",
+    "ja_title": "Omega版数",
+    "ja_desc": "ベースシステムで\nあるOmegaの版数\n情報です。"
+  },
+  "Set_EpsilonVersion": {
+    "en_keys": [
+      "Epsilon version",
+      "Software version"
+    ],
+    "en_desc": "NumWorks Epsilon base software version.",
+    "ja_title": "Epsilon版数",
+    "ja_desc": "NumWorks公式OS\n(Epsilon)のベー\nス\nバージョン番号で\nす"
+  },
+  "Set_MicroPythonVersion": {
+    "en_keys": [
+      "µPython version",
+      "MicroPython version"
+    ],
+    "en_desc": "Embedded MicroPython interpreter version.",
+    "ja_title": "Python版数",
+    "ja_desc": "内蔵MicroPython\n処理系のバージョ\nン\n番号です。"
+  },
+  "Set_Battery": {
+    "en_keys": [
+      "Battery"
+    ],
+    "en_desc": "Current battery charge status.",
+    "ja_title": "バッテリー状態",
+    "ja_desc": "現在のバッテリー\n残量状態を表示\nします。"
+  },
+  "Set_Memory": {
+    "en_keys": [
+      "Memory",
+      "Memory usage"
+    ],
+    "en_desc": "View storage memory usage for variables and scripts.",
+    "ja_title": "メモリ使用量",
+    "ja_desc": "変数やスクリプト\nが\n使用しているメモ\nリ\n容量を表示します\n。"
+  },
+  "Set_SerialNumber": {
+    "en_keys": [
+      "Serial number"
+    ],
+    "en_desc": "Hardware / simulator serial identifier.",
+    "ja_title": "シリアル番号",
+    "ja_desc": "デバイスの識別用\nシリアル番号です\n。"
+  },
+  "Set_FccId": {
+    "en_keys": [
+      "FCC ID"
+    ],
+    "en_desc": "Regulatory compliance ID.",
+    "ja_title": "FCC認証番号",
+    "ja_desc": "ハードウェアの無\n線\n・電磁適合認証ID\nです。"
+  },
+  "Set_Popups": {
+    "en_keys": [
+      "Update pop-up",
+      "Beta pop-up"
+    ],
+    "en_desc": "Toggle startup update or beta notification pop-ups.",
+    "ja_title": "通知ポップアップ",
+    "ja_desc": "更新通知などの表\n示\n有無を切り替えま\nす"
+  },
+  "Set_Contributors": {
+    "en_keys": [
+      "Contributors"
+    ],
+    "en_desc": "Open-source contributors to Upsilon and Omega.",
+    "ja_title": "開発貢献者一覧",
+    "ja_desc": "オープンソース開\n発\nに携わった貢献者\nの\n一覧を表示します\n。"
+  },
+  "Var_Variables": {
+    "en_keys": [
+      "Variables"
+    ],
+    "en_desc": "Browse and insert user-defined variables, functions, sequences, lists, and matrices.",
+    "ja_title": "変数一覧 (F9)",
+    "ja_desc": "定義済みの数値変\n数\n関数、数列、リス\nト\n行列を呼び出しま\nす\n【Enter】で挿入\n【BackSpace】削\n除"
+  },
+  "Var_Expressions": {
+    "en_keys": [
+      "Expressions"
+    ],
+    "en_desc": "Stored numeric variables and algebraic expressions (e.g., 5 -> a).",
+    "ja_title": "数値・式の変数",
+    "ja_desc": "STO(→)で保存し\nた\n数値や式の変数一\n覧\nです。\n【保存方法】\n計算画面で\n5→a のように入\n力"
+  },
+  "Tb_Toolbox": {
+    "en_keys": [
+      "Toolbox"
+    ],
+    "en_desc": "Catalog of mathematical functions, calculus, matrices, probability, units, and constants.",
+    "ja_title": "関数一覧 (F1)",
+    "ja_desc": "あらゆる数学関数\nや\n微積分、行列、確\n率\n単位、物理定数を\n選んで数式に挿入\nできます。"
+  },
+  "Tb_Abs": {
+    "en_keys": [
+      "abs(x)",
+      "Absolute value"
+    ],
+    "en_desc": "Absolute value |x| of a real number or modulus |z| of a complex number.",
+    "ja_title": "絶対値 |x|",
+    "ja_desc": "数値xの絶対値、\nまたは複素数zの\n大きさ|z|を求め\nます\n【書式】\nabs(x)\n【例】\nabs(-5) → 5"
+  },
+  "Tb_NthRoot": {
+    "en_keys": [
+      "root(x,n)",
+      "nth-root"
+    ],
+    "en_desc": "The n-th root of x: x^(1/n).",
+    "ja_title": "n乗根 √",
+    "ja_desc": "xのn乗根(1/n乗)\nを\n計算します。\n【書式】\nroot(x,n)\n【例】\nroot(27,3) → 3"
+  },
+  "Tb_BasedLog": {
+    "en_keys": [
+      "log(x,a)",
+      "Logarithm to base a"
+    ],
+    "en_desc": "Logarithm of x to base a: log_a(x).",
+    "ja_title": "底aの対数 log",
+    "ja_desc": "底をaとするxの対\n数\nlog_a(x)を求めま\nす\n【書式】\nlog(真数x, 底a)\n【例】\nlog(8,2) → 3"
+  },
+  "Tb_Diff": {
+    "en_keys": [
+      "diff(f(x),x,a)",
+      "Derivative"
+    ],
+    "en_desc": "Numerical derivative f'(a) of expression f(x) at x = a.",
+    "ja_title": "微分係数 f'(a)",
+    "ja_desc": "関数f(x)の x=a\nに\nおける微分係数を\n求めます。\n【書式】\ndiff(f(x),x,a)\n【例】\ndiff(x^2,x,3) → 6"
+  },
+  "Tb_Int": {
+    "en_keys": [
+      "int(f(x),x,a,b)",
+      "Integral"
+    ],
+    "en_desc": "Definite integral of f(x) with respect to x from a to b.",
+    "ja_title": "定積分 ∫f(x)dx",
+    "ja_desc": "区間[a,b]におけ\nる\nf(x)の定積分を計\n算\nします。\n【書式】\nint(f(x),x,a,b)\n【例】\nint(x^2,x,0,1)"
+  },
+  "Tb_Sum": {
+    "en_keys": [
+      "sum(f(n),n,nmin,nmax)",
+      "sum(f(n),n,a,b)",
+      "Sum"
+    ],
+    "en_desc": "Summation (Sigma) of f(n) for integer n from nmin to nmax.",
+    "ja_title": "総和 Σ (シグマ)",
+    "ja_desc": "n=開始値から終了\n値\nまでのf(n)の総和\nを\n計算します。\n【書式】\nsum(式,n,開始,終\n了)\n【例】\nsum(n,n,1,10) → 55"
+  },
+  "Tb_Product": {
+    "en_keys": [
+      "product(f(n),n,nmin,nmax)",
+      "prod(f(n),n,a,b)",
+      "Product"
+    ],
+    "en_desc": "Product (Pi) of f(n) for integer n from nmin to nmax.",
+    "ja_title": "総乗 Π (積)",
+    "ja_desc": "n=開始値から終了\n値\nまでのf(n)の総積\nを\n計算します。\n【書式】\nproduct(式,n,始,\n終)"
+  },
+  "Tb_Infinity": {
+    "en_keys": [
+      "infinity",
+      "inf",
+      "Infinity"
+    ],
+    "en_desc": "Infinity symbol (∞) for improper integrals or intervals.",
+    "ja_title": "無限大 (∞)",
+    "ja_desc": "広義積分や確率区\n間\nの端に使う無限大\n記号(∞)を入力し\nま\nす。"
+  },
+  "Tb_ComplexNumbers": {
+    "en_keys": [
+      "Complex numbers"
+    ],
+    "en_desc": "Complex number functions: modulus, argument, real part, imaginary part, conjugate.",
+    "ja_title": "複素数の関数",
+    "ja_desc": "複素数 z=a+bi の\n絶対値、偏角、実\n部\n虚部、共役複素数\nを\n計算するメニュー\nです。"
+  },
+  "Tb_Arg": {
+    "en_keys": [
+      "arg(z)"
+    ],
+    "en_desc": "Argument (phase angle) of complex number z.",
+    "ja_title": "偏角 arg(z)",
+    "ja_desc": "複素数zの偏角θ\nを\n現在の角度単位で\n求めます。\n【書式】\narg(z)\n【例】\narg(1+i) → π/4"
+  },
+  "Tb_Re": {
+    "en_keys": [
+      "re(z)",
+      "Real part"
+    ],
+    "en_desc": "Real part a of complex number z = a + bi.",
+    "ja_title": "実部 Re(z)",
+    "ja_desc": "複素数 z=a+bi の\n実部 a を返しま\nす。\n【書式】\nre(z)\n【例】\nre(3+4i) → 3"
+  },
+  "Tb_Im": {
+    "en_keys": [
+      "im(z)",
+      "Imaginary part"
+    ],
+    "en_desc": "Imaginary part b of complex number z = a + bi.",
+    "ja_title": "虚部 Im(z)",
+    "ja_desc": "複素数 z=a+bi の\n虚部 b を返しま\nす。\n【書式】\nim(z)\n【例】\nim(3+4i) → 4"
+  },
+  "Tb_Conj": {
+    "en_keys": [
+      "conj(z)",
+      "Conjugate"
+    ],
+    "en_desc": "Complex conjugate a - bi of z = a + bi.",
+    "ja_title": "共役複素数 z*",
+    "ja_desc": "複素数 z=a+bi の\n虚部の符号を反転\nした共役複素数\na-bi を返します\n。"
+  },
+  "Tb_Combinatorics": {
+    "en_keys": [
+      "Combinatorics"
+    ],
+    "en_desc": "Combinations nCr, permutations nPr, and factorial n!.",
+    "ja_title": "順列・組合せ",
+    "ja_desc": "場合の数で用いる\n組合せ(nCr)、順\n列\n(nPr)、階乗(n!)\nを\n計算します。"
+  },
+  "Tb_Binomial": {
+    "en_keys": [
+      "binomial(n,k)",
+      "Combination"
+    ],
+    "en_desc": "Number of combinations (n choose k): n! / (k!(n-k)!).",
+    "ja_title": "組合せ nCr",
+    "ja_desc": "異なるn個からk個\nを\n選ぶ組合せの数\nnCk\nを計算します。\n【書式】\nbinomial(n,k)\n【例】\nbinomial(5,2)→10"
+  },
+  "Tb_Permute": {
+    "en_keys": [
+      "permute(n,r)",
+      "permute(n,k)",
+      "Permutation"
+    ],
+    "en_desc": "Number of permutations nPr: n! / (n-r)!.",
+    "ja_title": "順列 nPr",
+    "ja_desc": "異なるn個からr個\nを\n取り出して並べる\n順列の数nPrを計\n算\nします。\n【書式】\npermute(n,r)"
+  },
+  "Tb_Factorial": {
+    "en_keys": [
+      "n!",
+      "Factorial"
+    ],
+    "en_desc": "Factorial of integer n: n! = 1 * 2 * ... * n.",
+    "ja_title": "階乗 n!",
+    "ja_desc": "1からnまでの自然\n数\nの積(階乗)を計算\nします。\n【例】\n5! → 120"
+  },
+  "Tb_NormalDist": {
+    "en_keys": [
+      "Normal distribution",
+      "Normal"
+    ],
+    "en_desc": "Normal (Gaussian) probability distribution N(mu, sigma).",
+    "ja_title": "正規分布 N(μ,σ)",
+    "ja_desc": "平均μ、標準偏差\nσ\nの正規分布の確率\n密度・累積確率・\n逆確率を計算しま\nす"
+  },
+  "Tb_NormCDF": {
+    "en_keys": [
+      "normcdf(a,μ,σ)",
+      "P(X<a) where X follows N(μ,σ)"
+    ],
+    "en_desc": "Cumulative normal probability P(X < a) for X ~ N(mu, sigma).",
+    "ja_title": "正規分布の下側確率",
+    "ja_desc": "正規分布N(μ,σ)\nに\nおいて X<a とな\nる\n累積確率P(X<a)を\n求めます。\n【書式】\nnormcdf(a,μ,σ)"
+  },
+  "Tb_NormCDF2": {
+    "en_keys": [
+      "normcdf2(a,b,μ,σ)",
+      "normcdf(a,b,μ,σ)",
+      "P(a<X<b) where X follows N(μ,σ)"
+    ],
+    "en_desc": "Normal interval probability P(a < X < b) for X ~ N(mu, sigma).",
+    "ja_title": "正規分布の区間確率",
+    "ja_desc": "正規分布N(μ,σ)\nで\na<X<b となる区間\n確率を求めます。\n【書式】\nnormcdf2(a,b,μ,σ)"
+  },
+  "Tb_InvNorm": {
+    "en_keys": [
+      "invnorm(a,μ,σ)",
+      "invnorm(p,μ,σ)",
+      "m where P(X<m)=a, X follows N(μ,σ)"
+    ],
+    "en_desc": "Inverse normal distribution: value m such that P(X < m) = a.",
+    "ja_title": "逆正規分布",
+    "ja_desc": "正規分布N(μ,σ)\nで\n下側累積確率がa\nと\nなる境界値mを逆\n算\nします。\n【書式】\ninvnorm(確率\na,μ,σ)"
+  },
+  "Tb_NormPDF": {
+    "en_keys": [
+      "normpdf(x,μ,σ)",
+      "Probability density of N(μ,σ)"
+    ],
+    "en_desc": "Probability density function of normal distribution N(mu, sigma) at x.",
+    "ja_title": "正規分布の確率密度",
+    "ja_desc": "正規分布N(μ,σ)\nの\n位置xにおける確\n率\n密度関数の値を計\n算\nします。\n【書式】\nnormpdf(x,μ,σ)"
+  },
+  "Tb_BinomialDist": {
+    "en_keys": [
+      "Binomial distribution",
+      "Binomial"
+    ],
+    "en_desc": "Discrete Binomial distribution B(n, p) with n trials and probability p.",
+    "ja_title": "二項分布 B(n,p)",
+    "ja_desc": "試行回数n、成功\n率p\nの二項分布の確率\nを\n計算します。"
+  },
+  "Tb_BinomPDF": {
+    "en_keys": [
+      "binompdf(m,n,p)",
+      "P(X=m) where X follows B(n,p)"
+    ],
+    "en_desc": "Binomial probability P(X = m) for m successes in n trials with probability p.",
+    "ja_title": "二項分布の確率",
+    "ja_desc": "二項分布B(n,p)で\n成功回数がちょう\nど\nm回になる確率\nP(X=m)\nを求めます。\n【書式】\nbinompdf(m,n,p)"
+  },
+  "Tb_BinomCDF": {
+    "en_keys": [
+      "binomcdf(m,n,p)",
+      "P(X<=m) where X follows B(n,p)"
+    ],
+    "en_desc": "Cumulative binomial probability P(X <= m) for X ~ B(n, p).",
+    "ja_title": "二項分布の累積確率",
+    "ja_desc": "二項分布B(n,p)で\n成功回数がm回以\n下\nとなる確率P(X≦\nm)\nを求めます。\n【書式】\nbinomcdf(m,n,p)"
+  },
+  "Tb_InvBinom": {
+    "en_keys": [
+      "invbinom(a,n,p)",
+      "invbinom(α,n,p)",
+      "m where P(X<=m)=a, X follows B(n,p)"
+    ],
+    "en_desc": "Inverse binomial: smallest m such that P(X <= m) >= a.",
+    "ja_title": "逆二項分布",
+    "ja_desc": "二項分布B(n,p)で\n累積確率がa以上\nと\nなる最小の回数m\nを\n求めます。\n【書式】\ninvbinom(確率\na,n,p)"
+  },
+  "Tb_RandomMenu": {
+    "en_keys": [
+      "Random and approximation",
+      "Random & rounding"
+    ],
+    "en_desc": "Generate random floats or random integers.",
+    "ja_title": "乱数の生成",
+    "ja_desc": "0以上1未満の実数\n乱数や、指定範囲\nの\n整数乱数を生成し\nま\nす。"
+  },
+  "Tb_RandomFloat": {
+    "en_keys": [
+      "random()",
+      "Floating point number in [0,1["
+    ],
+    "en_desc": "Uniform random floating-point number in [0, 1).",
+    "ja_title": "実数乱数 [0,1)",
+    "ja_desc": "0以上1未満の一様\nな\n実数乱数を生成し\nま\nす。\n【書式】\nrandom()"
+  },
+  "Tb_Randint": {
+    "en_keys": [
+      "randint(a,b)",
+      "Random integer in [a,b]"
+    ],
+    "en_desc": "Uniform random integer between a and b inclusive.",
+    "ja_title": "整数乱数 [a,b]",
+    "ja_desc": "a以上b以下の整数\nからランダムに1\nつ\n選びます。\n【書式】\nrandint(a,b)\n【例】\nrandint(1,6)"
+  },
+  "Tb_Fluctuation": {
+    "en_keys": [
+      "Prediction Interval",
+      "Fluctuation & prediction"
+    ],
+    "en_desc": "Prediction intervals and confidence intervals for proportions.",
+    "ja_title": "予測・信頼区間",
+    "ja_desc": "母比率pや標本比\n率f\nと標本数nから95%\n予測区間や信頼区\n間\nを計算します。"
+  },
+  "Tb_Prediction95": {
+    "en_keys": [
+      "prediction95(p,n)",
+      "Prediction interval 95%"
+    ],
+    "en_desc": "95% prediction interval [p - 1.96*sqrt(p(1-p)/n), p + 1.96*sqrt(p(1-p)/n)].",
+    "ja_title": "95%予測区間",
+    "ja_desc": "母比率p、標本数n\nに\n対する95%予測区\n間\nを計算します。\n【書式】\nprediction95(p,n)"
+  },
+  "Tb_Prediction": {
+    "en_keys": [
+      "prediction(p,n)",
+      "Simple prediction interval"
+    ],
+    "en_desc": "Simple prediction interval [p - 1/sqrt(n), p + 1/sqrt(n)].",
+    "ja_title": "簡易予測区間",
+    "ja_desc": "母比率p、標本数n\nの\n簡易予測区間\n[p±1/√n] を計\n算\nします。\n【書式】\nprediction(p,n)"
+  },
+  "Tb_Confidence": {
+    "en_keys": [
+      "confidence(f,n)",
+      "Confidence interval"
+    ],
+    "en_desc": "95% confidence interval [f - 1/sqrt(n), f + 1/sqrt(n)] for sample frequency f.",
+    "ja_title": "信頼区間",
+    "ja_desc": "標本比率f、標本\n数n\nから母比率の95%\n信頼区間を求めま\nす\n【書式】\nconfidence(f,n)"
+  },
+  "Tb_Arithmetic": {
+    "en_keys": [
+      "Arithmetic"
+    ],
+    "en_desc": "Number theory and rounding: GCD, LCM, prime factorization, quotient/remainder, floor, ceil, round.",
+    "ja_title": "整数・端数処理",
+    "ja_desc": "最大公約数、最小\n公\n倍数、素因数分解\n、\n割り算の商と余り\n、\n四捨五入や切り捨\nて\nなどを計算します\n。"
+  },
+  "Tb_GCD": {
+    "en_keys": [
+      "gcd(p,q)",
+      "gcd(a,b)",
+      "GCD"
+    ],
+    "en_desc": "Greatest common divisor of integers p and q.",
+    "ja_title": "最大公約数 GCD",
+    "ja_desc": "整数pとqの最大公\n約\n数を求めます。\n【書式】\ngcd(p,q)\n【例】\ngcd(24,36) → 12"
+  },
+  "Tb_LCM": {
+    "en_keys": [
+      "lcm(p,q)",
+      "lcm(a,b)",
+      "LCM"
+    ],
+    "en_desc": "Least common multiple of integers p and q.",
+    "ja_title": "最小公倍数 LCM",
+    "ja_desc": "整数pとqの最小公\n倍\n数を求めます。\n【書式】\nlcm(p,q)\n【例】\nlcm(12,18) → 36"
+  },
+  "Tb_Factor": {
+    "en_keys": [
+      "factor(n)",
+      "Integer factorization",
+      "Prime factors"
+    ],
+    "en_desc": "Prime factorization of integer n.",
+    "ja_title": "素因数分解",
+    "ja_desc": "整数nを素数の積\nに\n素因数分解します\n。\n【書式】\nfactor(n)\n【例】\nfactor(60)→2^2×3×5"
+  },
+  "Tb_Rem": {
+    "en_keys": [
+      "rem(p,q)",
+      "Remainder division p by q"
+    ],
+    "en_desc": "Remainder of Euclidean division of p by q.",
+    "ja_title": "割り算の余り",
+    "ja_desc": "整数pをqで割った\nときの余り(剰余)\nを\n求めます。\n【書式】\nrem(p,q)\n【例】\nrem(17,5) → 2"
+  },
+  "Tb_Quo": {
+    "en_keys": [
+      "quo(p,q)",
+      "Quotient division p by q"
+    ],
+    "en_desc": "Integer quotient of Euclidean division of p by q.",
+    "ja_title": "割り算の商(整数)",
+    "ja_desc": "整数pをqで割った\nときの整数の商を\n求めます。\n【書式】\nquo(p,q)\n【例】\nquo(17,5) → 3"
+  },
+  "Tb_Floor": {
+    "en_keys": [
+      "floor(x)",
+      "Floor"
+    ],
+    "en_desc": "Greatest integer less than or equal to x (floor function).",
+    "ja_title": "床関数(切り捨て)",
+    "ja_desc": "x以下の最大の整\n数\n(ガウス記号[x])\nを\n返します。\n【書式】\nfloor(x)\n【例】\nfloor(3.8) → 3"
+  },
+  "Tb_Frac": {
+    "en_keys": [
+      "frac(x)",
+      "Fractional part"
+    ],
+    "en_desc": "Fractional part of x: x - floor(x).",
+    "ja_title": "小数部分 frac",
+    "ja_desc": "実数xの小数部分\nx-floor(x) を取\nり\n出します。\n【書式】\nfrac(x)\n【例】\nfrac(3.14) → 0.14"
+  },
+  "Tb_Ceil": {
+    "en_keys": [
+      "ceil(x)",
+      "Ceiling"
+    ],
+    "en_desc": "Smallest integer greater than or equal to x (ceiling function).",
+    "ja_title": "天井関数(切上げ)",
+    "ja_desc": "x以上の最小の整\n数\nを返します。\n【書式】\nceil(x)\n【例】\nceil(3.2) → 4"
+  },
+  "Tb_Round": {
+    "en_keys": [
+      "round(x,n)",
+      "Round to n digits"
+    ],
+    "en_desc": "Round x to n decimal places.",
+    "ja_title": "四捨五入 round",
+    "ja_desc": "数値xを小数点以\n下\nn桁に四捨五入し\nま\nす。\n【書式】\nround(x,桁数n)\n【例】\nround(3.1415,2)"
+  },
+  "Tb_MatricesAndVectors": {
+    "en_keys": [
+      "Matrices and vectors"
+    ],
+    "en_desc": "Matrix operations (determinant, inverse, row echelon) and vector products.",
+    "ja_title": "行列とベクトル",
+    "ja_desc": "行列の生成、逆行\n列\n行列式、掃き出し\n法\nおよびベクトルの\n内積・外積・ノル\nム\nを計算します。"
+  },
+  "Tb_Matrices": {
+    "en_keys": [
+      "Matrices"
+    ],
+    "en_desc": "Matrix operations.",
+    "ja_title": "行列の演算",
+    "ja_desc": "行列の新規作成や\n逆行列、行列式、\n転置、階段形への\n変形を行います。"
+  },
+  "Tb_NewMatrix": {
+    "en_keys": [
+      "[[1,2][3,4]]",
+      "New matrix"
+    ],
+    "en_desc": "Insert a 2D matrix template into the expression.",
+    "ja_title": "新規行列の挿入",
+    "ja_desc": "数式欄に行列の枠\nを\n挿入します。\n矢印キーでマス目\nを\n移動して数値を入\n力\nすると拡張されま\nす"
+  },
+  "Tb_Inverse": {
+    "en_keys": [
+      "inverse(M)",
+      "Inverse"
+    ],
+    "en_desc": "Inverse matrix M^(-1) of square matrix M.",
+    "ja_title": "逆行列 M^-1",
+    "ja_desc": "正方行列Mの逆行\n列\nを計算します。\n【書式】\ninverse(M)\n(M^-1 でも計算可\n)"
+  },
+  "Tb_Determinant": {
+    "en_keys": [
+      "det(M)",
+      "Determinant"
+    ],
+    "en_desc": "Determinant det(M) of square matrix M.",
+    "ja_title": "行列式 det(M)",
+    "ja_desc": "正方行列Mの行列\n式\ndet(M)を求めます\n。\n【書式】\ndet(M)"
+  },
+  "Tb_Transpose": {
+    "en_keys": [
+      "transpose(M)",
+      "Transpose"
+    ],
+    "en_desc": "Transpose of matrix M (swapping rows and columns).",
+    "ja_title": "転置行列 ^tM",
+    "ja_desc": "行列Mの行と列を\n入れ替えた転置行\n列\nを返します。\n【書式】\ntranspose(M)"
+  },
+  "Tb_Trace": {
+    "en_keys": [
+      "trace(M)",
+      "Trace"
+    ],
+    "en_desc": "Trace of square matrix M (sum of diagonal elements).",
+    "ja_title": "トレース(対角和)",
+    "ja_desc": "正方行列Mの対角\n成分の和(トレー\nス)\nを求めます。\n【書式】\ntrace(M)"
+  },
+  "Tb_Dim": {
+    "en_keys": [
+      "dim(M)",
+      "Size"
+    ],
+    "en_desc": "Dimensions {rows, cols} of a matrix or length of a list.",
+    "ja_title": "行列・リスト寸法",
+    "ja_desc": "行列Mの{行数,列\n数}\nまたはリストの要\n素\n数を返します。\n【書式】\ndim(M)"
+  },
+  "Tb_REF": {
+    "en_keys": [
+      "ref(M)",
+      "Row echelon form"
+    ],
+    "en_desc": "Row echelon form of matrix M by Gaussian elimination.",
+    "ja_title": "行階段形 (REF)",
+    "ja_desc": "ガウスの消去法で\n行列Mを行階段形\nに\n変形します。\n【書式】\nref(M)"
+  },
+  "Tb_RREF": {
+    "en_keys": [
+      "rref(M)",
+      "Reduced row echelon form"
+    ],
+    "en_desc": "Reduced row echelon form (Gauss-Jordan elimination).",
+    "ja_title": "簡約階段形(RREF)",
+    "ja_desc": "掃き出し法で行列\nM\nを被約行階段形に\n変形します。連立\n方程式の解法に便\n利\n【書式】\nrref(M)"
+  },
+  "Tb_Identity": {
+    "en_keys": [
+      "identity(n)",
+      "Identity matrix of size n"
+    ],
+    "en_desc": "n x n identity matrix with 1s on the diagonal.",
+    "ja_title": "単位行列 I_n",
+    "ja_desc": "n行n列の単位行列\nを\n生成します。\n【書式】\nidentity(n)"
+  },
+  "Tb_Vectors": {
+    "en_keys": [
+      "Vectors"
+    ],
+    "en_desc": "Vector operations: dot product, cross product, and Euclidean norm.",
+    "ja_title": "ベクトル演算",
+    "ja_desc": "ベクトルの内積、\n外積、ノルム(長\nさ)\nを計算します。"
+  },
+  "Tb_Dot": {
+    "en_keys": [
+      "dot(u,v)",
+      "Dot product"
+    ],
+    "en_desc": "Scalar dot product u . v of two vectors.",
+    "ja_title": "ベクトルの内積",
+    "ja_desc": "2つのベクトルu,v\nの\n内積(スカラー積)\nを\n計算します。\n【書式】\ndot(u,v)"
+  },
+  "Tb_Cross": {
+    "en_keys": [
+      "cross(u,v)",
+      "Cross product"
+    ],
+    "en_desc": "3D vector cross product u x v.",
+    "ja_title": "ベクトルの外積",
+    "ja_desc": "3次元ベクトルu,v\nの\n外積(ベクトル積)\nを\n計算します。\n【書式】\ncross(u,v)"
+  },
+  "Tb_Norm": {
+    "en_keys": [
+      "norm(u)",
+      "Norm"
+    ],
+    "en_desc": "Euclidean norm ||u|| (length) of vector u.",
+    "ja_title": "ベクトル大きさ",
+    "ja_desc": "ベクトルuの長さ\n(ユークリッドノ\nルム)\n||u||を計算しま\nす。\n【書式】\nnorm(u)"
+  },
+  "Tb_Lists": {
+    "en_keys": [
+      "List",
+      "Lists"
+    ],
+    "en_desc": "List operations: sort ascending/descending, minimum, and maximum.",
+    "ja_title": "リスト操作",
+    "ja_desc": "リスト(配列)の昇\n順\n・降順の並べ替え\nや\n最大値・最小値の\n取得を行います。"
+  },
+  "Tb_SortAsc": {
+    "en_keys": [
+      "sort<(L)",
+      "Sort ascending"
+    ],
+    "en_desc": "Sort list L in ascending order.",
+    "ja_title": "昇順ソート(小→大)",
+    "ja_desc": "リストLの要素を\n小さい順(昇順)に\n並べ替えます。\n【書式】\nsort<(L)"
+  },
+  "Tb_SortDesc": {
+    "en_keys": [
+      "sort>(L)",
+      "Sort descending"
+    ],
+    "en_desc": "Sort list L in descending order.",
+    "ja_title": "降順ソート(大→小)",
+    "ja_desc": "リストLの要素を\n大きい順(降順)に\n並べ替えます。\n【書式】\nsort>(L)"
+  },
+  "Tb_Max": {
+    "en_keys": [
+      "max(L)",
+      "Maximum"
+    ],
+    "en_desc": "Maximum element in list L (or local maximum of a function).",
+    "ja_title": "最大値 / 極大値",
+    "ja_desc": "【リスト】max(L)\nで\n最大要素を取得。\n【グラフ/統計】\n関数の極大値また\nは\nデータの最大値。"
+  },
+  "Tb_Min": {
+    "en_keys": [
+      "min(L)",
+      "Minimum"
+    ],
+    "en_desc": "Minimum element in list L (or local minimum of a function).",
+    "ja_title": "最小値 / 極小値",
+    "ja_desc": "【リスト】min(L)\nで\n最小要素を取得。\n【グラフ/統計】\n関数の極小値また\nは\nデータの最小値。"
+  },
+  "Tb_Hyperbolic": {
+    "en_keys": [
+      "Hyperbolic trigonometry"
+    ],
+    "en_desc": "Hyperbolic sine, cosine, tangent and their inverses.",
+    "ja_title": "双曲線関数",
+    "ja_desc": "双曲線関数\nsinh, cosh, tanh\nとその逆双曲線関\n数\nを計算します。"
+  },
+  "Tb_Sinh": {
+    "en_keys": [
+      "sinh(x)",
+      "Hyperbolic sine"
+    ],
+    "en_desc": "Hyperbolic sine: (e^x - e^(-x)) / 2.",
+    "ja_title": "双曲線正弦 sinh",
+    "ja_desc": "双曲線正弦\n(e^x - e^-x)/2\nを計算します。\n【書式】\nsinh(x)"
+  },
+  "Tb_Cosh": {
+    "en_keys": [
+      "cosh(x)",
+      "Hyperbolic cosine"
+    ],
+    "en_desc": "Hyperbolic cosine: (e^x + e^(-x)) / 2.",
+    "ja_title": "双曲線余弦 cosh",
+    "ja_desc": "双曲線余弦(カテ\nナリ)\n(e^x + e^-x)/2\nを計算します。\n【書式】\ncosh(x)"
+  },
+  "Tb_Tanh": {
+    "en_keys": [
+      "tanh(x)",
+      "Hyperbolic tangent"
+    ],
+    "en_desc": "Hyperbolic tangent: sinh(x) / cosh(x).",
+    "ja_title": "双曲線正接 tanh",
+    "ja_desc": "双曲線正接\nsinh(x)/cosh(x)\nを計算します。\n【書式】\ntanh(x)"
+  },
+  "Tb_Asinh": {
+    "en_keys": [
+      "asinh(x)",
+      "Inverse hyperbolic sine"
+    ],
+    "en_desc": "Inverse hyperbolic sine.",
+    "ja_title": "逆双曲線正弦",
+    "ja_desc": "sinh(x)の逆関数\nasinh(x)を計算し\nま\nす。"
+  },
+  "Tb_Acosh": {
+    "en_keys": [
+      "acosh(x)",
+      "Inverse hyperbolic cosine"
+    ],
+    "en_desc": "Inverse hyperbolic cosine (for x >= 1).",
+    "ja_title": "逆双曲線余弦",
+    "ja_desc": "cosh(x)の逆関数\nacosh(x)を計算し\nま\nす(x≧1)。"
+  },
+  "Tb_Atanh": {
+    "en_keys": [
+      "atanh(x)",
+      "Inverse hyperbolic tangent"
+    ],
+    "en_desc": "Inverse hyperbolic tangent (for |x| < 1).",
+    "ja_title": "逆双曲線正接",
+    "ja_desc": "tanh(x)の逆関数\natanh(x)を計算し\nま\nす(|x|<1)。"
+  },
+  "Tb_Logic": {
+    "en_keys": [
+      "Logic",
+      "Logic and bits"
+    ],
+    "en_desc": "Bitwise logic operations: AND, OR, XOR, NOT, bit shifts, rotations, and bit manipulation.",
+    "ja_title": "論理・ビット演算",
+    "ja_desc": "2進ビット演算\n(AND,\nOR,XOR,NOT)、シ\nフト\n回転、特定ビット\nの\n操作を行います。"
+  },
+  "Tb_ExplicitBits": {
+    "en_keys": [
+      "Explicit number of bits",
+      "Explicit bit size"
+    ],
+    "en_desc": "Bitwise operations with an explicit bit width n.",
+    "ja_title": "ビット幅指定演算",
+    "ja_desc": "ビット数nを明示\nし\nて反転・シフト・\n回転を行います。"
+  },
+  "Tb_LogicAnd": {
+    "en_keys": [
+      "and(a,b)",
+      "a AND b"
+    ],
+    "en_desc": "Bitwise AND of integers a and b.",
+    "ja_title": "ビット論理積 AND",
+    "ja_desc": "整数aとbの各ビッ\nト\nの論理積(AND)を\n計算します。\n【書式】\nand(a,b)"
+  },
+  "Tb_LogicOr": {
+    "en_keys": [
+      "or(a,b)",
+      "a OR b"
+    ],
+    "en_desc": "Bitwise OR of integers a and b.",
+    "ja_title": "ビット論理和 OR",
+    "ja_desc": "整数aとbの各ビッ\nト\nの論理和(OR)を\n計算します。\n【書式】\nor(a,b)"
+  },
+  "Tb_LogicXor": {
+    "en_keys": [
+      "xor(a,r)",
+      "a XOR b"
+    ],
+    "en_desc": "Bitwise exclusive OR (XOR) of integers a and b.",
+    "ja_title": "排他的論理和 XOR",
+    "ja_desc": "整数aとbの各ビッ\nト\nの排他的論理和\n(XOR)\nを計算します。\n【書式】\nxor(a,b)"
+  },
+  "Tb_LogicNot": {
+    "en_keys": [
+      "not(a)",
+      "not(a,n)",
+      "NOT a"
+    ],
+    "en_desc": "Bitwise NOT (1's complement) of integer a.",
+    "ja_title": "ビット反転 NOT",
+    "ja_desc": "整数aの各ビット\nを\n反転します。\n【書式】\nnot(a) / not(a,n)"
+  },
+  "Tb_LogicSll": {
+    "en_keys": [
+      "sll(a,s)",
+      "Logical shift left [a << s]"
+    ],
+    "en_desc": "Logical left shift of a by s bits (a << s).",
+    "ja_title": "左論理シフト <<",
+    "ja_desc": "aを左へsビット論\n理\nシフト(a×2^s)し\nま\nす。\n【書式】\nsll(a,s)"
+  },
+  "Tb_LogicSrl": {
+    "en_keys": [
+      "srl(a,s)",
+      "Logical shift right [a >> s]"
+    ],
+    "en_desc": "Logical right shift of a by s bits (zero-fill).",
+    "ja_title": "右論理シフト >>",
+    "ja_desc": "aを右へsビット論\n理\nシフトします。\n【書式】\nsrl(a,s)"
+  },
+  "Tb_LogicSra": {
+    "en_keys": [
+      "sra(a,s)",
+      "sra(a,s,n)",
+      "Arithmetic shift right [a >>> s]"
+    ],
+    "en_desc": "Arithmetic right shift preserving the sign bit.",
+    "ja_title": "右算術シフト >>>",
+    "ja_desc": "符号ビットを保っ\nた\nままaを右へsビッ\nト\n算術シフトします\n。\n【書式】\nsra(a,s)"
+  },
+  "Tb_LogicRol": {
+    "en_keys": [
+      "rol(a,r)",
+      "rol(a,r,n)",
+      "Rotate r bits of a to the left"
+    ],
+    "en_desc": "Rotate bits of a to the left by r positions.",
+    "ja_title": "左ビット回転 ROL",
+    "ja_desc": "aのビット列を左\nへ\nrビット巡回シフ\nト\nします。\n【書式】\nrol(a,r)"
+  },
+  "Tb_LogicRor": {
+    "en_keys": [
+      "ror(a,r)",
+      "ror(a,r,n)",
+      "Rotate r bits of a to the right"
+    ],
+    "en_desc": "Rotate bits of a to the right by r positions.",
+    "ja_title": "右ビット回転 ROR",
+    "ja_desc": "aのビット列を右\nへ\nrビット巡回シフ\nト\nします。\n【書式】\nror(a,r)"
+  },
+  "Tb_LogicBitGet": {
+    "en_keys": [
+      "bit(a,b)",
+      "Get bit b in a"
+    ],
+    "en_desc": "Extract the b-th bit (0 or 1) of integer a.",
+    "ja_title": "ビット取得 bit",
+    "ja_desc": "整数aの下位b番目\n(0始まり)のビッ\nト値\n(0/1)を取得しま\nす。\n【書式】\nbit(a,b)"
+  },
+  "Tb_LogicBitSet": {
+    "en_keys": [
+      "bset(a,b)",
+      "Set bit b in a"
+    ],
+    "en_desc": "Set the b-th bit of integer a to 1.",
+    "ja_title": "ビット1設定 bset",
+    "ja_desc": "整数aの第bビット\nを\n1にセットします\n。\n【書式】\nbset(a,b)"
+  },
+  "Tb_LogicBitClr": {
+    "en_keys": [
+      "bclr(a,b)",
+      "Clear bit b in a"
+    ],
+    "en_desc": "Clear the b-th bit of integer a to 0.",
+    "ja_title": "ビット0消去 bclr",
+    "ja_desc": "整数aの第bビット\nを\n0にクリアします\n。\n【書式】\nbclr(a,b)"
+  },
+  "Tb_LogicBitFlp": {
+    "en_keys": [
+      "bflp(a,b)",
+      "Flip bit b in a"
+    ],
+    "en_desc": "Toggle (flip) the b-th bit of integer a.",
+    "ja_title": "ビット反転 bflp",
+    "ja_desc": "整数aの第bビット\nを\n反転(0↔1)します\n。\n【書式】\nbflp(a,b)"
+  },
+  "Tb_LogicBic": {
+    "en_keys": [
+      "bic(a,b)",
+      "bic(a,b,n)",
+      "Clear a with b [a AND NOT b]"
+    ],
+    "en_desc": "Bit clear with mask: a AND (NOT b).",
+    "ja_title": "マスク消去 bic",
+    "ja_desc": "ビットマスクbで\n指定\nしたビットを消去\n(a AND NOT b)し\nます\n【書式】\nbic(a,b)"
+  },
+  "Tb_LogicTc": {
+    "en_keys": [
+      "tc(a,n)",
+      "Two's complement equivalent"
+    ],
+    "en_desc": "Two's complement representation of a on n bits.",
+    "ja_title": "2の補数表現 tc",
+    "ja_desc": "整数aをnビット幅\nの\n2の補数表現に変\n換\nします。\n【書式】\ntc(a,n)"
+  },
+  "Tb_LogicClog2": {
+    "en_keys": [
+      "clog2(a)",
+      "Number of bits needed to store a"
+    ],
+    "en_desc": "Number of bits required to represent integer a.",
+    "ja_title": "必要ビット幅",
+    "ja_desc": "整数aを表現する\nのに\n必要なビット数を\n返します。\n【書式】\nclog2(a)"
+  },
+  "Tb_Units": {
+    "en_keys": [
+      "Units",
+      "Units and constants",
+      "Metric",
+      "Imperial"
+    ],
+    "en_desc": "Measurement units (distance, mass, time, energy, electricity, etc.) for unit conversions.",
+    "ja_title": "単位の入力と換算",
+    "ja_desc": "長さ・質量・時間\n・\nエネルギー・電気\n等\nの単位を入力しま\nす\n【単位換算の例】\n5_km→_m"
+  },
+  "Tb_UnitTimeItems": {
+    "en_keys": [
+      "Second",
+      "Millisecond",
+      "Microsecond",
+      "Nanosecond",
+      "Minute",
+      "Hour",
+      "Day",
+      "Week",
+      "Month",
+      "Year"
+    ],
+    "en_desc": "Time units: s, ms, us, ns, min, h, day, week, month, year.",
+    "ja_title": "時間の単位",
+    "ja_desc": "秒(_s)、ミリ秒\n(ms)\nマイクロ秒(μs)\n、分\n(_min)、時間(_h)\n、\n日・週・月・年を\n入力します。"
+  },
+  "Tb_UnitDistance": {
+    "en_keys": [
+      "Distance",
+      "Length",
+      "Distances",
+      "Radii",
+      "Kilometer",
+      "Meter",
+      "Centimeter",
+      "Millimeter",
+      "Micrometer",
+      "Nanometer",
+      "Picometer",
+      "Inch",
+      "Foot",
+      "Yard",
+      "Mile",
+      "Astronomical unit",
+      "Light year",
+      "Parsec"
+    ],
+    "en_desc": "Distance and length units (m, km, cm, mm, inch, ft, yd, mi, au, ly, pc).",
+    "ja_title": "長さ・距離の単位",
+    "ja_desc": "メートル\n(m,km,cm,\nmm,nm)、インチ\n(in)\nフィート(ft)、マ\nイル\n天文単位(au)、光\n年\nなどを入力します\n。"
+  },
+  "Tb_UnitMass": {
+    "en_keys": [
+      "Mass",
+      "Kilogram",
+      "Gram",
+      "Milligram",
+      "Microgram",
+      "Metric Ton",
+      "Ounce",
+      "Pound",
+      "Short Ton",
+      "Long Ton"
+    ],
+    "en_desc": "Mass units (kg, g, mg, ug, t, oz, lb) or astronomical/particle masses.",
+    "ja_title": "質量の単位",
+    "ja_desc": "キログラム(_kg)\n、\nグラム(_g,_mg)、\nトン(_t)、オンス\n(_oz)、ポンド\n(_lb)\nを入力します。"
+  },
+  "Tb_UnitCurrent": {
+    "en_keys": [
+      "Electric current",
+      "Ampere",
+      "Milliampere",
+      "Microampere"
+    ],
+    "en_desc": "Electric current units: Ampere (A, mA, uA).",
+    "ja_title": "電流の単位 (A)",
+    "ja_desc": "アンペア(_A)、\nミリアンペア\n(_mA)、\nマイクロアンペア\n(_μA)を入力しま\nす"
+  },
+  "Tb_UnitTemperature": {
+    "en_keys": [
+      "Temperature",
+      "Kelvin",
+      "Celsius",
+      "Fahrenheit"
+    ],
+    "en_desc": "Temperature units: Kelvin (K), Celsius (°C), Fahrenheit (°F).",
+    "ja_title": "温度の単位",
+    "ja_desc": "絶対温度ケルビン\n(_K)、摂氏(_°C)\n、\n華氏(_°F)を入力\n・\n換算します。"
+  },
+  "Tb_UnitAmount": {
+    "en_keys": [
+      "Quantity of matter",
+      "Mole",
+      "Millimole",
+      "Micromole"
+    ],
+    "en_desc": "Amount of substance units: mole (mol, mmol, umol).",
+    "ja_title": "物質量の単位(mol)",
+    "ja_desc": "モル(_mol)、\nミリモル(_mmol)\n、\nマイクロモル\n(_μmol)\nを入力します。"
+  },
+  "Tb_UnitLight": {
+    "en_keys": [
+      "Luminous intensity",
+      "Candela",
+      "Luminous Flux",
+      "Lumen",
+      "Illuminance",
+      "Lux",
+      "Solid Angle",
+      "Steradian"
+    ],
+    "en_desc": "Optical and solid angle units: candela (cd), lumen (lm), lux (lx), steradian (sr).",
+    "ja_title": "光度・光束・立体角",
+    "ja_desc": "カンデラ(cd)、ル\nー\nメン(lm)、ルクス\n(lx)、ステラジア\nン\n(sr)を入力します\n。"
+  },
+  "Tb_UnitFrequency": {
+    "en_keys": [
+      "Frequency",
+      "Hertz",
+      "Kilohertz",
+      "Megahertz",
+      "Gigahertz"
+    ],
+    "en_desc": "Frequency units: Hertz (Hz, kHz, MHz, GHz).",
+    "ja_title": "周波数の単位(Hz)",
+    "ja_desc": "ヘルツ(_Hz,\n_kHz,\n_MHz, _GHz)を入\n力\nします。"
+  },
+  "Tb_UnitForce": {
+    "en_keys": [
+      "Force",
+      "Strength",
+      "Newton",
+      "Kilonewton",
+      "Millinewton"
+    ],
+    "en_desc": "Force units: Newton (N, kN, mN).",
+    "ja_title": "力の単位 (N)",
+    "ja_desc": "ニュートン(_N,\n_kN, _mN)を入力\nします。"
+  },
+  "Tb_UnitPressure": {
+    "en_keys": [
+      "Pressure",
+      "Pascal",
+      "Hectopascal",
+      "Bar",
+      "Atmosphere"
+    ],
+    "en_desc": "Pressure units: Pascal (Pa, hPa), Bar (bar), Atmosphere (atm).",
+    "ja_title": "圧力の単位 (Pa)",
+    "ja_desc": "パスカル(_Pa)、\nヘクトパスカル\n(hPa)\nバール(bar)、標\n準\n気圧(atm)を入力\n。"
+  },
+  "Tb_UnitEnergy": {
+    "en_keys": [
+      "Energy",
+      "Joule",
+      "Kilojoule",
+      "Millijoule",
+      "Electronvolt",
+      "Kiloelectronvolt",
+      "Megaelectronvolt",
+      "Millielectronvolt"
+    ],
+    "en_desc": "Energy units: Joule (J, kJ, mJ) and Electronvolt (eV, keV, MeV, meV).",
+    "ja_title": "エネルギーの単位",
+    "ja_desc": "ジュール(_J,_kJ)\nや\n電子ボルト(_eV,\n_keV,_MeV)を入力\nします。"
+  },
+  "Tb_UnitPower": {
+    "en_keys": [
+      "Power",
+      "Watt",
+      "Kilowatt",
+      "Megawatt",
+      "Gigawatt",
+      "Milliwatt",
+      "Microwatt"
+    ],
+    "en_desc": "Power units: Watt (W, mW, uW, kW, MW, GW) or Power regression.",
+    "ja_title": "仕事率(W)/累乗",
+    "ja_desc": "【単位】ワット\n(_W,\n_kW,_MW,_mW)を入\n力\n【回帰】累乗回帰\ny=a·x^b を選択\n。"
+  },
+  "Tb_UnitElectricity": {
+    "en_keys": [
+      "Electric charge",
+      "Electrical charge",
+      "Coulomb",
+      "Electric potential",
+      "Volt",
+      "Kilovolt",
+      "Millivolt",
+      "Microvolt",
+      "Electrical capacitance",
+      "Electrical capacity",
+      "Farad",
+      "Millifarad",
+      "Microfarad",
+      "Electrical resistance",
+      "Ohm",
+      "Kiloohm",
+      "Electrical conductance",
+      "Siemens",
+      "Millisiemens",
+      "Magnetic field",
+      "Tesla",
+      "Electrical inductance",
+      "Inductance",
+      "Henry"
+    ],
+    "en_desc": "Electromagnetic units: Coulomb (C), Volt (V), Farad (F), Ohm, Siemens (S), Tesla (T), Henry (H).",
+    "ja_title": "電磁気の単位",
+    "ja_desc": "電荷(C)、電圧(V)\n、\n静電容量(F)、電\n気\n抵抗(Ω)、コンダ\nク\nタンス(S)、磁束\n密度\n(T)、インダクタ\nンス\n(H)を入力します\n。"
+  },
+  "Tb_UnitAreaVolume": {
+    "en_keys": [
+      "Area",
+      "Square meter",
+      "Hectare",
+      "Acre",
+      "Volume",
+      "Liter",
+      "Deciliter",
+      "Centiliter",
+      "Milliliter",
+      "Teaspoon",
+      "Tablespoon",
+      "Fluid ounce",
+      "Cup",
+      "Pint",
+      "Quart",
+      "Gallon"
+    ],
+    "en_desc": "Area (m^2, ha, acre) and Volume (L, dL, cL, mL, gal, pt, qt, cup, floz) units.",
+    "ja_title": "面積・体積の単位",
+    "ja_desc": "面積\n(m^2,ha,acre)\nおよび体積・容積\n(L,dL,mL,ガロン\n等)\nの単位を入力しま\nす"
+  },
+  "Tb_Physics": {
+    "en_keys": [
+      "Physics",
+      "Fundamental Constants",
+      "Nuclear and Atomic Constants"
+    ],
+    "en_desc": "Fundamental physical constants (c, h, G, e, k_B, N_A, R, etc.).",
+    "ja_title": "物理定数カタログ",
+    "ja_desc": "光速c、プランク\n定数\n万有引力定数G、\n素電荷e、アボガ\nドロ\n定数、気体定数な\nど\nの物理定数一覧で\nす"
+  },
+  "Tb_PhysSpeedOfLight": {
+    "en_keys": [
+      "Speed of light"
+    ],
+    "en_desc": "Speed of light in vacuum c = 2.99792458 * 10^8 m/s.",
+    "ja_title": "真空中の光速 c",
+    "ja_desc": "真空中の光の速さ\n2.99792458×10^8\n[m/s] を入力しま\nす"
+  },
+  "Tb_PhysSpeed": {
+    "en_keys": [
+      "Speed",
+      "Speed of sound",
+      "Sea level, 20°C",
+      "In water",
+      "In steel",
+      "In glass",
+      "Escape Velocity",
+      "Of Earth",
+      "Of Moon",
+      "Of Sun"
+    ],
+    "en_desc": "Speed of sound in media and planetary escape velocities.",
+    "ja_title": "音速・脱出速度",
+    "ja_desc": "空気・水・金属中\nの\n音速、および地球\n・\n月・太陽の第二宇\n宙\n速度(脱出速度)で\nす"
+  },
+  "Tb_PhysBoltzmann": {
+    "en_keys": [
+      "Boltzmann Constant"
+    ],
+    "en_desc": "Boltzmann constant k_B = 1.380649 * 10^-23 J/K.",
+    "ja_title": "ボルツマン定数",
+    "ja_desc": "ボルツマン定数\nk_B\n1.380649×10^-23\n[J/K] を入力しま\nす"
+  },
+  "Tb_PhysAvogadro": {
+    "en_keys": [
+      "Avogadro Constant"
+    ],
+    "en_desc": "Avogadro constant N_A = 6.02214076 * 10^23 mol^-1.",
+    "ja_title": "アボガドロ定数",
+    "ja_desc": "アボガドロ定数\nN_A\n6.02214076×10^23\n[/mol]を入力しま\nす"
+  },
+  "Tb_PhysGas": {
+    "en_keys": [
+      "Gas Constant"
+    ],
+    "en_desc": "Molar gas constant R = 8.314462618 J/(mol*K).",
+    "ja_title": "気体定数 R",
+    "ja_desc": "モル気体定数 R\n8.3144626 [J/mol·K]\nを入力します。"
+  },
+  "Tb_PhysThermo": {
+    "en_keys": [
+      "Thermodynamics",
+      "Stefan-Boltzmann Constant",
+      "Water Triple Point",
+      "Wien Constant",
+      "Atmospheric Pressure"
+    ],
+    "en_desc": "Thermodynamic constants: Stefan-Boltzmann, water triple point, Wien, 1 atm (101325 Pa).",
+    "ja_title": "熱力学の物理定数",
+    "ja_desc": "ステファン・ボル\nツ\nマン定数、水の三\n重点\nウィーン変位則定\n数\n標準大気圧\n(101325Pa)\nを入力します。"
+  },
+  "Tb_PhysElemCharge": {
+    "en_keys": [
+      "Elementary Charge"
+    ],
+    "en_desc": "Elementary electric charge e = 1.602176634 * 10^-19 C.",
+    "ja_title": "電気素量 (素電荷) e",
+    "ja_desc": "陽子・電子の素電\n荷\n1.6021766×10^-19 C\nを入力します。"
+  },
+  "Tb_PhysElectro": {
+    "en_keys": [
+      "Electromagnetism",
+      "Coulomb Constant",
+      "Vacuum permittivity",
+      "Vacuum permeability",
+      "Vacuum Impedance",
+      "Faraday Constant",
+      "Conductivity constants",
+      "Electricity",
+      "Resistivity Constants",
+      "Sea Water",
+      "Water",
+      "Air",
+      "Glass",
+      "Wood"
+    ],
+    "en_desc": "Electromagnetic constants: epsilon_0, mu_0, Coulomb k_e, Faraday F, resistivity/conductivity.",
+    "ja_title": "電磁気の物理定数",
+    "ja_desc": "クーロン定数、真\n空\nの誘電率ε0・透\n磁率\nμ0、ファラデー\n定数\n各物質の伝導率・\n抵抗率を入力しま\nす"
+  },
+  "Tb_PhysGravityAstro": {
+    "en_keys": [
+      "Gravitation",
+      "Acceleration",
+      "Constant",
+      "Moon",
+      "Earth",
+      "Sun",
+      "Earth - Moon",
+      "Earth - Sun"
+    ],
+    "en_desc": "Standard gravity g = 9.80665 m/s^2, gravitational constant G, and astronomical masses/radii/distances.",
+    "ja_title": "重力・天文定数",
+    "ja_desc": "標準重力加速度\ng=9.80665 m/s^2\n、\n万有引力定数G、\n太陽・地球・月の\n質量と半径です。"
+  },
+  "Tb_PhysPlanck": {
+    "en_keys": [
+      "Planck Constant",
+      "Reduced Planck Constant"
+    ],
+    "en_desc": "Planck constant h = 6.62607015 * 10^-34 J*s and h-bar = h / (2*pi).",
+    "ja_title": "プランク定数 h / ħ",
+    "ja_desc": "プランク定数 h\n6.62607015×10^-34\n[J·s] またはデ\nィラ\nック定数ħ=h/2π\nです"
+  },
+  "Tb_PhysQuantum": {
+    "en_keys": [
+      "Particles Mass",
+      "Electron",
+      "Proton",
+      "Neutron",
+      "Muon",
+      "Tauon",
+      "W Boson",
+      "Z Boson",
+      "Atomic Mass Unit",
+      "Bohr Radius",
+      "Bohr Magneton",
+      "Nuclear Magneton",
+      "Fine Structure Constant",
+      "Rydberg Constant",
+      "Hartree Constant",
+      "Magnetic Flux Quantum",
+      "Conductance Quantum",
+      "Circulation Quantum",
+      "Planck Units",
+      "Planck Mass",
+      "Planck Length",
+      "Planck Time",
+      "Planck Temperature",
+      "Planck Charge",
+      "Planck Force",
+      "Planck Energy",
+      "Planck Power",
+      "Planck Density",
+      "Planck Quantity of Movement",
+      "Planck Linear Mass",
+      "Planck Tension",
+      "Planck Current",
+      "Planck Pressure",
+      "Planck Impedance",
+      "Ultimate Answer"
+    ],
+    "en_desc": "Quantum, atomic, and particle constants (electron/proton/neutron mass, Bohr radius, fine structure alpha).",
+    "ja_title": "素粒子・原子核定数",
+    "ja_desc": "電子・陽子・中性\n子\n等の質量、原子質\n量\n単位u、ボーア半\n径\n微細構造定数α、\nプランク単位系で\nす"
+  },
+  "Tb_Chemistry": {
+    "en_keys": [
+      "Chemistry",
+      "Molar masses (1,2...)",
+      "Molar masses (A,B...)",
+      "pKa"
+    ],
+    "en_desc": "Chemical element molar masses (g/mol) and acid dissociation constants (pKa).",
+    "ja_title": "化学・モル質量",
+    "ja_desc": "全元素のモル質量\n(原子量 g/mol)を\n原子番号順・ABC\n順\nで呼び出せます。\n酸解離定数pKaも\n収録"
+  },
+  "Calc_AdditionalResults": {
+    "en_keys": [
+      "Additional results"
+    ],
+    "en_desc": "View additional representations of the calculation result (hex/bin, prime factors, trig form, etc.).",
+    "ja_title": "追加の計算結果",
+    "ja_desc": "計算結果に対する\n別形式の表現(16\n進\n2進、帯分数、極\n形式\n行列特性など)を\n一覧表示します。"
+  },
+  "Calc_HexBin": {
+    "en_keys": [
+      "Hexadecimal",
+      "Binary"
+    ],
+    "en_desc": "Hexadecimal (0x...) and Binary (0b...) integer representations.",
+    "ja_title": "16進数・2進数表記",
+    "ja_desc": "整数を16進数(0x)\nまたは2進数(0b)\nで\n表した値です。"
+  },
+  "Calc_MixedEuclidean": {
+    "en_keys": [
+      "Mixed fraction",
+      "Euclidean division"
+    ],
+    "en_desc": "Mixed fraction (integer + proper fraction) and Euclidean division (p = b*q + r).",
+    "ja_title": "帯分数・整数の除算",
+    "ja_desc": "仮分数を整数+真\n分数\nの帯分数で表した\n形\nおよび商と余りに\nよる\n除算等式です。"
+  },
+  "Calc_PolyForms": {
+    "en_keys": [
+      "Canonical form",
+      "Factorized form",
+      "Discriminant",
+      "Root",
+      "First root",
+      "Second root"
+    ],
+    "en_desc": "Quadratic polynomial analysis: canonical (vertex) form, factored form, discriminant Delta, and roots.",
+    "ja_title": "2次式の解析結果",
+    "ja_desc": "2次式の平方完成\n形\n(標準形)、因数分\n解\n判別式 Δ\n=b^2-4ac、\nおよび実数解です\n。"
+  },
+  "Tab_Graph": {
+    "en_keys": [
+      "Graph",
+      "Plot graph"
+    ],
+    "en_desc": "Switch to the Graph tab to plot curves, trace points, zoom, and analyze functions.",
+    "ja_title": "グラフ表示タブ",
+    "ja_desc": "定義した関数や数\n列\nデータのグラフを\n描画・解析します\n。\n矢印キーで曲線上\nの\n点をトレース可能\n。"
+  },
+  "Tab_Table": {
+    "en_keys": [
+      "Table",
+      "Display values"
+    ],
+    "en_desc": "Switch to the Table tab to inspect numerical values of functions or sequences.",
+    "ja_title": "数値表(テーブル)",
+    "ja_desc": "xやnを変化させた\nときの関数値f(x)\nや\n数列値u(n)の一覧\n表\nを表示します。"
+  },
+  "Tab_Data": {
+    "en_keys": [
+      "Data"
+    ],
+    "en_desc": "Data table tab for entering values V1/X1 and frequencies N1 or Y1.",
+    "ja_title": "データ入力タブ",
+    "ja_desc": "統計データ(値Vと\n度数N)や回帰デー\nタ\n(X,Y)を表形式で\n入力・編集します\n。"
+  },
+  "Tab_Stats": {
+    "en_keys": [
+      "Stats"
+    ],
+    "en_desc": "Summary statistics tab showing mean, standard deviation, quartiles, etc.",
+    "ja_title": "統計量一覧タブ",
+    "ja_desc": "入力データから算\n出\nされた平均値、分\n散\n標準偏差、四分位\n数\n等の一覧を表示。"
+  },
+  "Tab_Histogram": {
+    "en_keys": [
+      "Histogram",
+      "Histogram settings",
+      "Bin width"
+    ],
+    "en_desc": "Histogram plot tab and bin width / start settings.",
+    "ja_title": "ヒストグラム(柱状図)",
+    "ja_desc": "データの度数分布\nを\nヒストグラムで表\n示\nします。階級の幅\n(Bin width)や開\n始値\nも変更可能です。"
+  },
+  "Tab_Box": {
+    "en_keys": [
+      "Box"
+    ],
+    "en_desc": "Box-and-whisker plot showing minimum, Q1, median, Q3, and maximum.",
+    "ja_title": "箱ひげ図タブ",
+    "ja_desc": "データの最小値、\n第1四分位数(Q1)\n、\n中央値、第3四分\n位数\n(Q3)、最大値を箱\nひ\nげ図で比較します\n。"
+  },
+  "Graph_NavigateZoom": {
+    "en_keys": [
+      "Navigate",
+      "Pan:",
+      "Zoom:",
+      "Axes",
+      "Equal axes"
+    ],
+    "en_desc": "Pan or zoom the graph viewport, adjust X/Y axis ranges, or normalize axes to 1:1 ratio.",
+    "ja_title": "グラフの表示調整",
+    "ja_desc": "・Navigate: 画面\n移動\nとズーム操作\n・Axes: X軸/Y軸\nの\n表示範囲を指定\n・Equal axes: 縦\n横の\n目盛り比を1:1に"
+  },
+  "Graph_Calculate": {
+    "en_keys": [
+      "Calculate",
+      "Goto",
+      "Go to",
+      "Plot options",
+      "Function options",
+      "Sequence options"
+    ],
+    "en_desc": "Open calculation/analysis tools on the graph (roots, extrema, tangent, integral, intersection) or jump to X.",
+    "ja_title": "グラフ解析・設定",
+    "ja_desc": "曲線上の特定xへ\nの\n移動(Go to)や、\n零点\n極値、交点、接線\n、\n定積分の解析メニ\nュ\nーを開きます。"
+  },
+  "Graph_Zeros": {
+    "en_keys": [
+      "Zeros"
+    ],
+    "en_desc": "Find x-intercepts (roots where f(x) = 0) on the graph.",
+    "ja_title": "零点 (f(x)=0の解)",
+    "ja_desc": "グラフがx軸と交\nわ\nる点(f(x)=0とな\nる\n実数解x)を探索し\nま\nす。"
+  },
+  "Graph_Tangent": {
+    "en_keys": [
+      "Tangent"
+    ],
+    "en_desc": "Draw the tangent line to the curve at a point and display its equation y = ax + b and derivative f'(x).",
+    "ja_title": "接線と微分係数",
+    "ja_desc": "曲線上の点におけ\nる\n接線を描画し、微\n分\n係数(傾き)f'(x)\nと\n接線の方程式を表\n示\nします。"
+  },
+  "Graph_Intersection": {
+    "en_keys": [
+      "Intersection"
+    ],
+    "en_desc": "Find intersection points between two plotted curves f(x) = g(x).",
+    "ja_title": "2曲線の交点探索",
+    "ja_desc": "2つの関数のグラ\nフ\nが交わる交点座標\n(x, y) を探索し\nま\nす。"
+  },
+  "Graph_Preimage": {
+    "en_keys": [
+      "Inverse image"
+    ],
+    "en_desc": "Find x such that f(x) equals a given target value y.",
+    "ja_title": "逆像 (yからxを探索)",
+    "ja_desc": "指定したyの値に\n対\nして f(x)=y とな\nる\nxの値をグラフ上\nで\n逆算探索します。"
+  },
+  "Func_Manage": {
+    "en_keys": [
+      "Add function",
+      "Delete function",
+      "Curve type",
+      "Plot range",
+      "Function color",
+      "Derivative function column",
+      "Hide the derivative function",
+      "Turn on/off",
+      "Rename",
+      "Red",
+      "Blue",
+      "Green",
+      "Yellow",
+      "Purple",
+      "Cyan",
+      "Pink",
+      "Orange"
+    ],
+    "en_desc": "Add or delete functions, choose curve type (Cartesian, Polar, Parametric), set domain, or toggle f'(x) column.",
+    "ja_title": "関数の追加と設定",
+    "ja_desc": "関数の追加・削除\n、\n曲線種別(直交/極\n座標\n/媒介変数)、描画\n範囲\n色、導関数f'(x)\n列の\n表示を設定します\n。"
+  },
+  "Seq_Manage": {
+    "en_keys": [
+      "Add sequence",
+      "Choose sequence type",
+      "Sequence type",
+      "Explicit expression",
+      "Recursive first order",
+      "Recursive second order",
+      "Sequence color",
+      "Delete sequence",
+      "Sum of terms",
+      "First term index",
+      "n column"
+    ],
+    "en_desc": "Define explicit u(n), 1st-order recursive u(n+1), or 2nd-order recursive u(n+2) sequences, and compute sum of terms.",
+    "ja_title": "数列の定義と設定",
+    "ja_desc": "・Explicit: 一般\n項\n・Recursive 1st:\n2項間漸化式\nu(n+1)\n・Recursive 2nd:\n3項間漸化式\nu(n+2)\n・Sum: 項の和を\n計算"
+  },
+  "Table_Manage": {
+    "en_keys": [
+      "Set the interval",
+      "X start",
+      "X end",
+      "N start",
+      "N end",
+      "T start",
+      "T end",
+      "θ start",
+      "θ end",
+      "Step",
+      "Column options",
+      "Clear column",
+      "Fill with a formula",
+      "Sort by increasing values",
+      "Sort by increasing frequencies",
+      "Export the column to a list"
+    ],
+    "en_desc": "Configure table start/end/step intervals, fill columns with formulas, sort data, or clear columns.",
+    "ja_title": "表の範囲と列操作",
+    "ja_desc": "表の開始値・終了\n値\n・刻み幅(Step)の\n設定や、列のクリ\nア\n数式での一括入力\n、\n並べ替えを行いま\nす"
+  },
+  "Stats_Mean": {
+    "en_keys": [
+      "Mean",
+      "μ: Mean"
+    ],
+    "en_desc": "Arithmetic mean (average) of the dataset or distribution mean mu.",
+    "ja_title": "平均値 (Mean / μ)",
+    "ja_desc": "データの算術平均\n値\nまたは確率分布の\n母平均 μ です。"
+  },
+  "Stats_StdDev": {
+    "en_keys": [
+      "Standard deviation",
+      "Standard deviation σ",
+      "Sample std deviation s",
+      "σ: Standard deviation"
+    ],
+    "en_desc": "Population standard deviation sigma or sample unbiased standard deviation s.",
+    "ja_title": "標準偏差 (σ / s)",
+    "ja_desc": "データのばらつき\nを\n表す標準偏差です\n。\n・σ: 母標準偏差\n・s: 標本標準偏\n差"
+  },
+  "Stats_Variance": {
+    "en_keys": [
+      "Variance",
+      "Covariance"
+    ],
+    "en_desc": "Variance sigma^2 (average of squared deviations from the mean) or covariance Cov(X,Y).",
+    "ja_title": "分散 / 共分散",
+    "ja_desc": "・Variance: 分散\nσ^2\n(標準偏差の2乗)\n・Covariance:\n2変数の共分散"
+  },
+  "Stats_Quartiles": {
+    "en_keys": [
+      "First quartile",
+      "Median",
+      "Third quartile",
+      "Interquartile range",
+      "Range"
+    ],
+    "en_desc": "Order statistics: Q1 (25%), Median (50%), Q3 (75%), IQR = Q3 - Q1, and Range = Max - Min.",
+    "ja_title": "中央値・四分位数",
+    "ja_desc": "・First\nquartile: Q1\n・Median: 中央値\n(Me)\n・Third\nquartile: Q3\n・Interquartile:\n四分位範囲\n(Q3-Q1)\n・Range: 範囲(最\n大-最小)"
+  },
+  "Stats_SummaryOther": {
+    "en_keys": [
+      "Number of data points",
+      "Number of points",
+      "Sum of values",
+      "Sum of squared values",
+      "Sum of squares",
+      "Geometric mean",
+      "Harmonic Mean",
+      "Mode"
+    ],
+    "en_desc": "Total count N, sum of values, sum of squares, geometric mean, harmonic mean, and mode.",
+    "ja_title": "データ数・各種平均",
+    "ja_desc": "データの総数N、\n総和\n二乗和、幾何平均\n、\n調和平均、最頻値\n(Mode)を表示しま\nす"
+  },
+  "Reg_Models": {
+    "en_keys": [
+      "Regression curve",
+      "Prediction given X",
+      "Prediction given Y",
+      "Proportional",
+      "Quadratic",
+      "Cubic",
+      "Quartic",
+      "Logarithmic",
+      "Exponential",
+      "Trigonometric",
+      "Logistic"
+    ],
+    "en_desc": "Regression models (Linear, Proportional, Quadratic, Cubic, Quartic, Logarithmic, Exponential, Power, Trigonometric, Logistic) and X/Y predictions.",
+    "ja_title": "回帰モデルと予測",
+    "ja_desc": "散布図に当てはめ\nる\n回帰曲線(比例/2\n次/\n3次/4次/対数/指\n数/\n三角/ロジスティ\nック)\nの選択と、X・Yの\n予測値計算です。"
+  },
+  "Proba_Distributions": {
+    "en_keys": [
+      "Choose the distribution",
+      "Choose parameters",
+      "Calculate probabilities",
+      "Uniform",
+      "Uniform distribution",
+      "Exponential distribution",
+      "Geometric",
+      "Geometric distribution",
+      "Poisson",
+      "Poisson distribution",
+      "Chi-squared",
+      "Chi-squared distribution",
+      "Student's distribution",
+      "F distribution",
+      "n: Number of trials",
+      "p: Success probability",
+      "[a,b]: Interval",
+      "λ: Rate parameter",
+      "λ: Parameter",
+      "k: Degrees of freedom",
+      "d1: Degrees of freedom of the numerator",
+      "d2: Degrees of freedom of the denominator"
+    ],
+    "en_desc": "Probability app distributions (Binomial, Uniform, Exponential, Normal, Chi-squared, Geometric, Poisson, Student's t, Fisher F) and parameters.",
+    "ja_title": "確率分布と母数設定",
+    "ja_desc": "確率分布の種類と\nパラメータ(試行\n回数\nn、確率p、平均μ\n、\n標準偏差σ、自由\n度k\nなど)を設定して\n確率\nを計算します。"
+  },
+  "Solver_Items": {
+    "en_keys": [
+      "Add equation",
+      "Solve the equation",
+      "Solve the system",
+      "Use an equation template",
+      "Solution",
+      "Approximate solution",
+      "Search interval",
+      "Enter an equation"
+    ],
+    "en_desc": "Equations Solver: add equations (using '=' via G key or Shift+pi), solve algebraically or numerically on an interval.",
+    "ja_title": "方程式の入力と求解",
+    "ja_desc": "方程式(例:\nx^2-2=0)\nを追加し、下部ボ\nタン\n【Solve】で解き\nます\n複数式を入力する\nと\n連立方程式として\n求解します。"
+  },
+  "Atomic_Types": {
+    "en_keys": [
+      "Symbol",
+      "Protons",
+      "Neutrons",
+      "Type",
+      "Molar mass",
+      "Electronegativity",
+      "EC",
+      "Alkali metal",
+      "Alkaline earth metal",
+      "Lanthanide",
+      "Actinide",
+      "Transition metal",
+      "Post-transition metal",
+      "Metalloid",
+      "Halogen",
+      "Reactive non metal",
+      "Noble gas"
+    ],
+    "en_desc": "Element properties and chemical families in the Periodic Table.",
+    "ja_title": "元素の分類と特性",
+    "ja_desc": "・Protons: 陽子\n数(Z)\n・Neutrons: 中性\n子数\n・Molar mass: 原\n子量\n・\nElectronegativity:\n電気陰性度\n・EC: 電子配置"
+  },
+  "Python_Items": {
+    "en_keys": [
+      "Add a script",
+      "Python shell",
+      "Execute script",
+      "Script options",
+      "Auto import in shell",
+      "Autocomplete",
+      "Duplicate script",
+      "Delete script",
+      "Functions and variables",
+      "Catalog",
+      "Modules",
+      "Loops and tests",
+      "Files",
+      "Exceptions",
+      "Builtins and keywords",
+      "Imported modules and scripts"
+    ],
+    "en_desc": "Python script management, interactive shell, and code toolbox catalog.",
+    "ja_title": "Pythonスクリプト",
+    "ja_desc": "・Execute: 実行\n・Python shell:\n対話型シェル起動\n・Script\noptions:\n複製・削除・設定\n・F1: 構文カタロ\nグ"
+  },
+  "Common_Buttons": {
+    "en_keys": [
+      "Confirm",
+      "Cancel",
+      "Next"
+    ],
+    "en_desc": "Confirm (OK) or Cancel dialog action.",
+    "ja_title": "決定・キャンセル",
+    "ja_desc": "【Enter】で決定\n・\n実行します。"
+  },
+  "Elem_001_H": {
+    "en_keys": [
+      "Hydrogen",
+      "1 - Hydrogen (H)",
+      "H - Hydrogen (1)"
+    ],
+    "en_desc": "Element Hydrogen (H) - Atomic number 1.",
+    "ja_title": "水素",
+    "ja_desc": "原子番号: 1 (H)\n非金属 / 1族\n原子量: 1.008"
+  },
+  "Elem_002_He": {
+    "en_keys": [
+      "Helium",
+      "2 - Helium (He)",
+      "He - Helium (2)"
+    ],
+    "en_desc": "Element Helium (He) - Atomic number 2.",
+    "ja_title": "ヘリウム",
+    "ja_desc": "原子番号: 2 (He)\n貴ガス / 18族\n原子量: 4.0026"
+  },
+  "Elem_003_Li": {
+    "en_keys": [
+      "Lithium",
+      "3 - Lithium (Li)",
+      "Li - Lithium (3)"
+    ],
+    "en_desc": "Element Lithium (Li) - Atomic number 3.",
+    "ja_title": "リチウム",
+    "ja_desc": "原子番号: 3 (Li)\nアルカリ金属\n原子量: 6.94"
+  },
+  "Elem_004_Be": {
+    "en_keys": [
+      "Beryllium",
+      "4 - Beryllium (Be)",
+      "Be - Beryllium (4)"
+    ],
+    "en_desc": "Element Beryllium (Be) - Atomic number 4.",
+    "ja_title": "ベリリウム",
+    "ja_desc": "原子番号: 4 (Be)\nアルカリ土類金属\n原子量: 9.0122"
+  },
+  "Elem_005_B": {
+    "en_keys": [
+      "Boron",
+      "5 - Boron (B)",
+      "B - Boron (5)"
+    ],
+    "en_desc": "Element Boron (B) - Atomic number 5.",
+    "ja_title": "ホウ素",
+    "ja_desc": "原子番号: 5 (B)\n半金属 / 13族\n原子量: 10.81"
+  },
+  "Elem_006_C": {
+    "en_keys": [
+      "Carbon",
+      "6 - Carbon (C)",
+      "C - Carbon (6)"
+    ],
+    "en_desc": "Element Carbon (C) - Atomic number 6.",
+    "ja_title": "炭素",
+    "ja_desc": "原子番号: 6 (C)\n非金属 / 14族\n原子量: 12.011"
+  },
+  "Elem_007_N": {
+    "en_keys": [
+      "Nitrogen",
+      "7 - Nitrogen (N)",
+      "N - Nitrogen (7)"
+    ],
+    "en_desc": "Element Nitrogen (N) - Atomic number 7.",
+    "ja_title": "窒素",
+    "ja_desc": "原子番号: 7 (N)\n非金属 / 15族\n原子量: 14.007"
+  },
+  "Elem_008_O": {
+    "en_keys": [
+      "Oxygen",
+      "8 - Oxygen (O)",
+      "O - Oxygen (8)"
+    ],
+    "en_desc": "Element Oxygen (O) - Atomic number 8.",
+    "ja_title": "酸素",
+    "ja_desc": "原子番号: 8 (O)\n非金属 / 16族\n原子量: 15.999"
+  },
+  "Elem_009_F": {
+    "en_keys": [
+      "Fluorine",
+      "9 - Fluorine (F)",
+      "F - Fluorine (9)"
+    ],
+    "en_desc": "Element Fluorine (F) - Atomic number 9.",
+    "ja_title": "フッ素",
+    "ja_desc": "原子番号: 9 (F)\nハロゲン / 17族\n原子量: 18.998"
+  },
+  "Elem_010_Ne": {
+    "en_keys": [
+      "Neon",
+      "10 - Neon (Ne)",
+      "Ne - Neon (10)"
+    ],
+    "en_desc": "Element Neon (Ne) - Atomic number 10.",
+    "ja_title": "ネオン",
+    "ja_desc": "原子番号: 10\n(Ne)\n貴ガス / 18族\n原子量: 20.180"
+  },
+  "Elem_011_Na": {
+    "en_keys": [
+      "Sodium",
+      "11 - Sodium (Na)",
+      "Na - Sodium (11)"
+    ],
+    "en_desc": "Element Sodium (Na) - Atomic number 11.",
+    "ja_title": "ナトリウム",
+    "ja_desc": "原子番号: 11\n(Na)\nアルカリ金属\n原子量: 22.990"
+  },
+  "Elem_012_Mg": {
+    "en_keys": [
+      "Magnesium",
+      "12 - Magnesium (Mg)",
+      "Mg - Magnesium (12)"
+    ],
+    "en_desc": "Element Magnesium (Mg) - Atomic number 12.",
+    "ja_title": "マグネシウム",
+    "ja_desc": "原子番号: 12\n(Mg)\nアルカリ土類金属\n原子量: 24.305"
+  },
+  "Elem_013_Al": {
+    "en_keys": [
+      "Aluminium",
+      "13 - Aluminium (Al)",
+      "Al - Aluminium (13)"
+    ],
+    "en_desc": "Element Aluminium (Al) - Atomic number 13.",
+    "ja_title": "アルミニウム",
+    "ja_desc": "原子番号: 13\n(Al)\n典型金属 / 13族\n原子量: 26.982"
+  },
+  "Elem_014_Si": {
+    "en_keys": [
+      "Silicon",
+      "14 - Silicon (Si)",
+      "Si - Silicon (14)"
+    ],
+    "en_desc": "Element Silicon (Si) - Atomic number 14.",
+    "ja_title": "ケイ素",
+    "ja_desc": "原子番号: 14\n(Si)\n半金属 / 14族\n原子量: 28.085"
+  },
+  "Elem_015_P": {
+    "en_keys": [
+      "Phosphorus",
+      "15 - Phosphorus (P)",
+      "P - Phosphorus (15)"
+    ],
+    "en_desc": "Element Phosphorus (P) - Atomic number 15.",
+    "ja_title": "リン",
+    "ja_desc": "原子番号: 15 (P)\n非金属 / 15族\n原子量: 30.974"
+  },
+  "Elem_016_S": {
+    "en_keys": [
+      "Sulfur",
+      "16 - Sulfur (S)",
+      "S - Sulfur (16)"
+    ],
+    "en_desc": "Element Sulfur (S) - Atomic number 16.",
+    "ja_title": "硫黄",
+    "ja_desc": "原子番号: 16 (S)\n非金属 / 16族\n原子量: 32.06"
+  },
+  "Elem_017_Cl": {
+    "en_keys": [
+      "Chlorine",
+      "17 - Chlorine (Cl)",
+      "Cl - Chlorine (17)"
+    ],
+    "en_desc": "Element Chlorine (Cl) - Atomic number 17.",
+    "ja_title": "塩素",
+    "ja_desc": "原子番号: 17\n(Cl)\nハロゲン / 17族\n原子量: 35.45"
+  },
+  "Elem_018_Ar": {
+    "en_keys": [
+      "Argon",
+      "18 - Argon (Ar)",
+      "Ar - Argon (18)"
+    ],
+    "en_desc": "Element Argon (Ar) - Atomic number 18.",
+    "ja_title": "アルゴン",
+    "ja_desc": "原子番号: 18\n(Ar)\n貴ガス / 18族\n原子量: 39.948"
+  },
+  "Elem_019_K": {
+    "en_keys": [
+      "Potassium",
+      "19 - Potassium (K)",
+      "K - Potassium (19)"
+    ],
+    "en_desc": "Element Potassium (K) - Atomic number 19.",
+    "ja_title": "カリウム",
+    "ja_desc": "原子番号: 19 (K)\nアルカリ金属\n原子量: 39.098"
+  },
+  "Elem_020_Ca": {
+    "en_keys": [
+      "Calcium",
+      "20 - Calcium (Ca)",
+      "Ca - Calcium (20)"
+    ],
+    "en_desc": "Element Calcium (Ca) - Atomic number 20.",
+    "ja_title": "カルシウム",
+    "ja_desc": "原子番号: 20\n(Ca)\nアルカリ土類金属\n原子量: 40.078"
+  },
+  "Elem_021_Sc": {
+    "en_keys": [
+      "Scandium",
+      "21 - Scandium (Sc)",
+      "Sc - Scandium (21)"
+    ],
+    "en_desc": "Element Scandium (Sc) - Atomic number 21.",
+    "ja_title": "スカンジウム",
+    "ja_desc": "原子番号: 21\n(Sc)\n遷移金属 / 3族\n原子量: 44.956"
+  },
+  "Elem_022_Ti": {
+    "en_keys": [
+      "Titanium",
+      "22 - Titanium (Ti)",
+      "Ti - Titanium (22)"
+    ],
+    "en_desc": "Element Titanium (Ti) - Atomic number 22.",
+    "ja_title": "チタン",
+    "ja_desc": "原子番号: 22\n(Ti)\n遷移金属 / 4族\n原子量: 47.867"
+  },
+  "Elem_023_V": {
+    "en_keys": [
+      "Vanadium",
+      "23 - Vanadium (V)",
+      "V - Vanadium (23)"
+    ],
+    "en_desc": "Element Vanadium (V) - Atomic number 23.",
+    "ja_title": "バナジウム",
+    "ja_desc": "原子番号: 23 (V)\n遷移金属 / 5族\n原子量: 50.942"
+  },
+  "Elem_024_Cr": {
+    "en_keys": [
+      "Chromium",
+      "24 - Chromium (Cr)",
+      "Cr - Chromium (24)"
+    ],
+    "en_desc": "Element Chromium (Cr) - Atomic number 24.",
+    "ja_title": "クロム",
+    "ja_desc": "原子番号: 24\n(Cr)\n遷移金属 / 6族\n原子量: 51.996"
+  },
+  "Elem_025_Mn": {
+    "en_keys": [
+      "Manganese",
+      "25 - Manganese (Mn)",
+      "Mn - Manganese (25)"
+    ],
+    "en_desc": "Element Manganese (Mn) - Atomic number 25.",
+    "ja_title": "マンガン",
+    "ja_desc": "原子番号: 25\n(Mn)\n遷移金属 / 7族\n原子量: 54.938"
+  },
+  "Elem_026_Fe": {
+    "en_keys": [
+      "Iron",
+      "26 - Iron (Fe)",
+      "Fe - Iron (26)"
+    ],
+    "en_desc": "Element Iron (Fe) - Atomic number 26.",
+    "ja_title": "鉄 (Fe)",
+    "ja_desc": "原子番号: 26\n(Fe)\n遷移金属 / 8族\n原子量: 55.845"
+  },
+  "Elem_027_Co": {
+    "en_keys": [
+      "Cobalt",
+      "27 - Cobalt (Co)",
+      "Co - Cobalt (27)"
+    ],
+    "en_desc": "Element Cobalt (Co) - Atomic number 27.",
+    "ja_title": "コバルト",
+    "ja_desc": "原子番号: 27\n(Co)\n遷移金属 / 9族\n原子量: 58.933"
+  },
+  "Elem_028_Ni": {
+    "en_keys": [
+      "Nickel",
+      "28 - Nickel (Ni)",
+      "Ni - Nickel (28)"
+    ],
+    "en_desc": "Element Nickel (Ni) - Atomic number 28.",
+    "ja_title": "ニッケル",
+    "ja_desc": "原子番号: 28\n(Ni)\n遷移金属 / 10族\n原子量: 58.693"
+  },
+  "Elem_029_Cu": {
+    "en_keys": [
+      "Copper",
+      "29 - Copper (Cu)",
+      "Cu - Copper (29)"
+    ],
+    "en_desc": "Element Copper (Cu) - Atomic number 29.",
+    "ja_title": "銅 (Cu)",
+    "ja_desc": "原子番号: 29\n(Cu)\n遷移金属 / 11族\n原子量: 63.546"
+  },
+  "Elem_030_Zn": {
+    "en_keys": [
+      "Zinc",
+      "30 - Zinc (Zn)",
+      "Zn - Zinc (30)"
+    ],
+    "en_desc": "Element Zinc (Zn) - Atomic number 30.",
+    "ja_title": "亜鉛 (Zn)",
+    "ja_desc": "原子番号: 30\n(Zn)\n典型金属 / 12族\n原子量: 65.38"
+  },
+  "Elem_031_Ga": {
+    "en_keys": [
+      "Gallium",
+      "31 - Gallium (Ga)",
+      "Ga - Gallium (31)",
+      "Ga - Gallium (32)"
+    ],
+    "en_desc": "Element Gallium (Ga) - Atomic number 31.",
+    "ja_title": "ガリウム",
+    "ja_desc": "原子番号: 31\n(Ga)\n典型金属 / 13族\n原子量: 69.723"
+  },
+  "Elem_032_Ge": {
+    "en_keys": [
+      "Germanium",
+      "32 - Germanium (Ge)",
+      "Ge - Germanium (32)"
+    ],
+    "en_desc": "Element Germanium (Ge) - Atomic number 32.",
+    "ja_title": "ゲルマニウム",
+    "ja_desc": "原子番号: 32\n(Ge)\n半金属 / 14族\n原子量: 72.63"
+  },
+  "Elem_033_As": {
+    "en_keys": [
+      "Arsenic",
+      "33 - Arsenic (As)",
+      "As - Arsenic (33)"
+    ],
+    "en_desc": "Element Arsenic (As) - Atomic number 33.",
+    "ja_title": "ヒ素 (As)",
+    "ja_desc": "原子番号: 33\n(As)\n半金属 / 15族\n原子量: 74.922"
+  },
+  "Elem_034_Se": {
+    "en_keys": [
+      "Selenium",
+      "34 - Selenium (Se)",
+      "Se - Selenium (34)"
+    ],
+    "en_desc": "Element Selenium (Se) - Atomic number 34.",
+    "ja_title": "セレン",
+    "ja_desc": "原子番号: 34\n(Se)\n非金属 / 16族\n原子量: 78.971"
+  },
+  "Elem_035_Br": {
+    "en_keys": [
+      "Bromine",
+      "35 - Bromine (Br)",
+      "Br - Bromine (35)"
+    ],
+    "en_desc": "Element Bromine (Br) - Atomic number 35.",
+    "ja_title": "臭素 (Br)",
+    "ja_desc": "原子番号: 35\n(Br)\nハロゲン / 17族\n原子量: 79.904"
+  },
+  "Elem_036_Kr": {
+    "en_keys": [
+      "Krypton",
+      "36 - Krypton (Kr)",
+      "Kr - Krypton (36)"
+    ],
+    "en_desc": "Element Krypton (Kr) - Atomic number 36.",
+    "ja_title": "クリプトン",
+    "ja_desc": "原子番号: 36\n(Kr)\n貴ガス / 18族\n原子量: 83.798"
+  },
+  "Elem_037_Rb": {
+    "en_keys": [
+      "Rubidium",
+      "37 - Rubidium (Rb)",
+      "Rb - Rubidium (37)"
+    ],
+    "en_desc": "Element Rubidium (Rb) - Atomic number 37.",
+    "ja_title": "ルビジウム",
+    "ja_desc": "原子番号: 37\n(Rb)\nアルカリ金属\n原子量: 85.468"
+  },
+  "Elem_038_Sr": {
+    "en_keys": [
+      "Strontium",
+      "38 - Strontium (Sr)",
+      "Sr - Strontium (38)"
+    ],
+    "en_desc": "Element Strontium (Sr) - Atomic number 38.",
+    "ja_title": "ストロンチウム",
+    "ja_desc": "原子番号: 38\n(Sr)\nアルカリ土類金属\n原子量: 87.62"
+  },
+  "Elem_039_Y": {
+    "en_keys": [
+      "Yttrium",
+      "39 - Yttrium (Y)",
+      "Y - Yttrium (39)"
+    ],
+    "en_desc": "Element Yttrium (Y) - Atomic number 39.",
+    "ja_title": "イットリウム",
+    "ja_desc": "原子番号: 39 (Y)\n遷移金属 / 3族\n原子量: 88.906"
+  },
+  "Elem_040_Zr": {
+    "en_keys": [
+      "Zirconium",
+      "40 - Zirconium (Zr)",
+      "Zr - Zirconium (40)"
+    ],
+    "en_desc": "Element Zirconium (Zr) - Atomic number 40.",
+    "ja_title": "ジルコニウム",
+    "ja_desc": "原子番号: 40\n(Zr)\n遷移金属 / 4族\n原子量: 91.224"
+  },
+  "Elem_041_Nb": {
+    "en_keys": [
+      "Niobium",
+      "41 - Niobium (Nb)",
+      "Nb - Niobium (41)"
+    ],
+    "en_desc": "Element Niobium (Nb) - Atomic number 41.",
+    "ja_title": "ニオブ",
+    "ja_desc": "原子番号: 41\n(Nb)\n遷移金属 / 5族\n原子量: 92.906"
+  },
+  "Elem_042_Mo": {
+    "en_keys": [
+      "Molybdenum",
+      "42 - Molybdenum (Mo)",
+      "Mo - Molybdenum (42)"
+    ],
+    "en_desc": "Element Molybdenum (Mo) - Atomic number 42.",
+    "ja_title": "モリブデン",
+    "ja_desc": "原子番号: 42\n(Mo)\n遷移金属 / 6族\n原子量: 95.95"
+  },
+  "Elem_043_Tc": {
+    "en_keys": [
+      "Technetium",
+      "43 - Technetium (Tc)",
+      "Tc - Technetium (43)"
+    ],
+    "en_desc": "Element Technetium (Tc) - Atomic number 43.",
+    "ja_title": "テクネチウム",
+    "ja_desc": "原子番号: 43\n(Tc)\n遷移金属 / 7族\n原子量: 98"
+  },
+  "Elem_044_Ru": {
+    "en_keys": [
+      "Ruthenium",
+      "44 - Ruthenium (Ru)",
+      "Ru - Ruthenium (44)",
+      "Ruthemium"
+    ],
+    "en_desc": "Element Ruthenium (Ru) - Atomic number 44.",
+    "ja_title": "ルテニウム",
+    "ja_desc": "原子番号: 44\n(Ru)\n遷移金属 / 8族\n原子量: 101.07"
+  },
+  "Elem_045_Rh": {
+    "en_keys": [
+      "Rhodium",
+      "45 - Rhodium (Rh)",
+      "Rh - Rhodium (45)"
+    ],
+    "en_desc": "Element Rhodium (Rh) - Atomic number 45.",
+    "ja_title": "ロジウム",
+    "ja_desc": "原子番号: 45\n(Rh)\n遷移金属 / 9族\n原子量: 102.91"
+  },
+  "Elem_046_Pd": {
+    "en_keys": [
+      "Palladium",
+      "46 - Palladium (Pd)",
+      "Pd - Palladium (46)"
+    ],
+    "en_desc": "Element Palladium (Pd) - Atomic number 46.",
+    "ja_title": "パラジウム",
+    "ja_desc": "原子番号: 46\n(Pd)\n遷移金属 / 10族\n原子量: 106.42"
+  },
+  "Elem_047_Ag": {
+    "en_keys": [
+      "Silver",
+      "47 - Silver (Ag)",
+      "Ag - Silver (47)"
+    ],
+    "en_desc": "Element Silver (Ag) - Atomic number 47.",
+    "ja_title": "銀 (Ag)",
+    "ja_desc": "原子番号: 47\n(Ag)\n遷移金属 / 11族\n原子量: 107.87"
+  },
+  "Elem_048_Cd": {
+    "en_keys": [
+      "Cadmium",
+      "48 - Cadmium (Cd)",
+      "Cd - Cadmium (48)"
+    ],
+    "en_desc": "Element Cadmium (Cd) - Atomic number 48.",
+    "ja_title": "カドミウム",
+    "ja_desc": "原子番号: 48\n(Cd)\n典型金属 / 12族\n原子量: 112.41"
+  },
+  "Elem_049_In": {
+    "en_keys": [
+      "Indium",
+      "49 - Indium (In)",
+      "In - Indium (49)"
+    ],
+    "en_desc": "Element Indium (In) - Atomic number 49.",
+    "ja_title": "インジウム",
+    "ja_desc": "原子番号: 49\n(In)\n典型金属 / 13族\n原子量: 114.82"
+  },
+  "Elem_050_Sn": {
+    "en_keys": [
+      "Tin",
+      "50 - Tin (Sn)",
+      "Sn - Tin (50)"
+    ],
+    "en_desc": "Element Tin (Sn) - Atomic number 50.",
+    "ja_title": "スズ (Sn)",
+    "ja_desc": "原子番号: 50\n(Sn)\n典型金属 / 14族\n原子量: 118.71"
+  },
+  "Elem_051_Sb": {
+    "en_keys": [
+      "Antimony",
+      "51 - Antimony (Sb)",
+      "Sb - Antimony (51)"
+    ],
+    "en_desc": "Element Antimony (Sb) - Atomic number 51.",
+    "ja_title": "アンチモン",
+    "ja_desc": "原子番号: 51\n(Sb)\n半金属 / 15族\n原子量: 121.76"
+  },
+  "Elem_052_Te": {
+    "en_keys": [
+      "Tellurium",
+      "52 - Tellurium (Te)",
+      "Te - Tellurium (52)"
+    ],
+    "en_desc": "Element Tellurium (Te) - Atomic number 52.",
+    "ja_title": "テルル",
+    "ja_desc": "原子番号: 52\n(Te)\n半金属 / 16族\n原子量: 127.60"
+  },
+  "Elem_053_I": {
+    "en_keys": [
+      "Iodine",
+      "53 - Iodine (I)",
+      "I - Iodine (53)",
+      "Iodure"
+    ],
+    "en_desc": "Element Iodine (I) - Atomic number 53.",
+    "ja_title": "ヨウ素 (I)",
+    "ja_desc": "原子番号: 53 (I)\nハロゲン / 17族\n原子量: 126.90"
+  },
+  "Elem_054_Xe": {
+    "en_keys": [
+      "Xenon",
+      "54 - Xenon (Xe)",
+      "Xe - Xenon (54)"
+    ],
+    "en_desc": "Element Xenon (Xe) - Atomic number 54.",
+    "ja_title": "キセノン",
+    "ja_desc": "原子番号: 54\n(Xe)\n貴ガス / 18族\n原子量: 131.29"
+  },
+  "Elem_055_Cs": {
+    "en_keys": [
+      "Caesium",
+      "55 - Caesium (Cs)",
+      "Cs - Caesium (55)",
+      "Cesium",
+      "55 - Cesium (Cs)",
+      "Cs - Cesium (55)"
+    ],
+    "en_desc": "Element Caesium (Cs) - Atomic number 55.",
+    "ja_title": "セシウム",
+    "ja_desc": "原子番号: 55\n(Cs)\nアルカリ金属\n原子量: 132.91"
+  },
+  "Elem_056_Ba": {
+    "en_keys": [
+      "Barium",
+      "56 - Barium (Ba)",
+      "Ba - Barium (56)"
+    ],
+    "en_desc": "Element Barium (Ba) - Atomic number 56.",
+    "ja_title": "バリウム",
+    "ja_desc": "原子番号: 56\n(Ba)\nアルカリ土類金属\n原子量: 137.33"
+  },
+  "Elem_057_La": {
+    "en_keys": [
+      "Lanthanum",
+      "57 - Lanthanum (La)",
+      "La - Lanthanum (57)"
+    ],
+    "en_desc": "Element Lanthanum (La) - Atomic number 57.",
+    "ja_title": "ランタン",
+    "ja_desc": "原子番号: 57\n(La)\nランタノイド\n原子量: 138.91"
+  },
+  "Elem_058_Ce": {
+    "en_keys": [
+      "Cerium",
+      "58 - Cerium (Ce)",
+      "Ce - Cerium (58)"
+    ],
+    "en_desc": "Element Cerium (Ce) - Atomic number 58.",
+    "ja_title": "セリウム",
+    "ja_desc": "原子番号: 58\n(Ce)\nランタノイド\n原子量: 140.12"
+  },
+  "Elem_059_Pr": {
+    "en_keys": [
+      "Praseodymium",
+      "59 - Praseodymium (Pr)",
+      "Pr - Praseodymium (59)"
+    ],
+    "en_desc": "Element Praseodymium (Pr) - Atomic number 59.",
+    "ja_title": "プラセオジム",
+    "ja_desc": "原子番号: 59\n(Pr)\nランタノイド\n原子量: 140.91"
+  },
+  "Elem_060_Nd": {
+    "en_keys": [
+      "Neodymium",
+      "60 - Neodymium (Nd)",
+      "Nd - Neodymium (60)"
+    ],
+    "en_desc": "Element Neodymium (Nd) - Atomic number 60.",
+    "ja_title": "ネオジム",
+    "ja_desc": "原子番号: 60\n(Nd)\nランタノイド\n原子量: 144.24"
+  },
+  "Elem_061_Pm": {
+    "en_keys": [
+      "Promethium",
+      "61 - Promethium (Pm)",
+      "Pm - Promethium (61)"
+    ],
+    "en_desc": "Element Promethium (Pm) - Atomic number 61.",
+    "ja_title": "プロメチウム",
+    "ja_desc": "原子番号: 61\n(Pm)\nランタノイド\n原子量: 145"
+  },
+  "Elem_062_Sm": {
+    "en_keys": [
+      "Samarium",
+      "62 - Samarium (Sm)",
+      "Sm - Samarium (62)"
+    ],
+    "en_desc": "Element Samarium (Sm) - Atomic number 62.",
+    "ja_title": "サマリウム",
+    "ja_desc": "原子番号: 62\n(Sm)\nランタノイド\n原子量: 150.36"
+  },
+  "Elem_063_Eu": {
+    "en_keys": [
+      "Europium",
+      "63 - Europium (Eu)",
+      "Eu - Europium (63)"
+    ],
+    "en_desc": "Element Europium (Eu) - Atomic number 63.",
+    "ja_title": "ユウロピウム",
+    "ja_desc": "原子番号: 63\n(Eu)\nランタノイド\n原子量: 151.96"
+  },
+  "Elem_064_Gd": {
+    "en_keys": [
+      "Gadolinium",
+      "64 - Gadolinium (Gd)",
+      "Gd - Gadolinium (64)"
+    ],
+    "en_desc": "Element Gadolinium (Gd) - Atomic number 64.",
+    "ja_title": "ガドリニウム",
+    "ja_desc": "原子番号: 64\n(Gd)\nランタノイド\n原子量: 157.25"
+  },
+  "Elem_065_Tb": {
+    "en_keys": [
+      "Terbium",
+      "65 - Terbium (Tb)",
+      "Tb - Terbium (65)"
+    ],
+    "en_desc": "Element Terbium (Tb) - Atomic number 65.",
+    "ja_title": "テルビウム",
+    "ja_desc": "原子番号: 65\n(Tb)\nランタノイド\n原子量: 158.93"
+  },
+  "Elem_066_Dy": {
+    "en_keys": [
+      "Dysprosium",
+      "66 - Dysprosium (Dy)",
+      "Dy - Dysprosium (66)",
+      "Dyxprosium"
+    ],
+    "en_desc": "Element Dysprosium (Dy) - Atomic number 66.",
+    "ja_title": "ジスプロシウム",
+    "ja_desc": "原子番号: 66\n(Dy)\nランタノイド\n原子量: 162.50"
+  },
+  "Elem_067_Ho": {
+    "en_keys": [
+      "Holmium",
+      "67 - Holmium (Ho)",
+      "Ho - Holmium (67)"
+    ],
+    "en_desc": "Element Holmium (Ho) - Atomic number 67.",
+    "ja_title": "ホルミウム",
+    "ja_desc": "原子番号: 67\n(Ho)\nランタノイド\n原子量: 164.93"
+  },
+  "Elem_068_Er": {
+    "en_keys": [
+      "Erbium",
+      "68 - Erbium (Er)",
+      "Er - Erbium (68)"
+    ],
+    "en_desc": "Element Erbium (Er) - Atomic number 68.",
+    "ja_title": "エルビウム",
+    "ja_desc": "原子番号: 68\n(Er)\nランタノイド\n原子量: 167.26"
+  },
+  "Elem_069_Tm": {
+    "en_keys": [
+      "Thulium",
+      "69 - Thulium (Tm)",
+      "Tm - Thulium (69)"
+    ],
+    "en_desc": "Element Thulium (Tm) - Atomic number 69.",
+    "ja_title": "ツリウム",
+    "ja_desc": "原子番号: 69\n(Tm)\nランタノイド\n原子量: 168.93"
+  },
+  "Elem_070_Yb": {
+    "en_keys": [
+      "Ytterbium",
+      "70 - Ytterbium (Yb)",
+      "Yb - Ytterbium (70)"
+    ],
+    "en_desc": "Element Ytterbium (Yb) - Atomic number 70.",
+    "ja_title": "イッテルビウム",
+    "ja_desc": "原子番号: 70\n(Yb)\nランタノイド\n原子量: 173.05"
+  },
+  "Elem_071_Lu": {
+    "en_keys": [
+      "Lutetium",
+      "71 - Lutetium (Lu)",
+      "Lu - Lutetium (71)",
+      "Lutecium",
+      "71 - Lutecium (Lu)",
+      "Lu - Lutecium (71)"
+    ],
+    "en_desc": "Element Lutetium (Lu) - Atomic number 71.",
+    "ja_title": "ルテチウム",
+    "ja_desc": "原子番号: 71\n(Lu)\nランタノイド\n原子量: 174.97"
+  },
+  "Elem_072_Hf": {
+    "en_keys": [
+      "Hafnium",
+      "72 - Hafnium (Hf)",
+      "Hf - Hafnium (72)"
+    ],
+    "en_desc": "Element Hafnium (Hf) - Atomic number 72.",
+    "ja_title": "ハフニウム",
+    "ja_desc": "原子番号: 72\n(Hf)\n遷移金属 / 4族\n原子量: 178.49"
+  },
+  "Elem_073_Ta": {
+    "en_keys": [
+      "Tantalum",
+      "73 - Tantalum (Ta)",
+      "Ta - Tantalum (73)"
+    ],
+    "en_desc": "Element Tantalum (Ta) - Atomic number 73.",
+    "ja_title": "タンタル",
+    "ja_desc": "原子番号: 73\n(Ta)\n遷移金属 / 5族\n原子量: 180.95"
+  },
+  "Elem_074_W": {
+    "en_keys": [
+      "Tungsten",
+      "74 - Tungsten (W)",
+      "W - Tungsten (74)"
+    ],
+    "en_desc": "Element Tungsten (W) - Atomic number 74.",
+    "ja_title": "タングステン",
+    "ja_desc": "原子番号: 74 (W)\n遷移金属 / 6族\n原子量: 183.84"
+  },
+  "Elem_075_Re": {
+    "en_keys": [
+      "Rhenium",
+      "75 - Rhenium (Re)",
+      "Re - Rhenium (75)"
+    ],
+    "en_desc": "Element Rhenium (Re) - Atomic number 75.",
+    "ja_title": "レニウム",
+    "ja_desc": "原子番号: 75\n(Re)\n遷移金属 / 7族\n原子量: 186.21"
+  },
+  "Elem_076_Os": {
+    "en_keys": [
+      "Osmium",
+      "76 - Osmium (Os)",
+      "Os - Osmium (76)"
+    ],
+    "en_desc": "Element Osmium (Os) - Atomic number 76.",
+    "ja_title": "オスミウム",
+    "ja_desc": "原子番号: 76\n(Os)\n遷移金属 / 8族\n原子量: 190.23"
+  },
+  "Elem_077_Ir": {
+    "en_keys": [
+      "Iridium",
+      "77 - Iridium (Ir)",
+      "Ir - Iridium (77)"
+    ],
+    "en_desc": "Element Iridium (Ir) - Atomic number 77.",
+    "ja_title": "イリジウム",
+    "ja_desc": "原子番号: 77\n(Ir)\n遷移金属 / 9族\n原子量: 192.22"
+  },
+  "Elem_078_Pt": {
+    "en_keys": [
+      "Platinum",
+      "78 - Platinum (Pt)",
+      "Pt - Platinum (78)"
+    ],
+    "en_desc": "Element Platinum (Pt) - Atomic number 78.",
+    "ja_title": "白金 (Pt)",
+    "ja_desc": "原子番号: 78\n(Pt)\n遷移金属 / 10族\n原子量: 195.08"
+  },
+  "Elem_079_Au": {
+    "en_keys": [
+      "Gold",
+      "79 - Gold (Au)",
+      "Au - Gold (79)"
+    ],
+    "en_desc": "Element Gold (Au) - Atomic number 79.",
+    "ja_title": "金 (Au)",
+    "ja_desc": "原子番号: 79\n(Au)\n遷移金属 / 11族\n原子量: 196.97"
+  },
+  "Elem_080_Hg": {
+    "en_keys": [
+      "Mercury",
+      "80 - Mercury (Hg)",
+      "Hg - Mercury (80)"
+    ],
+    "en_desc": "Element Mercury (Hg) - Atomic number 80.",
+    "ja_title": "水銀 (Hg)",
+    "ja_desc": "原子番号: 80\n(Hg)\n典型金属 / 12族\n原子量: 200.59"
+  },
+  "Elem_081_Tl": {
+    "en_keys": [
+      "Thallium",
+      "81 - Thallium (Tl)",
+      "Tl - Thallium (81)",
+      "Thalium"
+    ],
+    "en_desc": "Element Thallium (Tl) - Atomic number 81.",
+    "ja_title": "タリウム",
+    "ja_desc": "原子番号: 81\n(Tl)\n典型金属 / 13族\n原子量: 204.38"
+  },
+  "Elem_082_Pb": {
+    "en_keys": [
+      "Lead",
+      "82 - Lead (Pb)",
+      "Pb - Lead (82)"
+    ],
+    "en_desc": "Element Lead (Pb) - Atomic number 82.",
+    "ja_title": "鉛 (Pb)",
+    "ja_desc": "原子番号: 82\n(Pb)\n典型金属 / 14族\n原子量: 207.2"
+  },
+  "Elem_083_Bi": {
+    "en_keys": [
+      "Bismuth",
+      "83 - Bismuth (Bi)",
+      "Bi - Bismuth (83)"
+    ],
+    "en_desc": "Element Bismuth (Bi) - Atomic number 83.",
+    "ja_title": "ビスマス",
+    "ja_desc": "原子番号: 83\n(Bi)\n典型金属 / 15族\n原子量: 208.98"
+  },
+  "Elem_084_Po": {
+    "en_keys": [
+      "Polonium",
+      "84 - Polonium (Po)",
+      "Po - Polonium (84)"
+    ],
+    "en_desc": "Element Polonium (Po) - Atomic number 84.",
+    "ja_title": "ポロニウム",
+    "ja_desc": "原子番号: 84\n(Po)\n典型金属 / 16族\n原子量: 209"
+  },
+  "Elem_085_At": {
+    "en_keys": [
+      "Astatine",
+      "85 - Astatine (At)",
+      "At - Astatine (85)"
+    ],
+    "en_desc": "Element Astatine (At) - Atomic number 85.",
+    "ja_title": "アスタチン",
+    "ja_desc": "原子番号: 85\n(At)\nハロゲン / 17族\n原子量: 210"
+  },
+  "Elem_086_Rn": {
+    "en_keys": [
+      "Radon",
+      "86 - Radon (Rn)",
+      "Rn - Radon (86)"
+    ],
+    "en_desc": "Element Radon (Rn) - Atomic number 86.",
+    "ja_title": "ラドン",
+    "ja_desc": "原子番号: 86\n(Rn)\n貴ガス / 18族\n原子量: 222"
+  },
+  "Elem_087_Fr": {
+    "en_keys": [
+      "Francium",
+      "87 - Francium (Fr)",
+      "Fr - Francium (87)",
+      "Fr - Francium (223)"
+    ],
+    "en_desc": "Element Francium (Fr) - Atomic number 87.",
+    "ja_title": "フランシウム",
+    "ja_desc": "原子番号: 87\n(Fr)\nアルカリ金属\n原子量: 223"
+  },
+  "Elem_088_Ra": {
+    "en_keys": [
+      "Radium",
+      "88 - Radium (Ra)",
+      "Ra - Radium (88)"
+    ],
+    "en_desc": "Element Radium (Ra) - Atomic number 88.",
+    "ja_title": "ラジウム",
+    "ja_desc": "原子番号: 88\n(Ra)\nアルカリ土類金属\n原子量: 226"
+  },
+  "Elem_089_Ac": {
+    "en_keys": [
+      "Actinium",
+      "89 - Actinium (Ac)",
+      "Ac - Actinium (89)"
+    ],
+    "en_desc": "Element Actinium (Ac) - Atomic number 89.",
+    "ja_title": "アクチニウム",
+    "ja_desc": "原子番号: 89\n(Ac)\nアクチノイド\n原子量: 227"
+  },
+  "Elem_090_Th": {
+    "en_keys": [
+      "Thorium",
+      "90 - Thorium (Th)",
+      "Th - Thorium (90)"
+    ],
+    "en_desc": "Element Thorium (Th) - Atomic number 90.",
+    "ja_title": "トリウム",
+    "ja_desc": "原子番号: 90\n(Th)\nアクチノイド\n原子量: 232.04"
+  },
+  "Elem_091_Pa": {
+    "en_keys": [
+      "Protactinium",
+      "91 - Protactinium (Pa)",
+      "Pa - Protactinium (91)"
+    ],
+    "en_desc": "Element Protactinium (Pa) - Atomic number 91.",
+    "ja_title": "プロトアクチニウム",
+    "ja_desc": "原子番号: 91\n(Pa)\nアクチノイド\n原子量: 231.04"
+  },
+  "Elem_092_U": {
+    "en_keys": [
+      "Uranium",
+      "92 - Uranium (U)",
+      "U - Uranium (92)"
+    ],
+    "en_desc": "Element Uranium (U) - Atomic number 92.",
+    "ja_title": "ウラン (U)",
+    "ja_desc": "原子番号: 92 (U)\nアクチノイド\n原子量: 238.03"
+  },
+  "Elem_093_Np": {
+    "en_keys": [
+      "Neptunium",
+      "93 - Neptunium (Np)",
+      "Np - Neptunium (93)"
+    ],
+    "en_desc": "Element Neptunium (Np) - Atomic number 93.",
+    "ja_title": "ネプツニウム",
+    "ja_desc": "原子番号: 93\n(Np)\nアクチノイド\n原子量: 237"
+  },
+  "Elem_094_Pu": {
+    "en_keys": [
+      "Plutonium",
+      "94 - Plutonium (Pu)",
+      "Pu - Plutonium (94)"
+    ],
+    "en_desc": "Element Plutonium (Pu) - Atomic number 94.",
+    "ja_title": "プルトニウム",
+    "ja_desc": "原子番号: 94\n(Pu)\nアクチノイド\n原子量: 244"
+  },
+  "Elem_095_Am": {
+    "en_keys": [
+      "Americium",
+      "95 - Americium (Am)",
+      "Am - Americium (95)"
+    ],
+    "en_desc": "Element Americium (Am) - Atomic number 95.",
+    "ja_title": "アメリシウム",
+    "ja_desc": "原子番号: 95\n(Am)\nアクチノイド\n原子量: 243"
+  },
+  "Elem_096_Cm": {
+    "en_keys": [
+      "Curium",
+      "96 - Curium (Cm)",
+      "Cm - Curium (96)"
+    ],
+    "en_desc": "Element Curium (Cm) - Atomic number 96.",
+    "ja_title": "キュリウム",
+    "ja_desc": "原子番号: 96\n(Cm)\nアクチノイド\n原子量: 247"
+  },
+  "Elem_097_Bk": {
+    "en_keys": [
+      "Berkelium",
+      "97 - Berkelium (Bk)",
+      "Bk - Berkelium (97)"
+    ],
+    "en_desc": "Element Berkelium (Bk) - Atomic number 97.",
+    "ja_title": "バークリウム",
+    "ja_desc": "原子番号: 97\n(Bk)\nアクチノイド\n原子量: 247"
+  },
+  "Elem_098_Cf": {
+    "en_keys": [
+      "Californium",
+      "98 - Californium (Cf)",
+      "Cf - Californium (98)"
+    ],
+    "en_desc": "Element Californium (Cf) - Atomic number 98.",
+    "ja_title": "カリホルニウム",
+    "ja_desc": "原子番号: 98\n(Cf)\nアクチノイド\n原子量: 251"
+  },
+  "Elem_099_Es": {
+    "en_keys": [
+      "Einsteinium",
+      "99 - Einsteinium (Es)",
+      "Es - Einsteinium (99)"
+    ],
+    "en_desc": "Element Einsteinium (Es) - Atomic number 99.",
+    "ja_title": "アインスタイニウム",
+    "ja_desc": "原子番号: 99\n(Es)\nアクチノイド\n原子量: 252"
+  },
+  "Elem_100_Fm": {
+    "en_keys": [
+      "Fermium",
+      "100 - Fermium (Fm)",
+      "Fm - Fermium (100)"
+    ],
+    "en_desc": "Element Fermium (Fm) - Atomic number 100.",
+    "ja_title": "フェルミウム",
+    "ja_desc": "原子番号: 100\n(Fm)\nアクチノイド\n原子量: 257"
+  },
+  "Elem_101_Md": {
+    "en_keys": [
+      "Mendelevium",
+      "101 - Mendelevium (Md)",
+      "Md - Mendelevium (101)"
+    ],
+    "en_desc": "Element Mendelevium (Md) - Atomic number 101.",
+    "ja_title": "メンデレビウム",
+    "ja_desc": "原子番号: 101\n(Md)\nアクチノイド\n原子量: 258"
+  },
+  "Elem_102_No": {
+    "en_keys": [
+      "Nobelium",
+      "102 - Nobelium (No)",
+      "No - Nobelium (102)"
+    ],
+    "en_desc": "Element Nobelium (No) - Atomic number 102.",
+    "ja_title": "ノーベリウム",
+    "ja_desc": "原子番号: 102\n(No)\nアクチノイド\n原子量: 259"
+  },
+  "Elem_103_Lr": {
+    "en_keys": [
+      "Lawrencium",
+      "103 - Lawrencium (Lr)",
+      "Lr - Lawrencium (103)"
+    ],
+    "en_desc": "Element Lawrencium (Lr) - Atomic number 103.",
+    "ja_title": "ローレンシウム",
+    "ja_desc": "原子番号: 103\n(Lr)\nアクチノイド\n原子量: 266"
+  },
+  "Elem_104_Rf": {
+    "en_keys": [
+      "Rutherfordium",
+      "104 - Rutherfordium (Rf)",
+      "Rf - Rutherfordium (104)"
+    ],
+    "en_desc": "Element Rutherfordium (Rf) - Atomic number 104.",
+    "ja_title": "ラザホージウム",
+    "ja_desc": "原子番号: 104\n(Rf)\n遷移金属 / 4族\n原子量: 267"
+  },
+  "Elem_105_Db": {
+    "en_keys": [
+      "Dubnium",
+      "105 - Dubnium (Db)",
+      "Db - Dubnium (105)"
+    ],
+    "en_desc": "Element Dubnium (Db) - Atomic number 105.",
+    "ja_title": "ドブニウム",
+    "ja_desc": "原子番号: 105\n(Db)\n遷移金属 / 5族\n原子量: 268"
+  },
+  "Elem_106_Sg": {
+    "en_keys": [
+      "Seaborgium",
+      "106 - Seaborgium (Sg)",
+      "Sg - Seaborgium (106)"
+    ],
+    "en_desc": "Element Seaborgium (Sg) - Atomic number 106.",
+    "ja_title": "シーボーギウム",
+    "ja_desc": "原子番号: 106\n(Sg)\n遷移金属 / 6族\n原子量: 269"
+  },
+  "Elem_107_Bh": {
+    "en_keys": [
+      "Bohrium",
+      "107 - Bohrium (Bh)",
+      "Bh - Bohrium (107)"
+    ],
+    "en_desc": "Element Bohrium (Bh) - Atomic number 107.",
+    "ja_title": "ボーリウム",
+    "ja_desc": "原子番号: 107\n(Bh)\n遷移金属 / 7族\n原子量: 270"
+  },
+  "Elem_108_Hs": {
+    "en_keys": [
+      "Hassium",
+      "108 - Hassium (Hs)",
+      "Hs - Hassium (108)"
+    ],
+    "en_desc": "Element Hassium (Hs) - Atomic number 108.",
+    "ja_title": "ハッシウム",
+    "ja_desc": "原子番号: 108\n(Hs)\n遷移金属 / 8族\n原子量: 277"
+  },
+  "Elem_109_Mt": {
+    "en_keys": [
+      "Meitnerium",
+      "109 - Meitnerium (Mt)",
+      "Mt - Meitnerium (109)"
+    ],
+    "en_desc": "Element Meitnerium (Mt) - Atomic number 109.",
+    "ja_title": "マイトネリウム",
+    "ja_desc": "原子番号: 109\n(Mt)\n9族元素\n原子量: 278"
+  },
+  "Elem_110_Ds": {
+    "en_keys": [
+      "Darmstadtium",
+      "110 - Darmstadtium (Ds)",
+      "Ds - Darmstadtium (110)"
+    ],
+    "en_desc": "Element Darmstadtium (Ds) - Atomic number 110.",
+    "ja_title": "ダルムスタチウム",
+    "ja_desc": "原子番号: 110\n(Ds)\n10族元素\n原子量: 281"
+  },
+  "Elem_111_Rg": {
+    "en_keys": [
+      "Roentgenium",
+      "111 - Roentgenium (Rg)",
+      "Rg - Roentgenium (111)"
+    ],
+    "en_desc": "Element Roentgenium (Rg) - Atomic number 111.",
+    "ja_title": "レントゲニウム",
+    "ja_desc": "原子番号: 111\n(Rg)\n11族元素\n原子量: 282"
+  },
+  "Elem_112_Cn": {
+    "en_keys": [
+      "Copernicium",
+      "112 - Copernicium (Cn)",
+      "Cn - Copernicium (112)"
+    ],
+    "en_desc": "Element Copernicium (Cn) - Atomic number 112.",
+    "ja_title": "コペルニシウム",
+    "ja_desc": "原子番号: 112\n(Cn)\n12族元素\n原子量: 285"
+  },
+  "Elem_113_Nh": {
+    "en_keys": [
+      "Nihonium",
+      "113 - Nihonium (Nh)",
+      "Nh - Nihonium (113)"
+    ],
+    "en_desc": "Element Nihonium (Nh) - Atomic number 113.",
+    "ja_title": "ニホニウム",
+    "ja_desc": "原子番号: 113\n(Nh)\n13族 / 日本発見\n原子量: 286"
+  },
+  "Elem_114_Fl": {
+    "en_keys": [
+      "Flerovium",
+      "114 - Flerovium (Fl)",
+      "Fl - Flerovium (114)"
+    ],
+    "en_desc": "Element Flerovium (Fl) - Atomic number 114.",
+    "ja_title": "フレロビウム",
+    "ja_desc": "原子番号: 114\n(Fl)\n14族元素\n原子量: 289"
+  },
+  "Elem_115_Mc": {
+    "en_keys": [
+      "Moscovium",
+      "115 - Moscovium (Mc)",
+      "Mc - Moscovium (115)"
+    ],
+    "en_desc": "Element Moscovium (Mc) - Atomic number 115.",
+    "ja_title": "モスコビウム",
+    "ja_desc": "原子番号: 115\n(Mc)\n15族元素\n原子量: 289"
+  },
+  "Elem_116_Lv": {
+    "en_keys": [
+      "Livermorium",
+      "116 - Livermorium (Lv)",
+      "Lv - Livermorium (116)"
+    ],
+    "en_desc": "Element Livermorium (Lv) - Atomic number 116.",
+    "ja_title": "リバモリウム",
+    "ja_desc": "原子番号: 116\n(Lv)\n16族元素\n原子量: 293"
+  },
+  "Elem_117_Ts": {
+    "en_keys": [
+      "Tennessine",
+      "117 - Tennessine (Ts)",
+      "Ts - Tennessine (117)"
+    ],
+    "en_desc": "Element Tennessine (Ts) - Atomic number 117.",
+    "ja_title": "テネシン",
+    "ja_desc": "原子番号: 117\n(Ts)\n17族元素\n原子量: 294"
+  },
+  "Elem_118_Og": {
+    "en_keys": [
+      "Oganesson",
+      "118 - Oganesson (Og)",
+      "Og - Oganesson (118)"
+    ],
+    "en_desc": "Element Oganesson (Og) - Atomic number 118.",
+    "ja_title": "オガネソン",
+    "ja_desc": "原子番号: 118\n(Og)\n18族元素\n原子量: 294"
+  }
+}

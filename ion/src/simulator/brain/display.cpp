@@ -11,6 +11,7 @@
 
 #include "display.h"
 #include "framebuffer.h"
+#include "help_data.h"
 #include "keyboard.h"
 #include "main.h"
 #include <ion/display.h>
@@ -23,7 +24,7 @@ namespace Simulator {
 namespace Display {
 
 static constexpr const wchar_t * kWindowClassName = L"BrainCalcWinCEClass";
-static constexpr const wchar_t * kWindowTitle = L"BrainCalc (SHARP Brain 800x480)";
+static constexpr const wchar_t * kWindowTitle = L"Lilium (SHARP Brain 800x480)";
 
 static HWND sHwnd = NULL;
 static HDC sMemDC = NULL;
@@ -41,6 +42,10 @@ static int sDirtyMinY = 0;
 static int sDirtyMaxX = Ion::Display::Width;
 static int sDirtyMaxY = Ion::Display::Height;
 static bool sSidebarDirty = true;
+
+// Japanese Help Display state (Strictly integer index only - no pointers held)
+static int sCurrentHelpIndex = -1;
+static bool sHelpReady = false;
 
 static inline uint32_t rgb565ToRgb888(uint16_t c) {
   uint32_t r = (c >> 11) & 0x1F;
@@ -214,6 +219,148 @@ static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec g
   }
 }
 
+static inline int wcharUnitWidth(wchar_t ch) {
+  return (ch >= 0x0020 && ch <= 0x007E) ? 1 : 2;
+}
+
+static inline bool isFormulaChar(wchar_t ch) {
+  return (ch >= 0x0021 && ch <= 0x007E) ||
+         ch == L'°' || ch == L'μ' || ch == L'σ' || ch == L'θ' || ch == L'π' || ch == L'λ';
+}
+
+static inline bool hasJapaneseChars(const wchar_t * str, int len) {
+  for (int i = 0; i < len; i++) {
+    wchar_t c = str[i];
+    if ((c >= 0x3000 && c <= 0x30FF) ||
+        (c >= 0x4E00 && c <= 0x9FFF) ||
+        (c >= 0xFF00 && c <= 0xFFEF)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static int drawSingleHelpLine(HDC hdc, int x, int y, int maxW, int maxY, const wchar_t * lineBuf, int lineLen) {
+  if (lineLen <= 0) {
+    return y + 7;
+  }
+  if (y + 16 > maxY) {
+    return y;
+  }
+
+  wchar_t temp[96];
+  if (lineLen > 94) lineLen = 94;
+  wmemcpy(temp, lineBuf, lineLen);
+  temp[lineLen] = L'\0';
+
+  int unitW = 0;
+  for (int i = 0; i < lineLen; i++) {
+    unitW += wcharUnitWidth(temp[i]);
+  }
+
+  bool isHeader = (temp[0] == L'【' || temp[0] == L'■');
+  COLORREF textColor = isHeader ? RGB(22, 116, 104) : RGB(42, 50, 60);
+
+  SelectObject(hdc, sUiFontSmall);
+  SIZE sz = { 0, 0 };
+  GetTextExtentPoint32W(hdc, temp, lineLen, &sz);
+
+  // If the line is a long formula (> 16 half-width units or > maxW pixels),
+  // draw with 8-dot tiny font so the formula is never cut in the middle
+  if (unitW > 16 || sz.cx > maxW) {
+    SelectObject(hdc, sUiFontTiny);
+    drawTextLine(hdc, x, y + 1, maxW + 4, 14, textColor, temp, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    return y + 15;
+  }
+
+  drawTextLine(hdc, x, y, maxW + 4, 18, textColor, temp, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  return y + 18;
+}
+
+static void drawWrappedHelpDesc(HDC hdc, int x, int startY, int maxW, int maxY, const wchar_t * desc) {
+  if (!desc) {
+    return;
+  }
+  int curY = startY;
+  const wchar_t * p = desc;
+
+  while (*p != L'\0' && curY + 14 <= maxY) {
+    const wchar_t * nl = wcschr(p, L'\n');
+    int rawLen = nl ? static_cast<int>(nl - p) : static_cast<int>(wcslen(p));
+
+    if (rawLen == 0) {
+      curY += 7;
+    } else {
+      int totalUnits = 0;
+      for (int i = 0; i < rawLen; i++) {
+        totalUnits += wcharUnitWidth(p[i]);
+      }
+
+      // If <= 8 full-width (16 half-width) units, or pure formula line, draw directly without splitting
+      if (totalUnits <= 16 || !hasJapaneseChars(p, rawLen)) {
+        curY = drawSingleHelpLine(hdc, x, curY, maxW, maxY, p, rawLen);
+      } else {
+        // Smart wrap at 16 half-width units (8 full-width chars), keeping formula tokens intact
+        int pos = 0;
+        wchar_t outBuf[64];
+        int outLen = 0;
+        int outUnits = 0;
+
+        while (pos < rawLen && curY + 14 <= maxY) {
+          int tokStart = pos;
+          int tokLen = 0;
+          int tokUnits = 0;
+
+          if (isFormulaChar(p[pos])) {
+            while (pos < rawLen && isFormulaChar(p[pos])) {
+              tokUnits += wcharUnitWidth(p[pos]);
+              tokLen++;
+              pos++;
+            }
+          } else {
+            tokUnits = wcharUnitWidth(p[pos]);
+            tokLen = 1;
+            pos++;
+          }
+
+          if (outLen == 0 && tokLen == 1 && p[tokStart] == L' ') {
+            continue;
+          }
+
+          if (outUnits + tokUnits <= 16) {
+            if (outLen + tokLen < 62) {
+              wmemcpy(outBuf + outLen, p + tokStart, tokLen);
+              outLen += tokLen;
+              outUnits += tokUnits;
+            }
+          } else {
+            if (outLen > 0) {
+              curY = drawSingleHelpLine(hdc, x, curY, maxW, maxY, outBuf, outLen);
+              outLen = 0;
+              outUnits = 0;
+            }
+            if (tokUnits > 16) {
+              curY = drawSingleHelpLine(hdc, x, curY, maxW, maxY, p + tokStart, tokLen);
+            } else if (tokLen < 62) {
+              wmemcpy(outBuf, p + tokStart, tokLen);
+              outLen = tokLen;
+              outUnits = tokUnits;
+            }
+          }
+        }
+        if (outLen > 0 && curY + 14 <= maxY) {
+          curY = drawSingleHelpLine(hdc, x, curY, maxW, maxY, outBuf, outLen);
+        }
+      }
+    }
+
+    if (!nl) {
+      break;
+    }
+    p = nl + 1;
+  }
+}
+
 static void renderRightSidebar(HDC hdc) {
   // Clear right sidebar area (X = 640..799, Y = 0..479) with #EDF1F5 in 32-bit DIB buffer
   for (int y = 0; y < kBrainScreenHeight; y++) {
@@ -231,11 +378,6 @@ static void renderRightSidebar(HDC hdc) {
   const int sw = kSidebarWidth - 12; // 148
   Keyboard::InputMode mode = Keyboard::currentInputMode();
 
-  // ===========================================================================
-  // 1. モード表示ボックス (Y = 6..60)
-  // ===========================================================================
-  drawBox(hdc, sx, 6, sw, 54, RGB(255, 255, 255), RGB(180, 208, 203));
-
   const wchar_t * modeTitle = L"モード: 12x";
   COLORREF modeColor = RGB(24, 128, 116);
   const wchar_t * modeHint = L"F2:切替   Ent:EXE";
@@ -250,34 +392,81 @@ static void renderRightSidebar(HDC hdc) {
     modeHint = L"F2:切替   Ent:OK";
   }
 
-  SelectObject(hdc, sUiFontBold);
-  drawTextLine(hdc, sx + 4, 9, sw - 8, 22, modeColor, modeTitle);
+  if (sCurrentHelpIndex >= 0 && sCurrentHelpIndex < kHelpEntriesCount) {
+    // =========================================================================
+    // A. 日本語ヘルプ表示モード (メニュー・設定・関数検索・ホーム画面等)
+    // =========================================================================
+    const HelpEntry & entry = kHelpEntries[sCurrentHelpIndex];
 
-  SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx + 4, 33, sw - 8, 22, RGB(65, 74, 86), modeHint);
+    // 1. 上部コンパクトモード枠 (Y = 6..50)
+    drawBox(hdc, sx, 6, sw, 44, RGB(255, 255, 255), RGB(180, 208, 203));
+    SelectObject(hdc, sUiFontBold);
+    drawTextLine(hdc, sx + 4, 8, sw - 8, 20, modeColor, modeTitle);
+    SelectObject(hdc, sUiFontTiny);
+    drawTextLine(hdc, sx + 4, 30, sw - 8, 16, RGB(75, 86, 98), L"[F1]:関数  [F9]:変数  [F2]:切替");
 
-  // ===========================================================================
-  // 2. 特殊キー（銀色キー）ヒント枠 (Y = 66..136)
-  // ===========================================================================
-  drawBox(hdc, sx, 66, sw, 70, RGB(255, 255, 255), RGB(196, 204, 214));
-  SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx + 4, 70,  sw - 8, 20, RGB(45, 52, 62), L"F1:関数   F9:変数");
-  drawTextLine(hdc, sx + 4, 91,  sw - 8, 20, RGB(65, 74, 86), L"F10/HOME: ホーム");
-  drawTextLine(hdc, sx + 4, 112, sw - 8, 20, RGB(45, 52, 62), L"PgUp:(    PgDn:)");
+    // 2. 日本語ヘルプカード枠 (Y = 56..426, H = 370)
+    drawBox(hdc, sx, 56, sw, 370, RGB(255, 255, 255), RGB(150, 206, 198));
 
-  // ===========================================================================
-  // 3. 左手側キー 5列×3段グリッド (Y = 142..276)
-  // ===========================================================================
-  SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx, 142, sw, 18, RGB(38, 115, 104), L"■左手側 (Q-T/A-G)");
-  drawKeyGridBlock(hdc, sx, 163, kLeftHandGrid, mode);
+    // ヘッダーバナー (#4fbfaf テーマ調和)
+    drawBox(hdc, sx, 56, sw, 34, RGB(226, 245, 242), RGB(150, 206, 198));
+    RECT rcAccent = { sx + 1, 57, sx + sw - 1, 60 };
+    HBRUSH hAccentBrush = CreateSolidBrush(RGB(79, 191, 175));
+    FillRect(hdc, &rcAccent, hAccentBrush);
+    DeleteObject(hAccentBrush);
 
-  // ===========================================================================
-  // 4. 右手側キー 5列×3段グリッド (Y = 282..416)
-  // ===========================================================================
-  SelectObject(hdc, sUiFontSmall);
-  drawTextLine(hdc, sx, 282, sw, 18, RGB(38, 115, 104), L"■右手側 (Y-P/H-L)");
-  drawKeyGridBlock(hdc, sx, 303, kRightHandGrid, mode);
+    // タイトル描画 (8全角文字以内)
+    SelectObject(hdc, sUiFontBold);
+    SIZE titleSz = { 0, 0 };
+    GetTextExtentPoint32W(hdc, entry.jaTitle, static_cast<int>(wcslen(entry.jaTitle)), &titleSz);
+    if (titleSz.cx > sw - 8) {
+      SelectObject(hdc, sUiFontTiny);
+    }
+    drawTextLine(hdc, sx + 4, 60, sw - 8, 28, RGB(20, 82, 74),
+                 entry.jaTitle, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+    // 解説本文 (1行全角8文字/半角16文字、数式途中切断防止)
+    drawWrappedHelpDesc(hdc, sx + 8, 96, sw - 16, 392, entry.jaDesc);
+
+    // 下部操作ガイドフッター (8ドットフォント)
+    drawBox(hdc, sx, 394, sw, 32, RGB(240, 247, 245), RGB(150, 206, 198));
+    SelectObject(hdc, sUiFontTiny);
+    drawTextLine(hdc, sx + 4, 396, sw - 8, 13, RGB(58, 92, 86),
+                 L"[Enter]:決定/挿入  [Back]:戻る",
+                 DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    drawTextLine(hdc, sx + 4, 410, sw - 8, 13, RGB(95, 110, 120),
+                 L"[矢印]:項目選択    [F10]:HOME",
+                 DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  } else {
+    // =========================================================================
+    // B. 通常モード: 数値・数式入力用 キーボード操作チートシート
+    // =========================================================================
+    // 1. モード表示ボックス (Y = 6..60)
+    drawBox(hdc, sx, 6, sw, 54, RGB(255, 255, 255), RGB(180, 208, 203));
+
+    SelectObject(hdc, sUiFontBold);
+    drawTextLine(hdc, sx + 4, 9, sw - 8, 22, modeColor, modeTitle);
+
+    SelectObject(hdc, sUiFontSmall);
+    drawTextLine(hdc, sx + 4, 33, sw - 8, 22, RGB(65, 74, 86), modeHint);
+
+    // 2. 特殊キー（銀色キー）ヒント枠 (Y = 66..136)
+    drawBox(hdc, sx, 66, sw, 70, RGB(255, 255, 255), RGB(196, 204, 214));
+    SelectObject(hdc, sUiFontSmall);
+    drawTextLine(hdc, sx + 4, 70,  sw - 8, 20, RGB(45, 52, 62), L"F1:関数   F9:変数");
+    drawTextLine(hdc, sx + 4, 91,  sw - 8, 20, RGB(65, 74, 86), L"F10/HOME: ホーム");
+    drawTextLine(hdc, sx + 4, 112, sw - 8, 20, RGB(45, 52, 62), L"PgUp:(    PgDn:)");
+
+    // 3. 左手側キー 5列×3段グリッド (Y = 142..276)
+    SelectObject(hdc, sUiFontSmall);
+    drawTextLine(hdc, sx, 142, sw, 18, RGB(38, 115, 104), L"■左手側 (Q-T/A-G)");
+    drawKeyGridBlock(hdc, sx, 163, kLeftHandGrid, mode);
+
+    // 4. 右手側キー 5列×3段グリッド (Y = 282..416)
+    SelectObject(hdc, sUiFontSmall);
+    drawTextLine(hdc, sx, 282, sw, 18, RGB(38, 115, 104), L"■右手側 (Y-P/H-L)");
+    drawKeyGridBlock(hdc, sx, 303, kRightHandGrid, mode);
+  }
 
   // ===========================================================================
   // 5. 最下部「終了」ボタン (Y = 434..472) - 控えめなフラットボタン
@@ -700,6 +889,8 @@ void init() {
 
   ShowWindow(sHwnd, SW_SHOW);
   UpdateWindow(sHwnd);
+
+  sHelpReady = true;
 }
 
 void draw() {
@@ -730,7 +921,7 @@ void draw() {
     }
   }
 
-  // 2. 右側サイドバー領域: モード切替時のみ再描画 & 等倍 BitBlt
+  // 2. 右側サイドバー領域: モード切替時またはヘルプ変化時のみ再描画 & 等倍 BitBlt
   if (sSidebarDirty) {
     sSidebarDirty = false;
     renderRightSidebar(sMemDC);
@@ -764,6 +955,8 @@ void draw() {
 }
 
 void quit() {
+  sHelpReady = false;
+  sCurrentHelpIndex = -1;
   if (sUiFontBold) {
     DeleteObject(sUiFontBold);
     sUiFontBold = NULL;
@@ -799,6 +992,36 @@ HWND windowHandle() {
   return sHwnd;
 }
 
+bool isHelpReady() {
+  return sHelpReady;
+}
+
+void setCurrentHelpIndex(int index) {
+  if (sCurrentHelpIndex != index) {
+    sCurrentHelpIndex = index;
+    sSidebarDirty = true;
+    Simulator::Main::setNeedsRefresh();
+  }
+}
+
 }
 }
+}
+
+extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText) {
+  if (!Ion::Simulator::Display::isHelpReady()) {
+    return;
+  }
+  int idx = Ion::Simulator::Display::findHelpEntryIndex(mainText);
+  if (idx < 0 && subText != nullptr) {
+    idx = Ion::Simulator::Display::findHelpEntryIndex(subText);
+  }
+  Ion::Simulator::Display::setCurrentHelpIndex(idx);
+}
+
+extern "C" void BrainClearHelp() {
+  if (!Ion::Simulator::Display::isHelpReady()) {
+    return;
+  }
+  Ion::Simulator::Display::setCurrentHelpIndex(-1);
 }

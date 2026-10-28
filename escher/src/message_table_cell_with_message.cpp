@@ -2,6 +2,8 @@
 #include <escher/palette.h>
 #include <string.h>
 
+extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText);
+
 template <class T>
 MessageTableCellWithMessage<T>::MessageTableCellWithMessage(I18n::Message message, TableCell::Layout layout) :
   MessageTableCell<T>(message, KDFont::SmallFont, layout),
@@ -15,6 +17,9 @@ MessageTableCellWithMessage<T>::MessageTableCellWithMessage(I18n::Message messag
 template <class T>
 void MessageTableCellWithMessage<T>::setAccessoryMessage(I18n::Message textBody) {
   m_accessoryView.setMessage(textBody);
+  if (this->isHighlighted()) {
+    BrainNotifyHelpText(static_cast<const T *>(this->labelView())->text(), m_accessoryView.text());
+  }
   this->reloadCell();
 }
 
@@ -31,6 +36,9 @@ void MessageTableCellWithMessage<T>::setHighlighted(bool highlight) {
   MessageTableCell<T>::setHighlighted(highlight);
   KDColor backgroundColor = this->isHighlighted()? Palette::ListCellBackgroundSelected : Palette::ListCellBackground;
   m_accessoryView.setBackgroundColor(backgroundColor);
+  if (highlight) {
+    BrainNotifyHelpText(static_cast<const T *>(this->labelView())->text(), m_accessoryView.text());
+  }
 }
 
 template <class T>

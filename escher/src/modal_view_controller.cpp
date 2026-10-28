@@ -2,6 +2,8 @@
 #include <escher/container.h>
 #include <assert.h>
 
+extern "C" void BrainClearHelp();
+
 ModalViewController::ContentView::ContentView() :
   View(),
   m_regularView(nullptr),
@@ -133,6 +135,7 @@ void ModalViewController::reloadModalViewController() {
 }
 
 void ModalViewController::dismissModalViewController(bool willExitApp) {
+  BrainClearHelp();
   m_currentModalViewController->viewDidDisappear();
   if (!willExitApp) {
     Container::activeApp()->setFirstResponder(m_previousResponder);

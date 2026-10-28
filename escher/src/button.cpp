@@ -2,6 +2,8 @@
 #include <escher/palette.h>
 #include <assert.h>
 
+extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText);
+
 Button::Button(Responder * parentResponder, I18n::Message textBody, Invocation invocation, const KDFont * font, KDColor textColor) :
   HighlightCell(),
   Responder(parentResponder),
@@ -13,6 +15,9 @@ Button::Button(Responder * parentResponder, I18n::Message textBody, Invocation i
 
 void Button::setMessage(I18n::Message message) {
   m_messageTextView.setMessage(message);
+  if (isHighlighted()) {
+    BrainNotifyHelpText(m_messageTextView.text(), nullptr);
+  }
 }
 
 int Button::numberOfSubviews() const {
@@ -40,6 +45,9 @@ void Button::setHighlighted(bool highlight) {
   HighlightCell::setHighlighted(highlight);
   KDColor backgroundColor = highlight? highlightedBackgroundColor() : Palette::ButtonBackground;
   m_messageTextView.setBackgroundColor(backgroundColor);
+  if (highlight) {
+    BrainNotifyHelpText(m_messageTextView.text(), nullptr);
+  }
   markRectAsDirty(bounds());
 }
 

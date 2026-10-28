@@ -2,6 +2,8 @@
 #include <escher/palette.h>
 #include <assert.h>
 
+extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText);
+
 ExpressionTableCellWithPointer::ExpressionTableCellWithPointer(Responder * parentResponder, I18n::Message accessoryMessage, Layout layout) :
   ExpressionTableCell(parentResponder, layout),
   m_accessoryView(KDFont::SmallFont, accessoryMessage, 0.0f, 0.5f, Palette::SecondaryText, Palette::ListCellBackground)
@@ -19,8 +21,14 @@ void ExpressionTableCellWithPointer::setHighlighted(bool highlight) {
   ExpressionTableCell::setHighlighted(highlight);
   KDColor backgroundColor = highlight? Palette::ListCellBackgroundSelected : Palette::ListCellBackground;
   m_accessoryView.setBackgroundColor(backgroundColor);
+  if (highlight) {
+    BrainNotifyHelpText(m_accessoryView.text(), nullptr);
+  }
 }
 
 void ExpressionTableCellWithPointer::setAccessoryMessage(I18n::Message text) {
   m_accessoryView.setMessage(text);
+  if (isHighlighted()) {
+    BrainNotifyHelpText(m_accessoryView.text(), nullptr);
+  }
 }
