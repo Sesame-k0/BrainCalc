@@ -12,6 +12,9 @@
 
 extern "C" {
 #include <assert.h>
+void BrainLog(const char * step);
+void BrainLogText(const char * step, const char * detail);
+void BrainLogInt(const char * step, int value);
 }
 
 using namespace Poincare;
@@ -331,7 +334,11 @@ bool AppsContainer::switchTo(App::Snapshot * snapshot) {
     m_window.hideTitleBarView(false);
   }
   if (snapshot) {
+    const char * appTitle = I18n::translate(snapshot->descriptor()->upperName());
+    BrainLogText("AppsContainer::switchTo target", appTitle);
     m_window.setTitle(snapshot->descriptor()->upperName());
+  } else {
+    BrainLog("AppsContainer::switchTo nullptr");
   }
   return Container::switchTo(snapshot);
 }

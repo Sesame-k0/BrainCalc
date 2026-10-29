@@ -2,6 +2,11 @@
 #include "../app.h"
 #include <algorithm>
 
+extern "C" {
+void BrainLog(const char * step);
+void BrainLogInt(const char * step, int value);
+}
+
 using namespace Poincare;
 using namespace Shared;
 
@@ -26,6 +31,7 @@ I18n::Message GraphController::emptyMessage() {
 }
 
 void GraphController::viewWillAppear() {
+  BrainLog("GraphController::viewWillAppear: start");
   m_view.drawTangent(false);
 #ifdef GRAPH_CURSOR_SPEEDUP
   m_cursorView.resetMemoization();
@@ -33,6 +39,7 @@ void GraphController::viewWillAppear() {
   m_view.setCursorView(&m_cursorView);
   FunctionGraphController::viewWillAppear();
   selectFunctionWithCursor(indexFunctionSelectedByCursor());
+  BrainLog("GraphController::viewWillAppear: done");
 }
 
 bool GraphController::defaultRangeIsNormalized() const {

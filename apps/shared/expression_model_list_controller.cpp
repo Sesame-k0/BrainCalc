@@ -3,6 +3,12 @@
 #include <poincare/symbol.h>
 #include <algorithm>
 
+extern "C" {
+void BrainLog(const char * step);
+void BrainLogText(const char * step, const char * detail);
+void BrainLogInt(const char * step, int value);
+}
+
 namespace Shared {
 
 /* Table Data Source */
@@ -205,14 +211,18 @@ bool ExpressionModelListController::handleEventOnExpression(Ion::Events::Event e
   return false;
 }
 void ExpressionModelListController::addEmptyModel() {
+  BrainLog("ExpressionModelListController::addEmptyModel: start");
   Ion::Storage::Record::ErrorStatus error = modelStore()->addEmptyModel();
   if (error == Ion::Storage::Record::ErrorStatus::NotEnoughSpaceAvailable) {
+    BrainLog("ExpressionModelListController::addEmptyModel: NotEnoughSpaceAvailable");
     return;
   }
   assert(error == Ion::Storage::Record::ErrorStatus::None);
   didChangeModelsList();
   selectableTableView()->reloadData();
+  BrainLog("ExpressionModelListController::addEmptyModel: calling editExpression");
   editExpression(Ion::Events::OK);
+  BrainLog("ExpressionModelListController::addEmptyModel: done");
 }
 
 void ExpressionModelListController::reinitSelectedExpression(ExpiringPointer<ExpressionModelHandle> model) {
@@ -244,12 +254,15 @@ void ExpressionModelListController::editExpression(Ion::Events::Event event) {
 }
 
 bool ExpressionModelListController::editSelectedRecordWithText(const char * text) {
+  BrainLogText("ExpressionModelListController::editSelectedRecordWithText: start", text);
   telemetryReportEvent("Edit", text);
   // Reset memoization of the selected cell which always corresponds to the k_memoizedCellsCount/2 memoized cell
   resetMemoizationForIndex(k_memoizedCellsCount/2);
   Ion::Storage::Record record = modelStore()->recordAtIndex(modelIndexForRow(selectedRow()));
   ExpiringPointer<ExpressionModelHandle> model = modelStore()->modelForRecord(record);
-  return (model->setContent(text, Container::activeApp()->localContext()) == Ion::Storage::Record::ErrorStatus::None);
+  bool ok = (model->setContent(text, Container::activeApp()->localContext()) == Ion::Storage::Record::ErrorStatus::None);
+  BrainLogInt("ExpressionModelListController::editSelectedRecordWithText: done", ok ? 1 : 0);
+  return ok;
 }
 
 bool ExpressionModelListController::removeModelRow(Ion::Storage::Record record) {

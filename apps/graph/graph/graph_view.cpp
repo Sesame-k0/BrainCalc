@@ -3,6 +3,11 @@
 #include <assert.h>
 #include <algorithm>
 
+extern "C" {
+void BrainLog(const char * step);
+void BrainLogInt(const char * step, int value);
+}
+
 using namespace Shared;
 
 namespace Graph {
@@ -23,9 +28,11 @@ void GraphView::reload() {
 }
 
 void GraphView::drawRect(KDContext * ctx, KDRect rect) const {
+  BrainLog("GraphView::drawRect: start");
   FunctionGraphView::drawRect(ctx, rect);
   ContinuousFunctionStore * functionStore = App::app()->functionStore();
   const int activeFunctionsCount = functionStore->numberOfActiveFunctions();
+  BrainLogInt("GraphView::drawRect: activeFunctionsCount", activeFunctionsCount);
   for (int i = 0; i < activeFunctionsCount ; i++) {
     Ion::Storage::Record record = functionStore->activeRecordAtIndex(i);
     ExpiringPointer<ContinuousFunction> f = functionStore->modelForRecord(record);

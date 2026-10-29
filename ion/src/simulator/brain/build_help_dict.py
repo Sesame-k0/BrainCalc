@@ -104,13 +104,58 @@ def wrap_line_8fw(line, max_units=16):
     return out_lines if out_lines else [""]
 
 
-def format_ja_desc(desc, max_units=16):
-    """Formats a multi-line Japanese description according to the 8-full-width rule."""
-    raw_lines = desc.split("\n")
-    formatted = []
-    for rl in raw_lines:
-        formatted.extend(wrap_line_8fw(rl, max_units=max_units))
-    return "\n".join(formatted)
+def is_standalone_line(s):
+    """
+    Returns True if line `s` is a standalone item (bullet, section header,
+    key:value pair, or pure formula) that should not be merged with adjacent lines.
+    """
+    if not s:
+        return True
+    if is_formula_line(s):
+        return True
+    if s.startswith(("・", "※", "■", "◆")):
+        return True
+    if s.startswith("【") and s.endswith("】"):
+        return True
+    if ":" in s or "：" in s:
+        return True
+    return False
+
+
+def format_ja_desc(desc, max_units=None):
+    """
+    Normalizes a Japanese description by joining artificial mid-sentence line breaks
+    while preserving intentional paragraph, bullet, header, and formula breaks.
+    Actual pixel-width line wrapping is performed dynamically by display.cpp based on
+    the text box width.
+    """
+    raw_lines = [rl.strip() for rl in desc.split("\n") if rl.strip()]
+    if not raw_lines:
+        return ""
+
+    paragraphs = [raw_lines[0]]
+    for line in raw_lines[1:]:
+        prev = paragraphs[-1]
+        # Keep separate line if previous ended a sentence, or either is a standalone line,
+        # or if `line` starts with 【...】 shortcut and `prev` is NOT mid-clause
+        prev_continues = prev.endswith(("、", "に", "で", "を", "の", "が", "は", "と", "や", "へ", "て", "し"))
+        line_is_shortcut = line.startswith("【") and not prev_continues and not line.endswith(("、", "に", "で", "を", "の", "が", "は", "と"))
+        prev_is_shortcut = prev.startswith("【") and not prev.endswith(("。", "、", "に", "で", "を", "の", "が", "は", "と"))
+        if (
+            prev.endswith(("。", "！", "？"))
+            or is_standalone_line(prev)
+            or is_standalone_line(line)
+            or line_is_shortcut
+            or prev_is_shortcut
+        ):
+            paragraphs.append(line)
+        else:
+            if prev[-1].isascii() and line[0].isascii():
+                paragraphs[-1] = prev + " " + line
+            else:
+                paragraphs[-1] = prev + line
+
+    return "\n".join(paragraphs)
 
 
 RAW_HELP_ENTRIES = [

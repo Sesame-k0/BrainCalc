@@ -28,8 +28,6 @@ void TabViewCell::setSelected(bool selected) {
   m_selected = selected;
   if (selected && m_controller != nullptr) {
     BrainNotifyHelpText(m_controller->title(), nullptr);
-  } else if (!selected) {
-    BrainClearHelp();
   }
   markRectAsDirty(bounds());
 }

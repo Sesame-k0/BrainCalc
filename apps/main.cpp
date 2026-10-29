@@ -1,6 +1,7 @@
 #include "apps_container.h"
 #if TARGET_BRAIN
 #include "../ion/src/simulator/brain/main.h"
+#include "../ion/src/simulator/brain/logger.h"
 #endif
 #include "global_preferences.h"
 #include <poincare/init.h>
@@ -101,7 +102,11 @@ void ion_main(int argc, const char * const argv[]) {
   Ion::updateSlotInfo();
 
 #if TARGET_BRAIN
+  BrainLog("ion_main: initializing AppsContainer::sharedAppsContainer");
+  AppsContainer::sharedAppsContainer();
+  BrainLog("ion_main: calling restoreBrainState");
   Ion::Simulator::Main::restoreBrainState();
+  BrainLog("ion_main: starting AppsContainer::run");
 #endif
 
   AppsContainer::sharedAppsContainer()->run();

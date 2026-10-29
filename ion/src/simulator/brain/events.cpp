@@ -1,5 +1,6 @@
 #include "keyboard.h"
 #include "main.h"
+#include "logger.h"
 #include <ion/events.h>
 
 namespace Ion {
@@ -28,7 +29,9 @@ Event getPlatformEvent() {
     return Termination;
   }
   Event e = Simulator::Keyboard::popPendingEvent();
-  if (e == None) {
+  if (e != None) {
+    BrainLogInt("Events::getPlatformEvent -> dispatching event", (int)(uint8_t)e);
+  } else {
     // キュー内のイベントをすべて処理し終えたタイミングで差分画面更新を実行
     Simulator::Main::refresh();
   }

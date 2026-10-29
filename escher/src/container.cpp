@@ -1,6 +1,11 @@
 #include <escher/container.h>
 #include <assert.h>
 
+extern "C" {
+void BrainLog(const char * step);
+void BrainClearHelp();
+}
+
 Container::Container() :
   RunLoop()
 {
@@ -25,16 +30,24 @@ bool Container::switchTo(App::Snapshot * snapshot) {
     return false;
   }
   if (s_activeApp) {
+    BrainLog("Container::switchTo: willBecomeInactive");
     s_activeApp->willBecomeInactive();
+    BrainLog("Container::switchTo: pack");
     s_activeApp->snapshot()->pack(s_activeApp);
     s_activeApp = nullptr;
   }
+  BrainClearHelp();
   if (snapshot) {
+    BrainLog("Container::switchTo: unpack start");
     s_activeApp = snapshot->unpack(this);
+    BrainLog("Container::switchTo: unpack done");
   }
   if (s_activeApp) {
+    BrainLog("Container::switchTo: didBecomeActive start");
     s_activeApp->didBecomeActive(window());
+    BrainLog("Container::switchTo: didBecomeActive done, redraw start");
     window()->redraw();
+    BrainLog("Container::switchTo: redraw done");
   }
   return true;
 }

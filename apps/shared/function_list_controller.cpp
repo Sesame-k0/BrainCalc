@@ -3,6 +3,11 @@
 #include "function_expression_cell.h"
 #include <algorithm>
 
+extern "C" {
+void BrainLog(const char * step);
+void BrainLogInt2(const char * step, int v1, int v2);
+}
+
 namespace Shared {
 
 constexpr KDCoordinate FunctionListController::k_minTitleColumnWidth;
@@ -147,6 +152,7 @@ Button * FunctionListController::buttonAtIndex(int index, ButtonRowController::P
 /* Responder */
 
 void FunctionListController::didBecomeFirstResponder() {
+  BrainLog("FunctionListController::didBecomeFirstResponder: start");
   if (selectedRow() == -1) {
     selectCellAtLocation(1, 0);
   } else {
@@ -157,6 +163,7 @@ void FunctionListController::didBecomeFirstResponder() {
   }
   footer()->setSelectedButton(-1);
   Container::activeApp()->setFirstResponder(selectableTableView());
+  BrainLog("FunctionListController::didBecomeFirstResponder: done");
 }
 
 bool FunctionListController::handleEvent(Ion::Events::Event event) {

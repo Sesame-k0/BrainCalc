@@ -13,6 +13,7 @@
 #include "framebuffer.h"
 #include "help_data.h"
 #include "keyboard.h"
+#include "logger.h"
 #include "main.h"
 #include <ion/display.h>
 #include <kandinsky/color.h>
@@ -219,13 +220,26 @@ static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec g
   }
 }
 
-static inline int wcharUnitWidth(wchar_t ch) {
-  return (ch >= 0x0020 && ch <= 0x007E) ? 1 : 2;
-}
-
 static inline bool isFormulaChar(wchar_t ch) {
   return (ch >= 0x0021 && ch <= 0x007E) ||
          ch == L'°' || ch == L'μ' || ch == L'σ' || ch == L'θ' || ch == L'π' || ch == L'λ';
+}
+
+static inline bool isKinsokuTailChar(wchar_t ch) {
+  switch (ch) {
+    case L'。': case L'、': case L'，': case L'．':
+    case L'）': case L')':  case L'】': case L']':
+    case L'」': case L'』': case L'：': case L':':
+    case L'；': case L';':  case L'！': case L'!':
+    case L'？': case L'?':  case L'ー':
+    case L'ぁ': case L'ぃ': case L'ぅ': case L'ぇ': case L'ぉ':
+    case L'っ': case L'ゃ': case L'ゅ': case L'ょ': case L'ゎ':
+    case L'ァ': case L'ィ': case L'ゥ': case L'ェ': case L'ォ':
+    case L'ッ': case L'ャ': case L'ュ': case L'ョ': case L'ヮ':
+      return true;
+    default:
+      return false;
+  }
 }
 
 static inline bool hasJapaneseChars(const wchar_t * str, int len) {
@@ -253,11 +267,6 @@ static int drawSingleHelpLine(HDC hdc, int x, int y, int maxW, int maxY, const w
   wmemcpy(temp, lineBuf, lineLen);
   temp[lineLen] = L'\0';
 
-  int unitW = 0;
-  for (int i = 0; i < lineLen; i++) {
-    unitW += wcharUnitWidth(temp[i]);
-  }
-
   bool isHeader = (temp[0] == L'【' || temp[0] == L'■');
   COLORREF textColor = isHeader ? RGB(22, 116, 104) : RGB(42, 50, 60);
 
@@ -265,9 +274,9 @@ static int drawSingleHelpLine(HDC hdc, int x, int y, int maxW, int maxY, const w
   SIZE sz = { 0, 0 };
   GetTextExtentPoint32W(hdc, temp, lineLen, &sz);
 
-  // If the line is a long formula (> 16 half-width units or > maxW pixels),
+  // If the line is a long formula that exceeds maxW pixels,
   // draw with 8-dot tiny font so the formula is never cut in the middle
-  if (unitW > 16 || sz.cx > maxW) {
+  if (sz.cx > maxW + 2) {
     SelectObject(hdc, sUiFontTiny);
     drawTextLine(hdc, x, y + 1, maxW + 4, 14, textColor, temp, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     return y + 15;
@@ -290,36 +299,50 @@ static void drawWrappedHelpDesc(HDC hdc, int x, int startY, int maxW, int maxY, 
 
     if (rawLen == 0) {
       curY += 7;
+    } else if (!hasJapaneseChars(p, rawLen)) {
+      // Pure formula line: draw directly without splitting
+      curY = drawSingleHelpLine(hdc, x, curY, maxW, maxY, p, rawLen);
     } else {
-      int totalUnits = 0;
-      for (int i = 0; i < rawLen; i++) {
-        totalUnits += wcharUnitWidth(p[i]);
-      }
+      SelectObject(hdc, sUiFontSmall);
+      SIZE fullSz = { 0, 0 };
+      GetTextExtentPoint32W(hdc, p, rawLen, &fullSz);
 
-      // If <= 8 full-width (16 half-width) units, or pure formula line, draw directly without splitting
-      if (totalUnits <= 16 || !hasJapaneseChars(p, rawLen)) {
+      // If the entire paragraph already fits within the text box width, draw without wrapping
+      if (fullSz.cx <= maxW) {
         curY = drawSingleHelpLine(hdc, x, curY, maxW, maxY, p, rawLen);
       } else {
-        // Smart wrap at 16 half-width units (8 full-width chars), keeping formula tokens intact
+        // Wrap based on actual pixel width (maxW), keeping formula/bracket tokens intact
+        // and binding kinsoku punctuation so 1-char lines never appear.
         int pos = 0;
         wchar_t outBuf[64];
         int outLen = 0;
-        int outUnits = 0;
 
         while (pos < rawLen && curY + 14 <= maxY) {
           int tokStart = pos;
           int tokLen = 0;
-          int tokUnits = 0;
 
-          if (isFormulaChar(p[pos])) {
+          if (p[pos] == L'【') {
+            while (pos < rawLen && p[pos] != L'】' && tokLen < 12) {
+              tokLen++;
+              pos++;
+            }
+            if (pos < rawLen && p[pos] == L'】') {
+              tokLen++;
+              pos++;
+            }
+          } else if (isFormulaChar(p[pos])) {
             while (pos < rawLen && isFormulaChar(p[pos])) {
-              tokUnits += wcharUnitWidth(p[pos]);
               tokLen++;
               pos++;
             }
           } else {
-            tokUnits = wcharUnitWidth(p[pos]);
             tokLen = 1;
+            pos++;
+          }
+
+          // Bind trailing kinsoku characters (e.g. 。、）】ーっゃゅょ) to this token
+          while (pos < rawLen && isKinsokuTailChar(p[pos]) && tokLen < 16) {
+            tokLen++;
             pos++;
           }
 
@@ -327,24 +350,43 @@ static void drawWrappedHelpDesc(HDC hdc, int x, int startY, int maxW, int maxY, 
             continue;
           }
 
-          if (outUnits + tokUnits <= 16) {
-            if (outLen + tokLen < 62) {
-              wmemcpy(outBuf + outLen, p + tokStart, tokLen);
-              outLen += tokLen;
-              outUnits += tokUnits;
-            }
+          int candLen = outLen + tokLen;
+          bool fits = false;
+          if (candLen < 62) {
+            wmemcpy(outBuf + outLen, p + tokStart, tokLen);
+            SelectObject(hdc, sUiFontSmall);
+            SIZE candSz = { 0, 0 };
+            GetTextExtentPoint32W(hdc, outBuf, candLen, &candSz);
+            fits = (candSz.cx <= maxW);
+          }
+
+          if (fits) {
+            outLen = candLen;
           } else {
             if (outLen > 0) {
+              // Prevent a 1-character orphan on the very last line of a paragraph
+              if (pos >= rawLen && tokLen == 1 && outLen >= 2) {
+                wchar_t carry = outBuf[outLen - 1];
+                curY = drawSingleHelpLine(hdc, x, curY, maxW, maxY, outBuf, outLen - 1);
+                outBuf[0] = carry;
+                outBuf[1] = p[tokStart];
+                outLen = 2;
+                continue;
+              }
               curY = drawSingleHelpLine(hdc, x, curY, maxW, maxY, outBuf, outLen);
               outLen = 0;
-              outUnits = 0;
             }
-            if (tokUnits > 16) {
-              curY = drawSingleHelpLine(hdc, x, curY, maxW, maxY, p + tokStart, tokLen);
-            } else if (tokLen < 62) {
+            if (tokLen < 62) {
               wmemcpy(outBuf, p + tokStart, tokLen);
-              outLen = tokLen;
-              outUnits = tokUnits;
+              SelectObject(hdc, sUiFontSmall);
+              SIZE tokSz = { 0, 0 };
+              GetTextExtentPoint32W(hdc, outBuf, tokLen, &tokSz);
+              if (tokSz.cx > maxW) {
+                curY = drawSingleHelpLine(hdc, x, curY, maxW, maxY, outBuf, tokLen);
+                outLen = 0;
+              } else {
+                outLen = tokLen;
+              }
             }
           }
         }
@@ -362,6 +404,7 @@ static void drawWrappedHelpDesc(HDC hdc, int x, int startY, int maxW, int maxY, 
 }
 
 static void renderRightSidebar(HDC hdc) {
+  BrainLogInt("Display::renderRightSidebar helpIndex", sCurrentHelpIndex);
   // Clear right sidebar area (X = 640..799, Y = 0..479) with #EDF1F5 in 32-bit DIB buffer
   for (int y = 0; y < kBrainScreenHeight; y++) {
     uint32_t * row = sDibPixels + y * kBrainScreenWidth;
@@ -405,36 +448,38 @@ static void renderRightSidebar(HDC hdc) {
     SelectObject(hdc, sUiFontTiny);
     drawTextLine(hdc, sx + 4, 30, sw - 8, 16, RGB(75, 86, 98), L"[F1]:関数  [F9]:変数  [F2]:切替");
 
-    // 2. 日本語ヘルプカード枠 (Y = 56..426, H = 370)
-    drawBox(hdc, sx, 56, sw, 370, RGB(255, 255, 255), RGB(150, 206, 198));
+    // 2. 日本語ヘルプカード枠 (Y = 56..426, H = 370, W = 150)
+    const int cardX = sx - 1; // 645
+    const int cardW = sw + 2; // 150
+    drawBox(hdc, cardX, 56, cardW, 370, RGB(255, 255, 255), RGB(150, 206, 198));
 
     // ヘッダーバナー (#4fbfaf テーマ調和)
-    drawBox(hdc, sx, 56, sw, 34, RGB(226, 245, 242), RGB(150, 206, 198));
-    RECT rcAccent = { sx + 1, 57, sx + sw - 1, 60 };
+    drawBox(hdc, cardX, 56, cardW, 34, RGB(226, 245, 242), RGB(150, 206, 198));
+    RECT rcAccent = { cardX + 1, 57, cardX + cardW - 1, 60 };
     HBRUSH hAccentBrush = CreateSolidBrush(RGB(79, 191, 175));
     FillRect(hdc, &rcAccent, hAccentBrush);
     DeleteObject(hAccentBrush);
 
-    // タイトル描画 (8全角文字以内)
+    // タイトル描画
     SelectObject(hdc, sUiFontBold);
     SIZE titleSz = { 0, 0 };
     GetTextExtentPoint32W(hdc, entry.jaTitle, static_cast<int>(wcslen(entry.jaTitle)), &titleSz);
-    if (titleSz.cx > sw - 8) {
+    if (titleSz.cx > cardW - 6) {
       SelectObject(hdc, sUiFontTiny);
     }
-    drawTextLine(hdc, sx + 4, 60, sw - 8, 28, RGB(20, 82, 74),
+    drawTextLine(hdc, cardX + 3, 60, cardW - 6, 28, RGB(20, 82, 74),
                  entry.jaTitle, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
-    // 解説本文 (1行全角8文字/半角16文字、数式途中切断防止)
-    drawWrappedHelpDesc(hdc, sx + 8, 96, sw - 16, 392, entry.jaDesc);
+    // 解説本文 (テキストボックス幅 maxW = 144px に基づく自動折り返し・禁則処理・数式途中切断防止)
+    drawWrappedHelpDesc(hdc, cardX + 3, 96, cardW - 6, 392, entry.jaDesc);
 
     // 下部操作ガイドフッター (8ドットフォント)
-    drawBox(hdc, sx, 394, sw, 32, RGB(240, 247, 245), RGB(150, 206, 198));
+    drawBox(hdc, cardX, 394, cardW, 32, RGB(240, 247, 245), RGB(150, 206, 198));
     SelectObject(hdc, sUiFontTiny);
-    drawTextLine(hdc, sx + 4, 396, sw - 8, 13, RGB(58, 92, 86),
+    drawTextLine(hdc, cardX + 3, 396, cardW - 6, 13, RGB(58, 92, 86),
                  L"[Enter]:決定/挿入  [Back]:戻る",
                  DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    drawTextLine(hdc, sx + 4, 410, sw - 8, 13, RGB(95, 110, 120),
+    drawTextLine(hdc, cardX + 3, 410, cardW - 6, 13, RGB(95, 110, 120),
                  L"[矢印]:項目選択    [F10]:HOME",
                  DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   } else {
@@ -802,6 +847,7 @@ static HFONT createFontWithFallback(const wchar_t * faceName, int height, LONG w
 }
 
 void init() {
+  BrainLog("Display::init enter");
   HINSTANCE hInstance = GetModuleHandleW(NULL);
 
   WNDCLASSW wc = {};
@@ -846,6 +892,7 @@ void init() {
     winX, winY, winW, winH,
     NULL, NULL, hInstance, NULL
   );
+  BrainLogHex("Display::init CreateWindowExW hwnd", reinterpret_cast<uintptr_t>(sHwnd));
 
   // Set up off-screen memory DC & 32-bit DIB section for flicker-free BitBlt double buffering
   HDC hdcScreen = GetDC(sHwnd);
@@ -863,6 +910,7 @@ void init() {
   sDibBitmap = CreateDIBSection(sMemDC, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
   sDibPixels = static_cast<uint32_t *>(bits);
   sOldBitmap = SelectObject(sMemDC, sDibBitmap);
+  BrainLogHex("Display::init CreateDIBSection pixels", reinterpret_cast<uintptr_t>(sDibPixels));
 
   // Resolve preferred font face with multi-stage fallback and ANTIALIASED_QUALITY (4)
   // ドットフォント (DotGothic16 / 美咲) 使用時は整数倍サイズ (-16 = 原寸/2倍, -8 = 1倍) かつ FW_NORMAL で
@@ -891,6 +939,7 @@ void init() {
   UpdateWindow(sHwnd);
 
   sHelpReady = true;
+  BrainLog("Display::init exit (sHelpReady=true)");
 }
 
 void draw() {
@@ -998,6 +1047,7 @@ bool isHelpReady() {
 
 void setCurrentHelpIndex(int index) {
   if (sCurrentHelpIndex != index) {
+    BrainLogInt2("Display::setCurrentHelpIndex", sCurrentHelpIndex, index);
     sCurrentHelpIndex = index;
     sSidebarDirty = true;
     Simulator::Main::setNeedsRefresh();
@@ -1012,6 +1062,7 @@ extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText)
   if (!Ion::Simulator::Display::isHelpReady()) {
     return;
   }
+  BrainLogText2("BrainNotifyHelpText", mainText ? mainText : "(null)", subText ? subText : "(null)");
   int idx = Ion::Simulator::Display::findHelpEntryIndex(mainText);
   if (idx < 0 && subText != nullptr) {
     idx = Ion::Simulator::Display::findHelpEntryIndex(subText);
@@ -1023,5 +1074,6 @@ extern "C" void BrainClearHelp() {
   if (!Ion::Simulator::Display::isHelpReady()) {
     return;
   }
+  BrainLog("BrainClearHelp");
   Ion::Simulator::Display::setCurrentHelpIndex(-1);
 }

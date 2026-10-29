@@ -3,6 +3,10 @@
 #include "graph_icon.h"
 #include <apps/i18n.h>
 
+extern "C" {
+void BrainLog(const char * step);
+}
+
 using namespace Poincare;
 using namespace Shared;
 
@@ -33,7 +37,10 @@ App::Snapshot::Snapshot() :
 }
 
 App * App::Snapshot::unpack(Container * container) {
-  return new (container->currentAppBuffer()) App(this);
+  BrainLog("Graph::App::Snapshot::unpack: placement new start");
+  App * app = new (container->currentAppBuffer()) App(this);
+  BrainLog("Graph::App::Snapshot::unpack: placement new done");
+  return app;
 }
 
 void App::Snapshot::reset() {
@@ -71,6 +78,7 @@ App::App(Snapshot * snapshot) :
   m_tabViewController(&m_inputViewController, snapshot, &m_listStackViewController, &m_graphStackViewController, &m_valuesStackViewController),
   m_inputViewController(&m_modalViewController, &m_tabViewController, this, this, this)
 {
+  BrainLog("Graph::App::App constructor body completed");
 }
 
 CodePoint App::XNT() {

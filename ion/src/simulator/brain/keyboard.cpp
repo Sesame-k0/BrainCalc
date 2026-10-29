@@ -13,6 +13,7 @@
 #include "keyboard.h"
 #include "display.h"
 #include "main.h"
+#include "logger.h"
 
 namespace Ion {
 namespace Events {
@@ -30,7 +31,6 @@ static bool sTerminationRequested = false;
 // Circuit breaker key tracking (for interrupting heavy Poincare calculations)
 static bool sBackKeyHeld = false;
 static DWORD sBackKeyDownTick = 0;
-static DWORD sLastScanPumpTick = 0;
 
 // Ring buffer for platform events
 constexpr int kEventQueueCapacity = 64;
@@ -42,6 +42,7 @@ static void pushPendingEvent(Ion::Events::Event e) {
   if (e == Ion::Events::None) {
     return;
   }
+  BrainLogInt2("Keyboard::pushPendingEvent", (int)(uint8_t)e, (int)sCurrentInputMode);
   int nextTail = (sEventQueueTail + 1) % kEventQueueCapacity;
   if (nextTail != sEventQueueHead) {
     sEventQueue[sEventQueueTail] = e;
@@ -78,6 +79,7 @@ InputMode currentInputMode() {
 void setInputMode(InputMode mode) {
   if (sCurrentInputMode != mode) {
     sCurrentInputMode = mode;
+    BrainLogInt("Keyboard::setInputMode", (int)mode);
     Display::markSidebarDirty();
     Main::setNeedsRefresh();
   }
@@ -210,6 +212,7 @@ static bool handleUpperAlphaModeKey(WPARAM vkCode) {
 }
 
 void onKeyDown(WPARAM vkCode, LPARAM lParam) {
+  BrainLogInt("Keyboard::onKeyDown vkCode", (int)vkCode);
   if (Display::isExitConfirmOpen()) {
     Display::handleExitConfirmKey(vkCode);
     return;
@@ -390,6 +393,7 @@ void onKeyUp(WPARAM vkCode, LPARAM /*lParam*/) {
 }
 
 void onTouchClick(int x, int y) {
+  BrainLogInt2("Keyboard::onTouchClick", x, y);
   if (Display::isExitConfirmOpen()) {
     Display::handleExitConfirmClick(x, y);
     return;
@@ -422,15 +426,19 @@ namespace Ion {
 namespace Keyboard {
 
 State scan() {
-  // Poincare の計算中断チェック (poincareCircuitBreaker) で毎秒数千回呼ばれるため、
-  // メッセージポンプは 16ms 間隔にスロットリングしてオーバーヘッドを最小化する
-  DWORD now = GetTickCount();
-  if ((now - Simulator::Keyboard::sLastScanPumpTick) >= 16) {
-    Simulator::Keyboard::sLastScanPumpTick = now;
-    Simulator::Keyboard::pumpMessages();
-  }
-  if (Simulator::Keyboard::sBackKeyHeld && (now - Simulator::Keyboard::sBackKeyDownTick) >= 60) {
-    return State(Key::Back);
+  // Poincare の計算中断チェック (poincareCircuitBreaker) で呼ばれる。
+  // 計算途中で Window メッセージポンプ (DispatchMessageW) を回すと再入競合を起こすため、
+  // GetAsyncKeyState による非ブロッキングなハードウェアキー状態参照のみを行う。
+  if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0) {
+    DWORD now = GetTickCount();
+    if (!Simulator::Keyboard::sBackKeyHeld) {
+      Simulator::Keyboard::sBackKeyHeld = true;
+      Simulator::Keyboard::sBackKeyDownTick = now;
+    } else if ((now - Simulator::Keyboard::sBackKeyDownTick) >= 60) {
+      return State(Key::Back);
+    }
+  } else {
+    Simulator::Keyboard::sBackKeyHeld = false;
   }
   return State(0);
 }

@@ -11,6 +11,7 @@
 
 #include "main.h"
 #include "display.h"
+#include "logger.h"
 #include <ion.h>
 #include <ion/storage.h>
 #include <apps/global_preferences.h>
@@ -169,13 +170,36 @@ struct BrainSavedPreferences {
 };
 
 struct BrainStateHeader {
-  char magic[8];        // "BRNSTATE"
-  uint32_t version;     // 1
-  uint32_t storageSize; // 65012
-  uint32_t prefsSize;   // sizeof(BrainSavedPreferences)
-  uint32_t checksum;    // simple byte sum
+  char magic[8];          // "BRNSTATE"
+  uint32_t version;       // 2
+  uint32_t storageSize;   // 65012
+  uint32_t prefsSize;     // sizeof(BrainSavedPreferences)
+  uint32_t checksum;      // simple byte sum
+  uint32_t buildHash;     // FNV-1a of __DATE__ __TIME__
+  uint32_t codeCanary;    // runtime address in .text
+  uint32_t rdataCanary;   // runtime address in .rdata
 };
 #pragma pack(pop)
+
+static const uint32_t kRdataCanaryAnchor = 0x4C494C4D; // "LILM" in .rdata
+
+static uint32_t computeBuildHash() {
+  const char * sig = __DATE__ " " __TIME__;
+  uint32_t h = 2166136261u;
+  for (size_t i = 0; sig[i] != '\0'; i++) {
+    h ^= static_cast<uint8_t>(sig[i]);
+    h *= 16777619u;
+  }
+  return h;
+}
+
+static uint32_t getCodeCanary() {
+  return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&computeBuildHash));
+}
+
+static uint32_t getRdataCanary() {
+  return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&kRdataCanaryAnchor));
+}
 
 static bool getStateFilePath(wchar_t * outPath, size_t maxLen) {
   wchar_t exeDir[MAX_PATH] = L"";
@@ -201,8 +225,10 @@ static bool getStateFilePath(wchar_t * outPath, size_t maxLen) {
 }
 
 void saveBrainState() {
+  BrainLog("Main::saveBrainState: start");
   wchar_t stateFilePath[MAX_PATH] = L"";
   if (!getStateFilePath(stateFilePath, MAX_PATH)) {
+    BrainLog("Main::saveBrainState: getStateFilePath failed");
     return;
   }
 
@@ -234,11 +260,15 @@ void saveBrainState() {
   prefs.numberOfSignificantDigits = pp->numberOfSignificantDigits();
 
   BrainStateHeader header;
+  memset(&header, 0, sizeof(header));
   memcpy(header.magic, "BRNSTATE", 8);
-  header.version = 1;
+  header.version = 2;
   header.storageSize = static_cast<uint32_t>(storageLen);
   header.prefsSize = sizeof(BrainSavedPreferences);
   header.checksum = 0;
+  header.buildHash = computeBuildHash();
+  header.codeCanary = getCodeCanary();
+  header.rdataCanary = getRdataCanary();
 
   for (size_t i = 0; i < storageLen; i++) {
     header.checksum += static_cast<uint8_t>(storageBuf[i]);
@@ -251,6 +281,7 @@ void saveBrainState() {
   HANDLE hFile = CreateFileW(stateFilePath, GENERIC_WRITE, 0, NULL,
                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
   if (hFile == INVALID_HANDLE_VALUE) {
+    BrainLog("Main::saveBrainState: CreateFileW failed");
     return;
   }
 
@@ -258,41 +289,59 @@ void saveBrainState() {
   WriteFile(hFile, &header, sizeof(header), &written, NULL);
   WriteFile(hFile, storageBuf, static_cast<DWORD>(storageLen), &written, NULL);
   WriteFile(hFile, &prefs, sizeof(prefs), &written, NULL);
+  FlushFileBuffers(hFile);
   CloseHandle(hFile);
+  BrainLog("Main::saveBrainState: done");
 }
 
 bool restoreBrainState() {
+  BrainLog("Main::restoreBrainState: start");
   wchar_t stateFilePath[MAX_PATH] = L"";
   if (!getStateFilePath(stateFilePath, MAX_PATH)) {
+    BrainLog("Main::restoreBrainState: getStateFilePath failed");
     return false;
   }
 
   HANDLE hFile = CreateFileW(stateFilePath, GENERIC_READ, FILE_SHARE_READ, NULL,
                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
   if (hFile == INVALID_HANDLE_VALUE) {
+    BrainLog("Main::restoreBrainState: no existing brain_state.bin");
     return false;
   }
 
   BrainStateHeader header;
+  memset(&header, 0, sizeof(header));
   DWORD readBytes = 0;
   if (!ReadFile(hFile, &header, sizeof(header), &readBytes, NULL) || readBytes != sizeof(header)) {
+    BrainLog("Main::restoreBrainState: header size mismatch (old format -> ignoring)");
     CloseHandle(hFile);
     return false;
   }
 
-  if (memcmp(header.magic, "BRNSTATE", 8) != 0 || header.version != 1) {
+  if (memcmp(header.magic, "BRNSTATE", 8) != 0 || header.version != 2) {
+    BrainLogInt("Main::restoreBrainState: unsupported state version -> ignoring", (int)header.version);
+    CloseHandle(hFile);
+    return false;
+  }
+
+  if (header.buildHash != computeBuildHash() ||
+      header.codeCanary != getCodeCanary() ||
+      header.rdataCanary != getRdataCanary()) {
+    BrainLog("Main::restoreBrainState: binary build/vtable layout changed -> skipping raw storage buffer");
     CloseHandle(hFile);
     return false;
   }
 
   Ion::Storage * storage = Ion::Storage::sharedStorage();
   if (header.storageSize != storage->bufferSize()) {
+    BrainLog("Main::restoreBrainState: storageSize mismatch");
     CloseHandle(hFile);
     return false;
   }
 
   char * tempBuf = new char[header.storageSize];
   if (!ReadFile(hFile, tempBuf, header.storageSize, &readBytes, NULL) || readBytes != header.storageSize) {
+    BrainLog("Main::restoreBrainState: failed reading storage buffer");
     delete[] tempBuf;
     CloseHandle(hFile);
     return false;
@@ -319,12 +368,14 @@ bool restoreBrainState() {
     }
   }
   if (sum != header.checksum) {
+    BrainLog("Main::restoreBrainState: checksum mismatch");
     delete[] tempBuf;
     return false;
   }
 
   storage->restoreBuffer(tempBuf, header.storageSize);
   delete[] tempBuf;
+  BrainLogInt("Main::restoreBrainState: storage restored, records", storage->numberOfRecords());
 
   if (hasPrefs) {
     GlobalPreferences * gp = GlobalPreferences::sharedGlobalPreferences();
@@ -352,18 +403,25 @@ bool restoreBrainState() {
     if (prefs.numberOfSignificantDigits > 0) {
       pp->setNumberOfSignificantDigits(prefs.numberOfSignificantDigits);
     }
+    BrainLog("Main::restoreBrainState: preferences restored");
   }
 
+  BrainLog("Main::restoreBrainState: done");
   return true;
 }
 
 void init() {
+  BrainLog("Main::init: start");
   loadBundledFont();
+  BrainLogInt("Main::init: loadBundledFont done", sFontLoaded ? 1 : 0);
   Ion::Simulator::Random::init();
+  BrainLog("Main::init: Random::init done");
   Ion::Simulator::Display::init();
+  BrainLog("Main::init: Display::init done");
 
   // A. OSタスクバー／インジケーター（右上バッテリーアイコン等）を非表示化
   hideTaskBar();
+  BrainLog("Main::init: hideTaskBar done");
 
   // B. 自アプリのウィンドウを完全な最前面（HWND_TOPMOST）に固定
   HWND hWnd = Ion::Simulator::Display::windowHandle();
@@ -380,6 +438,7 @@ void init() {
   }
 
   setNeedsRefresh();
+  BrainLog("Main::init: complete");
 }
 
 void setNeedsRefresh() {
@@ -395,10 +454,12 @@ void refresh() {
 }
 
 void quit() {
+  BrainLog("Main::quit: start");
   saveBrainState();
   restoreTaskBar();
   Ion::Simulator::Display::quit();
   unloadBundledFont();
+  BrainLog("Main::quit: complete");
 }
 
 }
@@ -406,10 +467,13 @@ void quit() {
 }
 
 int main(int argc, char * argv[]) {
+  BrainLogInit();
+  BrainLog("main: entry");
   Ion::Simulator::Main::init();
-  Ion::Simulator::Main::restoreBrainState();
+  BrainLog("main: calling ion_main");
   ion_main(argc, argv);
-  Ion::Simulator::Main::saveBrainState();
+  BrainLog("main: ion_main returned, calling quit");
   Ion::Simulator::Main::quit();
+  BrainLog("main: exit 0");
   return 0;
 }
