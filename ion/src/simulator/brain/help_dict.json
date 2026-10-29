@@ -74,13 +74,15 @@
   },
   "App_Atomic": {
     "en_keys": [
+      "ATOMIC",
+      "Atomic",
       "Periodic table",
       "Periodic Table",
       "Elements"
     ],
     "en_desc": "Interactive periodic table of chemical elements with atomic mass and properties.",
     "ja_title": "元素周期表",
-    "ja_desc": "全118元素の周期表と性質を閲覧。\n・原子番号と元素記号\n・モル質量(原子量)\n・電気陰性度と分類\n・電子配置の確認"
+    "ja_desc": "全118元素の周期表と性質を閲覧。\n・原子番号と元素記号\n・モル質量(原子量)\n・電気陰性度と分類\n・電子配置の確認\n【Enter】詳細リスト表示"
   },
   "App_Python": {
     "en_keys": [
@@ -2235,29 +2237,168 @@
     "ja_title": "方程式の入力と求解",
     "ja_desc": "方程式(例: x^2-2=0)\nを追加し、下部ボタン\n【Solve】で解きます\n複数式を入力すると連立方程式として求解します。"
   },
-  "Atomic_Types": {
+  "Atomic_Prop_Symbol": {
     "en_keys": [
       "Symbol",
-      "Protons",
-      "Neutrons",
-      "Type",
-      "Molar mass",
-      "Electronegativity",
-      "EC",
-      "Alkali metal",
-      "Alkaline earth metal",
-      "Lanthanide",
-      "Actinide",
-      "Transition metal",
-      "Post-transition metal",
-      "Metalloid",
-      "Halogen",
-      "Reactive non metal",
-      "Noble gas"
+      "AtomSymbol"
     ],
-    "en_desc": "Element properties and chemical families in the Periodic Table.",
-    "ja_title": "元素の分類と特性",
-    "ja_desc": "・Protons: 陽子数(Z)\n・Neutrons: 中性子数\n・Molar mass: 原子量\n・Electronegativity:\n電気陰性度\n・EC: 電子配置"
+    "en_desc": "One or two-letter abbreviation representing the chemical element.",
+    "ja_title": "元素記号 (Symbol)",
+    "ja_desc": "元素を表す世界共通の記号です。\nアルファベット1〜2文字で表記され、1文字目は大文字、2文字目は小文字で表します。"
+  },
+  "Atomic_Prop_Protons": {
+    "en_keys": [
+      "Protons",
+      "AtomNum"
+    ],
+    "en_desc": "Number of protons in the atomic nucleus, equal to the atomic number (Z).",
+    "ja_title": "陽子数 (原子番号)",
+    "ja_desc": "原子核に含まれる陽子の数です。\n原子番号(Z)と一致し、元素の種類や化学的性質、中性時の電子数を決定します。"
+  },
+  "Atomic_Prop_Neutrons": {
+    "en_keys": [
+      "Neutrons",
+      "AtomNeutrons"
+    ],
+    "en_desc": "Number of neutrons in the atomic nucleus.",
+    "ja_title": "中性子数 (Neutrons)",
+    "ja_desc": "原子核に含まれる中性子の数です。\n質量数から陽子数を引いた数に相当し、同位体（アイソトープ）ごとに異なります。"
+  },
+  "Atomic_Prop_Type": {
+    "en_keys": [
+      "Type",
+      "AtomTypes"
+    ],
+    "en_desc": "Chemical classification and family of the element in the Periodic Table.",
+    "ja_title": "元素の分類 (Type)",
+    "ja_desc": "化学的・物理的性質に基づく分類です。\n典型金属、遷移金属、半金属、非金属、貴ガスなどに区分されます。"
+  },
+  "Atomic_Prop_MolarMass": {
+    "en_keys": [
+      "Molar mass",
+      "AtomMass"
+    ],
+    "en_desc": "Mass of one mole of the element in grams per mole (g/mol).",
+    "ja_title": "モル質量 / 原子量",
+    "ja_desc": "元素1molあたりの質量(g/mol)です。\n天然同位体の存在比を考慮した平均相対質量を表します。"
+  },
+  "Atomic_Prop_Electroneg": {
+    "en_keys": [
+      "Electronegativity",
+      "AtomElectroneg"
+    ],
+    "en_desc": "Relative ability of an atom to attract shared electron pairs in a chemical bond.",
+    "ja_title": "電気陰性度",
+    "ja_desc": "原子が共有結合で電子を引き寄せる強さの尺度です。\nポーリングの尺度で表され、周期表の右上（フッ素など）ほど大きくなります。"
+  },
+  "Atomic_Prop_EC": {
+    "en_keys": [
+      "EC",
+      "AtomEC",
+      "Electron configuration"
+    ],
+    "en_desc": "Arrangement of electrons in atomic orbitals (s, p, d, f subshells).",
+    "ja_title": "電子配置 (EC)",
+    "ja_desc": "原子の電子殻や軌道(s, p, d, f)における電子の収容状態です。\n最外殻電子（価電子）の数が化学結合や性質を決定します。"
+  },
+  "Atomic_Type_AlkaliMetal": {
+    "en_keys": [
+      "Alkali metal",
+      "AtomTypeALKALIMETAL"
+    ],
+    "en_desc": "Group 1 highly reactive metals (Li, Na, K, Rb, Cs, Fr) with 1 valence electron.",
+    "ja_title": "アルカリ金属",
+    "ja_desc": "周期表第1族の金属元素です(Li, Na, K等)。\n最外殻電子が1個で反応性が極めて高く、水と激しく反応して水素を発生します。"
+  },
+  "Atomic_Type_AlkaliEarthMetal": {
+    "en_keys": [
+      "Alkaline earth metal",
+      "AtomTypeALKALIEARTHMETAL"
+    ],
+    "en_desc": "Group 2 reactive metals (Be, Mg, Ca, Sr, Ba, Ra) with 2 valence electrons.",
+    "ja_title": "アルカリ土類金属",
+    "ja_desc": "周期表第2族の金属元素です(Be, Mg, Ca等)。\n価電子が2個で、銀白色の金属光沢を持ち、アルカリ金属に次ぐ反応性を示します。"
+  },
+  "Atomic_Type_Lanthanide": {
+    "en_keys": [
+      "Lanthanide",
+      "AtomTypeLANTHANIDE"
+    ],
+    "en_desc": "15 rare earth elements from Lanthanum (57) to Lutetium (71) filling 4f orbitals.",
+    "ja_title": "ランタノイド (希土類)",
+    "ja_desc": "原子番号57(La)〜71(Lu)の15元素です。\n4f軌道に電子が順次充填され、強力磁石や光学・電子材料（レアアース）として重要です。"
+  },
+  "Atomic_Type_Actinide": {
+    "en_keys": [
+      "Actinide",
+      "AtomTypeACTINIDE"
+    ],
+    "en_desc": "15 radioactive elements from Actinium (89) to Lawrencium (103) filling 5f orbitals.",
+    "ja_title": "アクチノイド",
+    "ja_desc": "原子番号89(Ac)〜103(Lr)の15元素です。\nすべて放射性元素であり、ウラン(U)やプルトニウム(Pu)など原子力や核物理に利用されます。"
+  },
+  "Atomic_Type_TransitionMetal": {
+    "en_keys": [
+      "Transition metal",
+      "AtomTypeTRANSITIONMETAL"
+    ],
+    "en_desc": "D-block metals (Groups 3-11) characterized by multiple oxidation states and colored compounds.",
+    "ja_title": "遷移金属",
+    "ja_desc": "周期表第3族〜第11族の金属元素群です。\nd軌道に電子が充填され、複数の酸化数を持ち、有色化合物や優れた触媒特性を示します。"
+  },
+  "Atomic_Type_PostTransitionMetal": {
+    "en_keys": [
+      "Post-transition metal",
+      "AtomTypePOSTTRANSITIONMETAL"
+    ],
+    "en_desc": "Metals to the right of transition metals (Al, Ga, In, Sn, Tl, Pb, Bi) with lower melting points.",
+    "ja_title": "典型金属 (遷移後金属)",
+    "ja_desc": "遷移金属の右側に位置する金属(Al, Sn, Pb等)。\n融点が比較的低く柔らかい性質を持ち、日用品から電子基板まで広く活用されます。"
+  },
+  "Atomic_Type_Metalloid": {
+    "en_keys": [
+      "Metalloid",
+      "AtomTypeMETALLOID"
+    ],
+    "en_desc": "Elements with intermediate metallic and nonmetallic properties (B, Si, Ge, As, Sb, Te).",
+    "ja_title": "半金属 (メタロイド)",
+    "ja_desc": "金属と非金属の中間的な性質を持つ元素です。\nケイ素(Si)やゲルマニウム(Ge)など、半導体の基幹材料として電子工学に不可欠です。"
+  },
+  "Atomic_Type_Halogen": {
+    "en_keys": [
+      "Halogen",
+      "AtomTypeHALLOGEN"
+    ],
+    "en_desc": "Group 17 highly reactive nonmetals (F, Cl, Br, I, At) forming salts with metals.",
+    "ja_title": "ハロゲン",
+    "ja_desc": "周期表第17族の非金属元素です(F, Cl, Br, I等)。\n価電子が7個で電子を1個受け取りやすく、金属と塩を形成します。強力な酸化力を持ちます。"
+  },
+  "Atomic_Type_ReactiveNonmetal": {
+    "en_keys": [
+      "Reactive non metal",
+      "AtomTypeREACTIVENONMETAL"
+    ],
+    "en_desc": "Nonmetallic elements (H, C, N, O, P, S, Se) readily forming covalent compounds.",
+    "ja_title": "反応性非金属",
+    "ja_desc": "水素、炭素、窒素、酸素、リン、硫黄などの非金属です。\n共有結合を作りやすく、有機物や生体分子（タンパク質やDNA）の根幹を構成します。"
+  },
+  "Atomic_Type_NobleGas": {
+    "en_keys": [
+      "Noble gas",
+      "AtomTypeNOBLEGAS"
+    ],
+    "en_desc": "Group 18 inert gases (He, Ne, Ar, Kr, Xe, Rn) with full outer electron shells.",
+    "ja_title": "貴ガス (希ガス)",
+    "ja_desc": "周期表第18族の気体元素です(He, Ne, Ar等)。\n最外殻電子が閉殻で極めて安定しており、通常の環境下では化学反応を起こしません。"
+  },
+  "Atomic_Type_Unknown": {
+    "en_keys": [
+      "Unknown",
+      "AtomTypeUNKNOWN"
+    ],
+    "en_desc": "Superheavy synthesized elements with unconfirmed chemical properties.",
+    "ja_title": "分類未確定 / 超重元素",
+    "ja_desc": "人工的に合成された超重元素などで、化学的性質や分類が実験的に未確定の元素群です。"
   },
   "Python_Items": {
     "en_keys": [
