@@ -33,6 +33,14 @@ static HDC sMemDC = NULL;
 static HBITMAP sDibBitmap = NULL;
 static HGDIOBJ sOldBitmap = NULL;
 static uint32_t * sDibPixels = nullptr;
+
+// Backdrop cache for flicker-free modal rendering
+static HDC sBackdropDC = NULL;
+static HBITMAP sBackdropBitmap = NULL;
+static HGDIOBJ sOldBackdropBitmap = NULL;
+static uint32_t * sBackdropPixels = nullptr;
+static bool sBackdropValid = false;
+
 static HFONT sUiFontBold = NULL;
 static HFONT sUiFontSmall = NULL;
 static HFONT sUiFontTiny = NULL;
@@ -595,12 +603,6 @@ static int sKeyChangeConfirmFocus = 0; // 0: 変更する, 1: キャンセル
 static int sResetConfirmFocus = 0; // 0: 初期化する, 1: キャンセル
 
 static void refreshModal() {
-  sCalcDirty = true;
-  sDirtyMinX = 0;
-  sDirtyMinY = 0;
-  sDirtyMaxX = Ion::Display::Width;
-  sDirtyMaxY = Ion::Display::Height;
-  sSidebarDirty = true;
   draw();
 }
 
@@ -1115,12 +1117,20 @@ bool isModalOpen() {
 
 void closeModal() {
   sModalMode = ModalMode::None;
-  refreshModal();
+  sBackdropValid = false;
+  sCalcDirty = true;
+  sDirtyMinX = 0;
+  sDirtyMinY = 0;
+  sDirtyMaxX = Ion::Display::Width;
+  sDirtyMaxY = Ion::Display::Height;
+  sSidebarDirty = true;
+  draw();
 }
 
 void showExitConfirm() {
   sModalMode = ModalMode::ExitConfirm;
   sExitConfirmFocus = 2;  // デフォルトはキャンセル（安全策）
+  sBackdropValid = false;
   refreshModal();
 }
 
@@ -1132,6 +1142,7 @@ void showSettingsDialog() {
   sModalMode = ModalMode::SettingsMain;
   sSettingsFocus = 0;
   sSettingsSubFocus = 0;
+  sBackdropValid = false;
   refreshModal();
 }
 
@@ -1143,6 +1154,7 @@ bool handleModalKey(WPARAM vkCode) {
   if (sModalMode == ModalMode::None) {
     return false;
   }
+  BrainLogInt("handleModalKey vkCode", (int)vkCode);
 
   switch (sModalMode) {
     case ModalMode::ExitConfirm:
@@ -1744,6 +1756,15 @@ void init() {
   sOldBitmap = SelectObject(sMemDC, sDibBitmap);
   BrainLogHex("Display::init CreateDIBSection pixels", reinterpret_cast<uintptr_t>(sDibPixels));
 
+  // Initialize backdrop DC and DIB section for flicker-free modal caching
+  sBackdropDC = CreateCompatibleDC(hdcScreen);
+  void * backdropBits = nullptr;
+  sBackdropBitmap = CreateDIBSection(sBackdropDC, &bmi, DIB_RGB_COLORS, &backdropBits, NULL, 0);
+  sBackdropPixels = static_cast<uint32_t *>(backdropBits);
+  sOldBackdropBitmap = SelectObject(sBackdropDC, sBackdropBitmap);
+  sBackdropValid = false;
+  BrainLogHex("Display::init CreateDIBSection backdrop pixels", reinterpret_cast<uintptr_t>(sBackdropPixels));
+
   // Resolve preferred font face with multi-stage fallback and ANTIALIASED_QUALITY (4)
   // ドットフォント (DotGothic16 / 美咲) 使用時は整数倍サイズ (-16 = 原寸/2倍, -8 = 1倍) かつ FW_NORMAL で
   // ドット潰れ・端数滲みのない完全なピクセル描画にする
@@ -1774,10 +1795,67 @@ void init() {
   BrainLog("Display::init exit (sHelpReady=true)");
 }
 
+static void createBackdrop() {
+  if (!sDibPixels || !sBackdropPixels) {
+    return;
+  }
+  // 未反映の電卓描画やサイドバー描画があれば先にメモリDCに反映
+  if (sCalcDirty) {
+    sCalcDirty = false;
+    renderCalculatorRect(sDirtyMinX, sDirtyMinY, sDirtyMaxX, sDirtyMaxY);
+    sDirtyMinX = Ion::Display::Width;
+    sDirtyMinY = Ion::Display::Height;
+    sDirtyMaxX = 0;
+    sDirtyMaxY = 0;
+  }
+  if (sSidebarDirty) {
+    sSidebarDirty = false;
+    renderRightSidebar(sMemDC);
+  }
+
+  // 画面全体を薄く暗転 (輝度70%) させて backdrop バッファにキャッシュ
+  for (int y = 0; y < kBrainScreenHeight; y++) {
+    const uint32_t * srcRow = sDibPixels + y * kBrainScreenWidth;
+    uint32_t * dstRow = sBackdropPixels + y * kBrainScreenWidth;
+    for (int x = 0; x < kBrainScreenWidth; x++) {
+      uint32_t c = srcRow[x];
+      uint32_t r = (((c >> 16) & 0xFF) * 180) >> 8;
+      uint32_t g = (((c >> 8)  & 0xFF) * 180) >> 8;
+      uint32_t b = ((c & 0xFF)         * 180) >> 8;
+      dstRow[x] = (r << 16) | (g << 8) | b;
+    }
+  }
+  sBackdropValid = true;
+  BrainLog("createBackdrop: cached darkened screen");
+}
+
 void draw() {
   if (!sHwnd || !sMemDC || !sDibPixels) {
     return;
   }
+
+  // モーダルダイアログ表示時: 背景キャッシュを使ってダブルバッファ描画
+  // 素の電卓画面が実画面に描画されるのを防ぎ、チラつきと遅延を完全解消する
+  if (sModalMode != ModalMode::None) {
+    if (!sBackdropValid) {
+      createBackdrop();
+    }
+    // 1. キャッシュされた暗転背景をメモリDC (sMemDC) に超高速転送 (BitBlt)
+    BitBlt(sMemDC, 0, 0, kBrainScreenWidth, kBrainScreenHeight, sBackdropDC, 0, 0, SRCCOPY);
+
+    // 2. メモリDC上にモーダルダイアログを描画
+    renderActiveModal(sMemDC);
+
+    // 3. 完成したフレームを実画面に1回だけ BitBlt (フリッカー完全ゼロ)
+    HDC hdc = GetDC(sHwnd);
+    if (hdc) {
+      BitBlt(hdc, 0, 0, kBrainScreenWidth, kBrainScreenHeight, sMemDC, 0, 0, SRCCOPY);
+      ReleaseDC(sHwnd, hdc);
+    }
+    BrainLogInt("draw: modal rendered mode", (int)sModalMode);
+    return;
+  }
+
   if (!sCalcDirty && !sSidebarDirty) {
     return;
   }
@@ -1808,25 +1886,6 @@ void draw() {
     renderRightSidebar(sMemDC);
     if (hdc) {
       BitBlt(hdc, kSidebarX, 0, kSidebarWidth, kBrainScreenHeight, sMemDC, kSidebarX, 0, SRCCOPY);
-    }
-  }
-
-  // 3. モーダルダイアログ表示時
-  if (sModalMode != ModalMode::None) {
-    // 画面全体を薄く暗転 (輝度70%) させて中央にダイアログを描画
-    for (int y = 0; y < kBrainScreenHeight; y++) {
-      uint32_t * row = sDibPixels + y * kBrainScreenWidth;
-      for (int x = 0; x < kBrainScreenWidth; x++) {
-        uint32_t c = row[x];
-        uint32_t r = (((c >> 16) & 0xFF) * 180) >> 8;
-        uint32_t g = (((c >> 8)  & 0xFF) * 180) >> 8;
-        uint32_t b = ((c & 0xFF)         * 180) >> 8;
-        row[x] = (r << 16) | (g << 8) | b;
-      }
-    }
-    renderActiveModal(sMemDC);
-    if (hdc) {
-      BitBlt(hdc, 0, 0, kBrainScreenWidth, kBrainScreenHeight, sMemDC, 0, 0, SRCCOPY);
     }
   }
 
@@ -1864,6 +1923,20 @@ void quit() {
     sDibBitmap = NULL;
     sDibPixels = nullptr;
   }
+  if (sBackdropDC) {
+    if (sOldBackdropBitmap) {
+      SelectObject(sBackdropDC, sOldBackdropBitmap);
+      sOldBackdropBitmap = NULL;
+    }
+    DeleteDC(sBackdropDC);
+    sBackdropDC = NULL;
+  }
+  if (sBackdropBitmap) {
+    DeleteObject(sBackdropBitmap);
+    sBackdropBitmap = NULL;
+    sBackdropPixels = nullptr;
+  }
+  sBackdropValid = false;
   if (sHwnd) {
     DestroyWindow(sHwnd);
     sHwnd = NULL;
