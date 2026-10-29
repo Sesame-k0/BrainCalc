@@ -614,7 +614,7 @@ static void refreshModal() {
   draw();
 }
 
-static void renderExitConfirmDialog(HDC hdc) {
+static void renderExitConfirmBase(HDC hdc) {
   // 1. ドロップシャドウ
   drawBox(hdc, kExitDialogX + 4, kExitDialogY + 4, kExitDialogW, kExitDialogH,
           RGB(136, 153, 166), RGB(136, 153, 166));
@@ -640,47 +640,22 @@ static void renderExitConfirmDialog(HDC hdc) {
                RGB(70, 80, 92), L"設定画面を開くこともできます。",
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-  // 5. ボタン群 (3ボタン: 終了する, 設定, キャンセル)
+  // 5. ボタン群 (3ボタン: 全て非選択ベース状態で描画)
   SelectObject(hdc, sUiFontBold);
+  drawBox(hdc, kBtnQuitX, kBtnExitY, kBtnExitW, kBtnExitH,
+          RGB(255, 240, 238), RGB(225, 180, 175));
+  drawTextLine(hdc, kBtnQuitX, kBtnExitY, kBtnExitW, kBtnExitH,
+               RGB(190, 50, 40), L"終了する", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-  // [ 終了する ]
-  if (sExitConfirmFocus == 0) {
-    drawBox(hdc, kBtnQuitX, kBtnExitY, kBtnExitW, kBtnExitH,
-            RGB(224, 68, 52), RGB(170, 40, 28));
-    drawTextLine(hdc, kBtnQuitX, kBtnExitY, kBtnExitW, kBtnExitH,
-                 RGB(255, 255, 255), L"終了する", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  } else {
-    drawBox(hdc, kBtnQuitX, kBtnExitY, kBtnExitW, kBtnExitH,
-            RGB(255, 240, 238), RGB(225, 180, 175));
-    drawTextLine(hdc, kBtnQuitX, kBtnExitY, kBtnExitW, kBtnExitH,
-                 RGB(190, 50, 40), L"終了する", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  }
+  drawBox(hdc, kBtnConfigX, kBtnExitY, kBtnExitW, kBtnExitH,
+          RGB(235, 248, 246), RGB(180, 215, 210));
+  drawTextLine(hdc, kBtnConfigX, kBtnExitY, kBtnExitW, kBtnExitH,
+               RGB(25, 110, 100), L"設　定", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-  // [ 設　定 ]
-  if (sExitConfirmFocus == 1) {
-    drawBox(hdc, kBtnConfigX, kBtnExitY, kBtnExitW, kBtnExitH,
-            RGB(79, 191, 175), RGB(40, 150, 135));
-    drawTextLine(hdc, kBtnConfigX, kBtnExitY, kBtnExitW, kBtnExitH,
-                 RGB(255, 255, 255), L"設　定", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  } else {
-    drawBox(hdc, kBtnConfigX, kBtnExitY, kBtnExitW, kBtnExitH,
-            RGB(235, 248, 246), RGB(180, 215, 210));
-    drawTextLine(hdc, kBtnConfigX, kBtnExitY, kBtnExitW, kBtnExitH,
-                 RGB(25, 110, 100), L"設　定", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  }
-
-  // [ キャンセル ]
-  if (sExitConfirmFocus == 2) {
-    drawBox(hdc, kBtnCancelX, kBtnExitY, kBtnExitW, kBtnExitH,
-            RGB(100, 115, 130), RGB(70, 85, 100));
-    drawTextLine(hdc, kBtnCancelX, kBtnExitY, kBtnExitW, kBtnExitH,
-                 RGB(255, 255, 255), L"キャンセル", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  } else {
-    drawBox(hdc, kBtnCancelX, kBtnExitY, kBtnExitW, kBtnExitH,
-            RGB(255, 255, 255), RGB(192, 200, 212));
-    drawTextLine(hdc, kBtnCancelX, kBtnExitY, kBtnExitW, kBtnExitH,
-                 RGB(60, 70, 80), L"キャンセル", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  }
+  drawBox(hdc, kBtnCancelX, kBtnExitY, kBtnExitW, kBtnExitH,
+          RGB(255, 255, 255), RGB(192, 200, 212));
+  drawTextLine(hdc, kBtnCancelX, kBtnExitY, kBtnExitW, kBtnExitH,
+               RGB(60, 70, 80), L"キャンセル", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
   // 6. ガイド
   SelectObject(hdc, sUiFontTiny);
@@ -689,7 +664,96 @@ static void renderExitConfirmDialog(HDC hdc) {
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
-static void renderSettingsMainDialog(HDC hdc) {
+static void renderExitConfirmOverlay(HDC hdc) {
+  SelectObject(hdc, sUiFontBold);
+  if (sExitConfirmFocus == 0) {
+    drawBox(hdc, kBtnQuitX, kBtnExitY, kBtnExitW, kBtnExitH,
+            RGB(224, 68, 52), RGB(170, 40, 28));
+    drawTextLine(hdc, kBtnQuitX, kBtnExitY, kBtnExitW, kBtnExitH,
+                 RGB(255, 255, 255), L"終了する", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  } else if (sExitConfirmFocus == 1) {
+    drawBox(hdc, kBtnConfigX, kBtnExitY, kBtnExitW, kBtnExitH,
+            RGB(79, 191, 175), RGB(40, 150, 135));
+    drawTextLine(hdc, kBtnConfigX, kBtnExitY, kBtnExitW, kBtnExitH,
+                 RGB(255, 255, 255), L"設　定", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  } else if (sExitConfirmFocus == 2) {
+    drawBox(hdc, kBtnCancelX, kBtnExitY, kBtnExitW, kBtnExitH,
+            RGB(100, 115, 130), RGB(70, 85, 100));
+    drawTextLine(hdc, kBtnCancelX, kBtnExitY, kBtnExitW, kBtnExitH,
+                 RGB(255, 255, 255), L"キャンセル", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  }
+}
+
+static void renderExitConfirmDialog(HDC hdc) {
+  renderExitConfirmBase(hdc);
+  renderExitConfirmOverlay(hdc);
+}
+
+static constexpr int kSettingsRowY[4] = {
+  kSettingsDialogY + 52,
+  kSettingsDialogY + 114,
+  kSettingsDialogY + 176,
+  kSettingsDialogY + 238
+};
+
+static void renderSettingsRowContent(HDC hdc, int r) {
+  int ry = kSettingsRowY[r];
+  if (r == 0) {
+    SelectObject(hdc, sUiFontBold);
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 6, 300, 20, RGB(30, 40, 50), L"■ 日本語ヘルプ表示");
+    SelectObject(hdc, sUiFontTiny);
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 30, 420, 16, RGB(90, 100, 110),
+                 L"右側サイドバーに現在選択中の項目の日本語解説を表示します");
+    SelectObject(hdc, sUiFontBold);
+    if (Config::isHelpEnabled()) {
+      drawBox(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(226, 245, 242), RGB(79, 191, 175));
+      drawTextLine(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(22, 116, 104),
+                   L"【 有効 (ON) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    } else {
+      drawBox(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(242, 244, 247), RGB(200, 208, 216));
+      drawTextLine(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(110, 120, 130),
+                   L"【 無効 (OFF) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    }
+  } else if (r == 1) {
+    SelectObject(hdc, sUiFontBold);
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 6, 300, 20, RGB(30, 40, 50), L"■ デバッグログ出力");
+    SelectObject(hdc, sUiFontTiny);
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 30, 420, 16, RGB(90, 100, 110),
+                 L"lilium_debug.log を出力します（通常はOFF推奨）");
+    SelectObject(hdc, sUiFontBold);
+    if (Config::isLogEnabled()) {
+      drawBox(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(255, 236, 234), RGB(220, 70, 55));
+      drawTextLine(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(190, 50, 40),
+                   L"【 ON (記録中) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    } else {
+      drawBox(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(226, 245, 242), RGB(79, 191, 175));
+      drawTextLine(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(22, 116, 104),
+                   L"【 OFF (高速) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    }
+  } else if (r == 2) {
+    SelectObject(hdc, sUiFontBold);
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 6, 300, 20, RGB(30, 40, 50), L"■ キー配置の変更 (キーリマップ)");
+    SelectObject(hdc, sUiFontTiny);
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 30, 420, 16, RGB(90, 100, 110),
+                 L"数字入力モード(12x)時の各物理キーへの電卓機能の割り当てを変更します");
+    SelectObject(hdc, sUiFontBold);
+    drawBox(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(242, 248, 247), RGB(160, 205, 198));
+    drawTextLine(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(25, 95, 88),
+                 L"設定を開く ▶", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  } else if (r == 3) {
+    SelectObject(hdc, sUiFontBold);
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 6, 300, 20, RGB(30, 40, 50), L"■ キー設定のリセット");
+    SelectObject(hdc, sUiFontTiny);
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 30, 420, 16, RGB(90, 100, 110),
+                 L"キー配置の割り当てをすべて初期設定（デフォルト）に戻します");
+    SelectObject(hdc, sUiFontBold);
+    drawBox(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(255, 245, 244), RGB(220, 180, 175));
+    drawTextLine(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(180, 60, 50),
+                 L"デフォルトに戻す", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  }
+}
+
+static void renderSettingsMainBase(HDC hdc) {
   // 1. ドロップシャドウ
   drawBox(hdc, kSettingsDialogX + 5, kSettingsDialogY + 5, kSettingsDialogW, kSettingsDialogH,
           RGB(136, 153, 166), RGB(136, 153, 166));
@@ -705,83 +769,14 @@ static void renderSettingsMainDialog(HDC hdc) {
   drawTextLine(hdc, kSettingsDialogX, kSettingsDialogY + 9, kSettingsDialogW, 20,
                RGB(255, 255, 255), L"【 Lilium 設定 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-  // 4. 設定項目 4行
-  const int rowY[4] = {
-    kSettingsDialogY + 52,
-    kSettingsDialogY + 114,
-    kSettingsDialogY + 176,
-    kSettingsDialogY + 238
-  };
-
+  // 4. 設定項目 4行 (全て非選択ベース状態: 背景 白, 枠線 薄グレー)
   for (int r = 0; r < 4; r++) {
-    int ry = rowY[r];
-    bool isSel = (sSettingsFocus == r);
-    COLORREF rowBg = isSel ? RGB(232, 246, 244) : RGB(255, 255, 255);
-    COLORREF rowBorder = isSel ? RGB(79, 191, 175) : RGB(216, 224, 232);
-    drawBox(hdc, kSettingsDialogX + 16, ry, kSettingsDialogW - 32, 54, rowBg, rowBorder);
-
-    if (isSel) {
-      drawBox(hdc, kSettingsDialogX + 16, ry, 6, 54, RGB(79, 191, 175), RGB(79, 191, 175));
-    }
+    int ry = kSettingsRowY[r];
+    drawBox(hdc, kSettingsDialogX + 16, ry, kSettingsDialogW - 32, 54, RGB(255, 255, 255), RGB(216, 224, 232));
+    renderSettingsRowContent(hdc, r);
   }
 
-  // 行0: 日本語ヘルプ
-  SelectObject(hdc, sUiFontBold);
-  drawTextLine(hdc, kSettingsDialogX + 32, rowY[0] + 6, 300, 20, RGB(30, 40, 50), L"■ 日本語ヘルプ表示");
-  SelectObject(hdc, sUiFontTiny);
-  drawTextLine(hdc, kSettingsDialogX + 32, rowY[0] + 30, 420, 16, RGB(90, 100, 110),
-               L"右側サイドバーに現在選択中の項目の日本語解説を表示します");
-  SelectObject(hdc, sUiFontBold);
-  if (Config::isHelpEnabled()) {
-    drawBox(hdc, kSettingsDialogX + 460, rowY[0] + 10, 145, 34, RGB(226, 245, 242), RGB(79, 191, 175));
-    drawTextLine(hdc, kSettingsDialogX + 460, rowY[0] + 10, 145, 34, RGB(22, 116, 104),
-                 L"【 有効 (ON) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  } else {
-    drawBox(hdc, kSettingsDialogX + 460, rowY[0] + 10, 145, 34, RGB(242, 244, 247), RGB(200, 208, 216));
-    drawTextLine(hdc, kSettingsDialogX + 460, rowY[0] + 10, 145, 34, RGB(110, 120, 130),
-                 L"【 無効 (OFF) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  }
-
-  // 行1: デバッグログ
-  SelectObject(hdc, sUiFontBold);
-  drawTextLine(hdc, kSettingsDialogX + 32, rowY[1] + 6, 300, 20, RGB(30, 40, 50), L"■ デバッグログ出力");
-  SelectObject(hdc, sUiFontTiny);
-  drawTextLine(hdc, kSettingsDialogX + 32, rowY[1] + 30, 420, 16, RGB(90, 100, 110),
-               L"lilium_debug.log を出力します（通常はOFF推奨）");
-  SelectObject(hdc, sUiFontBold);
-  if (Config::isLogEnabled()) {
-    drawBox(hdc, kSettingsDialogX + 460, rowY[1] + 10, 145, 34, RGB(255, 236, 234), RGB(220, 70, 55));
-    drawTextLine(hdc, kSettingsDialogX + 460, rowY[1] + 10, 145, 34, RGB(190, 50, 40),
-                 L"【 ON (記録中) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  } else {
-    drawBox(hdc, kSettingsDialogX + 460, rowY[1] + 10, 145, 34, RGB(226, 245, 242), RGB(79, 191, 175));
-    drawTextLine(hdc, kSettingsDialogX + 460, rowY[1] + 10, 145, 34, RGB(22, 116, 104),
-                 L"【 OFF (高速) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  }
-
-  // 行2: キー配置変更
-  SelectObject(hdc, sUiFontBold);
-  drawTextLine(hdc, kSettingsDialogX + 32, rowY[2] + 6, 300, 20, RGB(30, 40, 50), L"■ キー配置の変更 (キーリマップ)");
-  SelectObject(hdc, sUiFontTiny);
-  drawTextLine(hdc, kSettingsDialogX + 32, rowY[2] + 30, 420, 16, RGB(90, 100, 110),
-               L"数字入力モード(12x)時の各物理キーへの電卓機能の割り当てを変更します");
-  SelectObject(hdc, sUiFontBold);
-  drawBox(hdc, kSettingsDialogX + 460, rowY[2] + 10, 145, 34, RGB(242, 248, 247), RGB(160, 205, 198));
-  drawTextLine(hdc, kSettingsDialogX + 460, rowY[2] + 10, 145, 34, RGB(25, 95, 88),
-               L"設定を開く ▶", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-
-  // 行3: キー設定リセット
-  SelectObject(hdc, sUiFontBold);
-  drawTextLine(hdc, kSettingsDialogX + 32, rowY[3] + 6, 300, 20, RGB(30, 40, 50), L"■ キー設定のリセット");
-  SelectObject(hdc, sUiFontTiny);
-  drawTextLine(hdc, kSettingsDialogX + 32, rowY[3] + 30, 420, 16, RGB(90, 100, 110),
-               L"キー配置の割り当てをすべて初期設定（デフォルト）に戻します");
-  SelectObject(hdc, sUiFontBold);
-  drawBox(hdc, kSettingsDialogX + 460, rowY[3] + 10, 145, 34, RGB(255, 245, 244), RGB(220, 180, 175));
-  drawTextLine(hdc, kSettingsDialogX + 460, rowY[3] + 10, 145, 34, RGB(180, 60, 50),
-               L"デフォルトに戻す", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-
-  // 5. 下部ボタン群 (Y = 312)
+  // 5. 下部ボタン群 (Y = 312, 非選択ベース状態)
   const int btnY = kSettingsDialogY + 312;
   const int btnW = 160;
   const int btnH = 42;
@@ -789,29 +784,48 @@ static void renderSettingsMainDialog(HDC hdc) {
   const int btn1X = kSettingsDialogX + 345;
 
   SelectObject(hdc, sUiFontBold);
-  // [ 完了して保存 ]
-  if (sSettingsFocus == 4 && sSettingsSubFocus == 0) {
-    drawBox(hdc, btn0X, btnY, btnW, btnH, RGB(79, 191, 175), RGB(40, 150, 135));
-    drawTextLine(hdc, btn0X, btnY, btnW, btnH, RGB(255, 255, 255), L"完了して保存", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  } else {
-    drawBox(hdc, btn0X, btnY, btnW, btnH, RGB(232, 246, 244), RGB(170, 210, 205));
-    drawTextLine(hdc, btn0X, btnY, btnW, btnH, RGB(25, 110, 100), L"完了して保存", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  }
+  drawBox(hdc, btn0X, btnY, btnW, btnH, RGB(232, 246, 244), RGB(170, 210, 205));
+  drawTextLine(hdc, btn0X, btnY, btnW, btnH, RGB(25, 110, 100), L"完了して保存", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-  // [ キャンセル ]
-  if (sSettingsFocus == 4 && sSettingsSubFocus == 1) {
-    drawBox(hdc, btn1X, btnY, btnW, btnH, RGB(100, 115, 130), RGB(70, 85, 100));
-    drawTextLine(hdc, btn1X, btnY, btnW, btnH, RGB(255, 255, 255), L"キャンセル", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  } else {
-    drawBox(hdc, btn1X, btnY, btnW, btnH, RGB(255, 255, 255), RGB(192, 200, 212));
-    drawTextLine(hdc, btn1X, btnY, btnW, btnH, RGB(60, 70, 80), L"キャンセル", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  }
+  drawBox(hdc, btn1X, btnY, btnW, btnH, RGB(255, 255, 255), RGB(192, 200, 212));
+  drawTextLine(hdc, btn1X, btnY, btnW, btnH, RGB(60, 70, 80), L"キャンセル", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
   // 6. ガイド
   SelectObject(hdc, sUiFontTiny);
   drawTextLine(hdc, kSettingsDialogX, kSettingsDialogY + 380, kSettingsDialogW, 18,
                RGB(125, 135, 148), L"[↑/↓]:項目選択   [←/→/Enter]:変更・実行   [Esc]:閉じる",
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+}
+
+static void renderSettingsMainOverlay(HDC hdc) {
+  if (sSettingsFocus >= 0 && sSettingsFocus < 4) {
+    int r = sSettingsFocus;
+    int ry = kSettingsRowY[r];
+    // 選択行のハイライト枠 + 左端緑バー
+    drawBox(hdc, kSettingsDialogX + 16, ry, kSettingsDialogW - 32, 54, RGB(232, 246, 244), RGB(79, 191, 175));
+    drawBox(hdc, kSettingsDialogX + 16, ry, 6, 54, RGB(79, 191, 175), RGB(79, 191, 175));
+    renderSettingsRowContent(hdc, r);
+  } else if (sSettingsFocus == 4) {
+    const int btnY = kSettingsDialogY + 312;
+    const int btnW = 160;
+    const int btnH = 42;
+    const int btn0X = kSettingsDialogX + 135;
+    const int btn1X = kSettingsDialogX + 345;
+
+    SelectObject(hdc, sUiFontBold);
+    if (sSettingsSubFocus == 0) {
+      drawBox(hdc, btn0X, btnY, btnW, btnH, RGB(79, 191, 175), RGB(40, 150, 135));
+      drawTextLine(hdc, btn0X, btnY, btnW, btnH, RGB(255, 255, 255), L"完了して保存", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    } else {
+      drawBox(hdc, btn1X, btnY, btnW, btnH, RGB(100, 115, 130), RGB(70, 85, 100));
+      drawTextLine(hdc, btn1X, btnY, btnW, btnH, RGB(255, 255, 255), L"キャンセル", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    }
+  }
+}
+
+static void renderSettingsMainDialog(HDC hdc) {
+  renderSettingsMainBase(hdc);
+  renderSettingsMainOverlay(hdc);
 }
 
 static void renderKeyConfigDialog(HDC hdc) {
@@ -1119,6 +1133,36 @@ static void getModalBoundingRect(ModalMode mode, int & x, int & y, int & w, int 
   }
 }
 
+static bool isModalOverlaySupported(ModalMode mode) {
+  return mode == ModalMode::ExitConfirm || mode == ModalMode::SettingsMain;
+}
+
+static void renderActiveModalBase(HDC hdc) {
+  switch (sModalMode) {
+    case ModalMode::ExitConfirm:
+      renderExitConfirmBase(hdc);
+      break;
+    case ModalMode::SettingsMain:
+      renderSettingsMainBase(hdc);
+      break;
+    default:
+      break;
+  }
+}
+
+static void renderActiveModalOverlay(HDC hdc) {
+  switch (sModalMode) {
+    case ModalMode::ExitConfirm:
+      renderExitConfirmOverlay(hdc);
+      break;
+    case ModalMode::SettingsMain:
+      renderSettingsMainOverlay(hdc);
+      break;
+    default:
+      break;
+  }
+}
+
 static void renderActiveModal(HDC hdc) {
   switch (sModalMode) {
     case ModalMode::ExitConfirm:
@@ -1249,9 +1293,11 @@ bool handleModalKey(WPARAM vkCode) {
         case VK_RIGHT:
           if (sSettingsFocus == 0) {
             Config::setHelpEnabled(!Config::isHelpEnabled());
+            sBackdropValid = false;
             refreshModal();
           } else if (sSettingsFocus == 1) {
             Config::setLogEnabled(!Config::isLogEnabled());
+            sBackdropValid = false;
             refreshModal();
           } else if (sSettingsFocus == 4) {
             sSettingsSubFocus = 1 - sSettingsSubFocus;
@@ -1261,19 +1307,23 @@ bool handleModalKey(WPARAM vkCode) {
         case VK_RETURN:
           if (sSettingsFocus == 0) {
             Config::setHelpEnabled(!Config::isHelpEnabled());
+            sBackdropValid = false;
             refreshModal();
           } else if (sSettingsFocus == 1) {
             Config::setLogEnabled(!Config::isLogEnabled());
+            sBackdropValid = false;
             refreshModal();
           } else if (sSettingsFocus == 2) {
             sModalMode = ModalMode::KeyConfig;
             sKeySelectedIndex = 0;
             sKeyScrollOffset = 0;
+            sBackdropValid = false;
             refreshModal();
           } else if (sSettingsFocus == 3) {
             sPreviousModalMode = ModalMode::SettingsMain;
             sModalMode = ModalMode::ResetKeyConfirm;
             sResetConfirmFocus = 0;
+            sBackdropValid = false;
             refreshModal();
           } else if (sSettingsFocus == 4) {
             if (sSettingsSubFocus == 0) {
@@ -1332,17 +1382,20 @@ bool handleModalKey(WPARAM vkCode) {
           sWaitingActionIndex = sKeySelectedIndex;
           sWaitingError = false;
           sModalMode = ModalMode::WaitingForKey;
+          sBackdropValid = false;
           refreshModal();
           return true;
         case VK_F4:
           sPreviousModalMode = ModalMode::KeyConfig;
           sModalMode = ModalMode::ResetKeyConfirm;
           sResetConfirmFocus = 0;
+          sBackdropValid = false;
           refreshModal();
           return true;
         case VK_ESCAPE:
         case VK_BACK:
           sModalMode = ModalMode::SettingsMain;
+          sBackdropValid = false;
           refreshModal();
           return true;
         default:
@@ -1352,6 +1405,7 @@ bool handleModalKey(WPARAM vkCode) {
     case ModalMode::WaitingForKey:
       if (vkCode == VK_ESCAPE || vkCode == VK_BACK) {
         sModalMode = ModalMode::KeyConfig;
+        sBackdropValid = false;
         refreshModal();
         return true;
       }
@@ -1364,6 +1418,7 @@ bool handleModalKey(WPARAM vkCode) {
       sPendingNewVk = static_cast<uint16_t>(vkCode);
       sKeyChangeConfirmFocus = 0;
       sModalMode = ModalMode::KeyChangeConfirm;
+      sBackdropValid = false;
       refreshModal();
       return true;
 
@@ -1382,11 +1437,13 @@ bool handleModalKey(WPARAM vkCode) {
             Config::setActionKey(Config::getActionInfo(sPendingActionIndex).action, sPendingNewVk);
           }
           sModalMode = ModalMode::KeyConfig;
+          sBackdropValid = false;
           refreshModal();
           return true;
         case VK_ESCAPE:
         case VK_BACK:
           sModalMode = ModalMode::KeyConfig;
+          sBackdropValid = false;
           refreshModal();
           return true;
         default:
@@ -1408,11 +1465,13 @@ bool handleModalKey(WPARAM vkCode) {
             Config::resetKeyMappingsToDefault();
           }
           sModalMode = sPreviousModalMode;
+          sBackdropValid = false;
           refreshModal();
           return true;
         case VK_ESCAPE:
         case VK_BACK:
           sModalMode = sPreviousModalMode;
+          sBackdropValid = false;
           refreshModal();
           return true;
         default:
@@ -1464,12 +1523,14 @@ bool handleModalClick(int x, int y) {
       if (y >= ry0 && y < ry0 + 54) {
         sSettingsFocus = 0;
         Config::setHelpEnabled(!Config::isHelpEnabled());
+        sBackdropValid = false;
         refreshModal();
         return true;
       }
       if (y >= ry1 && y < ry1 + 54) {
         sSettingsFocus = 1;
         Config::setLogEnabled(!Config::isLogEnabled());
+        sBackdropValid = false;
         refreshModal();
         return true;
       }
@@ -1478,6 +1539,7 @@ bool handleModalClick(int x, int y) {
         sModalMode = ModalMode::KeyConfig;
         sKeySelectedIndex = 0;
         sKeyScrollOffset = 0;
+        sBackdropValid = false;
         refreshModal();
         return true;
       }
@@ -1486,6 +1548,7 @@ bool handleModalClick(int x, int y) {
         sPreviousModalMode = ModalMode::SettingsMain;
         sModalMode = ModalMode::ResetKeyConfirm;
         sResetConfirmFocus = 0;
+        sBackdropValid = false;
         refreshModal();
         return true;
       }
@@ -1866,8 +1929,14 @@ static void createBackdrop() {
       dstRow[x] = (r << 16) | (g << 8) | b;
     }
   }
+
+  // Base+Overlay 最適化に対応したモーダル表示中であれば、そのモーダルの静的ベース下地 (全文字・全枠線) を sBackdropDC 上に描画してキャッシュ！
+  if (sModalMode != ModalMode::None && isModalOverlaySupported(sModalMode)) {
+    renderActiveModalBase(sBackdropDC);
+  }
+
   sBackdropValid = true;
-  BrainLog("createBackdrop: cached darkened screen");
+  BrainLog("createBackdrop: cached darkened screen with modal base");
 }
 
 void draw() {
@@ -1891,12 +1960,18 @@ void draw() {
 
     DWORD t0 = GetTickCount();
 
-    // 1. キャッシュされた暗転背景から対象矩形をメモリDC (sMemDC) に超高速転送 (BitBlt)
+    // 1. キャッシュされた暗転背景/下地から対象矩形をメモリDC (sMemDC) に超高速転送 (BitBlt)
     BitBlt(sMemDC, mx, my, mw, mh, sBackdropDC, mx, my, SRCCOPY);
     DWORD t1 = GetTickCount();
 
-    // 2. メモリDC上にモーダルダイアログを描画
-    renderActiveModal(sMemDC);
+    // 2. モーダル描画:
+    // Base+Overlay 最適化対応モーダル (SettingsMain / ExitConfirm) の場合:
+    // 下地は sBackdropDC に全文字描画済みのため、選択行/ボタンのみを超軽量に上書き描画 (180文字のラスタライズ全廃！)
+    if (isModalOverlaySupported(sModalMode)) {
+      renderActiveModalOverlay(sMemDC);
+    } else {
+      renderActiveModal(sMemDC);
+    }
     DWORD t2 = GetTickCount();
 
     // 3. 対象矩形のみを実画面に1回だけ BitBlt (フリッカー完全ゼロ & 転送量最小化)
