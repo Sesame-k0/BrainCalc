@@ -123,6 +123,7 @@ static void drawBox(HDC hdc, int x, int y, int w, int h, COLORREF bgColor, COLOR
 
 static void drawTextLine(HDC hdc, int x, int y, int w, int h, COLORREF color, const wchar_t * text, UINT alignFlags = DT_LEFT | DT_VCENTER | DT_SINGLELINE) {
   RECT rc = { x, y, x + w, y + h };
+  SetBkMode(hdc, TRANSPARENT);
   SetTextColor(hdc, color);
   DrawTextW(hdc, text, -1, &rc, alignFlags);
 }
@@ -1793,6 +1794,104 @@ static HFONT createFontWithFallback(const wchar_t * faceName, int height, LONG w
   return CreateFontIndirectW(&lf);
 }
 
+#define ENABLE_BRAIN_BENCHMARK 1
+
+#if ENABLE_BRAIN_BENCHMARK
+static void runStartupBenchmark(HDC hdcScreen) {
+  BrainLog("=== Startup Benchmark Start ===");
+  const int bw = 640;
+  const int bh = 370;
+  const int bx = 100;
+  const int by = 50;
+
+  // 1. BitBlt (sMemDC <- sBackdropDC, 32bit -> 32bit DIB)
+  DWORD t0 = GetTickCount();
+  for (int i = 0; i < 5; i++) {
+    BitBlt(sMemDC, bx, by, bw, bh, sBackdropDC, bx, by, SRCCOPY);
+  }
+  DWORD t1 = GetTickCount();
+  BrainLogInt("Bench: 32b-32b BitBlt 640x370 (5 frames, ms)", (int)(t1 - t0));
+
+  // 2. 自前 memcpy (sDibPixels <- sBackdropPixels, 32bit -> 32bit 行単位)
+  t0 = GetTickCount();
+  for (int i = 0; i < 5; i++) {
+    for (int y = by; y < by + bh; y++) {
+      memcpy(sDibPixels + y * kBrainScreenWidth + bx,
+             sBackdropPixels + y * kBrainScreenWidth + bx,
+             bw * sizeof(uint32_t));
+    }
+  }
+  t1 = GetTickCount();
+  BrainLogInt("Bench: 32b-32b memcpy 640x370 (5 frames, ms)", (int)(t1 - t0));
+
+  // 3. BitBlt to Screen (hdcScreen <- sMemDC, 32bit -> 16bit LCD)
+  if (hdcScreen) {
+    t0 = GetTickCount();
+    for (int i = 0; i < 5; i++) {
+      BitBlt(hdcScreen, bx, by, bw, bh, sMemDC, bx, by, SRCCOPY);
+    }
+    t1 = GetTickCount();
+    BrainLogInt("Bench: 32b->16b Screen BitBlt 640x370 (5 frames, ms)", (int)(t1 - t0));
+  }
+
+  // 4. 文字描画ベンチマーク (各20回)
+  SelectObject(sMemDC, sUiFontBold);
+  SetBkMode(sMemDC, TRANSPARENT);
+  RECT rc = { bx, by, bx + 250, by + 30 };
+
+  // 4-a: ASCII "A"
+  t0 = GetTickCount();
+  for (int i = 0; i < 20; i++) {
+    DrawTextW(sMemDC, L"A", 1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  }
+  t1 = GetTickCount();
+  BrainLogInt("Bench: DrawText 'A' (20 times, ms)", (int)(t1 - t0));
+
+  // 4-b: 漢字 "設"
+  t0 = GetTickCount();
+  for (int i = 0; i < 20; i++) {
+    DrawTextW(sMemDC, L"設", 1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  }
+  t1 = GetTickCount();
+  BrainLogInt("Bench: DrawText '設' (20 times, ms)", (int)(t1 - t0));
+
+  // 4-c: 記号 "▶" (U+25B6, 非JIS)
+  t0 = GetTickCount();
+  for (int i = 0; i < 20; i++) {
+    DrawTextW(sMemDC, L"▶", 1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  }
+  t1 = GetTickCount();
+  BrainLogInt("Bench: DrawText '▶' (U+25B6, 20 times, ms)", (int)(t1 - t0));
+
+  // 4-d: 全角記号 "＞" (U+FF1E, JIS)
+  t0 = GetTickCount();
+  for (int i = 0; i < 20; i++) {
+    DrawTextW(sMemDC, L"＞", 1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  }
+  t1 = GetTickCount();
+  BrainLogInt("Bench: DrawText '＞' (U+FF1E, 20 times, ms)", (int)(t1 - t0));
+
+  // 4-e: 長文 (18文字)
+  const wchar_t * testLine = L"■ キー配置の変更 (キーリマップ)";
+  t0 = GetTickCount();
+  for (int i = 0; i < 10; i++) {
+    DrawTextW(sMemDC, testLine, -1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  }
+  t1 = GetTickCount();
+  BrainLogInt("Bench: DrawText line 18chars (10 times, ms)", (int)(t1 - t0));
+
+  // 5. drawBox ベンチマーク (10回)
+  t0 = GetTickCount();
+  for (int i = 0; i < 10; i++) {
+    drawBox(sMemDC, bx, by, bw, 54, RGB(232, 246, 244), RGB(79, 191, 175));
+  }
+  t1 = GetTickCount();
+  BrainLogInt("Bench: drawBox 640x54 (10 times, ms)", (int)(t1 - t0));
+
+  BrainLog("=== Startup Benchmark End ===");
+}
+#endif
+
 void init() {
   BrainLog("Display::init enter");
   HINSTANCE hInstance = GetModuleHandleW(NULL);
@@ -1868,6 +1967,10 @@ void init() {
   sBackdropValid = false;
   BrainLogHex("Display::init CreateDIBSection backdrop pixels", reinterpret_cast<uintptr_t>(sBackdropPixels));
 
+  // Ensure transparent text rendering mode on all offscreen DCs
+  SetBkMode(sMemDC, TRANSPARENT);
+  SetBkMode(sBackdropDC, TRANSPARENT);
+
   // Resolve preferred font face with multi-stage fallback and ANTIALIASED_QUALITY (4)
   // ドットフォント (DotGothic16 / 美咲) 使用時は整数倍サイズ (-16 = 原寸/2倍, -8 = 1倍) かつ FW_NORMAL で
   // ドット潰れ・端数滲みのない完全なピクセル描画にする
@@ -1889,6 +1992,10 @@ void init() {
   // Initial render into memory DC before showing window
   renderCalculatorRect(0, 0, Ion::Display::Width, Ion::Display::Height);
   renderRightSidebar(sMemDC);
+
+#if ENABLE_BRAIN_BENCHMARK
+  runStartupBenchmark(hdcScreen);
+#endif
 
   ReleaseDC(sHwnd, hdcScreen);
 
