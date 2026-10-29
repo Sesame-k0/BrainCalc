@@ -10,6 +10,7 @@
 #include <windows.h>
 
 #include "main.h"
+#include "config.h"
 #include "display.h"
 #include "logger.h"
 #include <ion.h>
@@ -412,6 +413,8 @@ bool restoreBrainState() {
 
 void init() {
   BrainLog("Main::init: start");
+  Ion::Simulator::Config::init();
+  BrainLog("Main::init: Config::init done");
   loadBundledFont();
   BrainLogInt("Main::init: loadBundledFont done", sFontLoaded ? 1 : 0);
   Ion::Simulator::Random::init();
@@ -455,6 +458,7 @@ void refresh() {
 
 void quit() {
   BrainLog("Main::quit: start");
+  Ion::Simulator::Config::save();
   saveBrainState();
   restoreTaskBar();
   Ion::Simulator::Display::quit();

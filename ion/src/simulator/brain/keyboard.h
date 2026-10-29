@@ -39,6 +39,8 @@ void toggleNumberInput();
 
 bool hasPendingEvent();
 Ion::Events::Event popPendingEvent();
+void pushPendingEvent(Ion::Events::Event e);
+void pushExternalText(const char * utf8Text);
 void requestTermination();
 bool isTerminationRequested();
 

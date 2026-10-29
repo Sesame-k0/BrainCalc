@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "keyboard.h"
+#include "config.h"
 #include "display.h"
 #include "main.h"
 #include "logger.h"
@@ -38,7 +39,7 @@ static Ion::Events::Event sEventQueue[kEventQueueCapacity];
 static int sEventQueueHead = 0;
 static int sEventQueueTail = 0;
 
-static void pushPendingEvent(Ion::Events::Event e) {
+void pushPendingEvent(Ion::Events::Event e) {
   if (e == Ion::Events::None) {
     return;
   }
@@ -50,7 +51,7 @@ static void pushPendingEvent(Ion::Events::Event e) {
   }
 }
 
-static void pushExternalTextEvent(const char * utf8Text) {
+void pushExternalText(const char * utf8Text) {
   char * buf = Ion::Events::sharedExternalTextBuffer();
   if (buf && utf8Text) {
     strncpy(buf, utf8Text, 31);
@@ -124,45 +125,11 @@ bool isTerminationRequested() {
 
 // KEY-MAPPING.md Section 4: 【数字モード（ON / 12x）時】
 static bool handleNumberModeKey(WPARAM vkCode) {
-  switch (vkCode) {
-    // 【上段 Q-P】 -> 1, 2, 3, 4, 5, 6, 7, 8, 9, 0
-    case 'Q': pushPendingEvent(Ion::Events::One);   return true;
-    case 'W': pushPendingEvent(Ion::Events::Two);   return true;
-    case 'E': pushPendingEvent(Ion::Events::Three); return true;
-    case 'R': pushPendingEvent(Ion::Events::Four);  return true;
-    case 'T': pushPendingEvent(Ion::Events::Five);  return true;
-    case 'Y': pushPendingEvent(Ion::Events::Six);   return true;
-    case 'U': pushPendingEvent(Ion::Events::Seven); return true;
-    case 'I': pushPendingEvent(Ion::Events::Eight); return true;
-    case 'O': pushPendingEvent(Ion::Events::Nine);  return true;
-    case 'P': pushPendingEvent(Ion::Events::Zero);  return true;
-
-    // 【中段 A-L】
-    case 'A': pushPendingEvent(Ion::Events::Plus);           return true; // +
-    case 'S': pushPendingEvent(Ion::Events::Minus);          return true; // -
-    case 'D': pushPendingEvent(Ion::Events::Multiplication); return true; // *
-    case 'F': pushPendingEvent(Ion::Events::Division);       return true; // /
-    case 'G': pushPendingEvent(Ion::Events::Equal);          return true; // =
-    case 'H': pushPendingEvent(Ion::Events::Power);          return true; // x^n (n乗)
-    case 'J': pushExternalTextEvent("\xe2\x84\xaf");         return true; // e (ネイピア数 U+212F 'ℯ')
-    case 'K': pushPendingEvent(Ion::Events::Ans);            return true; // ANSキー
-    case 'L': pushPendingEvent(Ion::Events::Sto);            return true; // STOキー
-
-    // 【下段 Z-ー】
-    case 'Z': pushPendingEvent(Ion::Events::Sqrt);      return true; // sqrt (√)
-    case 'X': pushPendingEvent(Ion::Events::XNT);       return true; // x,n,t
-    case 'C': pushPendingEvent(Ion::Events::Imaginary); return true; // 虚数i
-    case 'V': pushPendingEvent(Ion::Events::Pi);        return true; // pi (π)
-    case 'B': pushPendingEvent(Ion::Events::Log);       return true; // log
-    case 'N': pushPendingEvent(Ion::Events::Comma);     return true; // ,
-    case 'M': pushPendingEvent(Ion::Events::Dot);       return true; // .
-    case 0xBD: // [ー(長音記号)] -> マイナス (-)
-      pushPendingEvent(Ion::Events::Minus);
-      return true;
-
-    default:
-      return false;
+  Config::KeyAction action = Config::findActionByVk(static_cast<uint16_t>(vkCode));
+  if (action != Config::KeyAction::ActionCount) {
+    return Config::executeAction(action);
   }
+  return false;
 }
 
 // KEY-MAPPING.md Section 4: 【通常モード (OFF / abc) 時】
@@ -213,8 +180,8 @@ static bool handleUpperAlphaModeKey(WPARAM vkCode) {
 
 void onKeyDown(WPARAM vkCode, LPARAM lParam) {
   BrainLogInt("Keyboard::onKeyDown vkCode", (int)vkCode);
-  if (Display::isExitConfirmOpen()) {
-    Display::handleExitConfirmKey(vkCode);
+  if (Display::isModalOpen()) {
+    Display::handleModalKey(vkCode);
     return;
   }
 
@@ -384,7 +351,7 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
 }
 
 void onKeyUp(WPARAM vkCode, LPARAM /*lParam*/) {
-  if (Display::isExitConfirmOpen()) {
+  if (Display::isModalOpen()) {
     return;
   }
   if (vkCode == VK_ESCAPE || vkCode == VK_HOME || vkCode == VK_F10) {
@@ -394,8 +361,8 @@ void onKeyUp(WPARAM vkCode, LPARAM /*lParam*/) {
 
 void onTouchClick(int x, int y) {
   BrainLogInt2("Keyboard::onTouchClick", x, y);
-  if (Display::isExitConfirmOpen()) {
-    Display::handleExitConfirmClick(x, y);
+  if (Display::isModalOpen()) {
+    Display::handleModalClick(x, y);
     return;
   }
   // 最下部「終了」ボタンのタッチ／クリック判定

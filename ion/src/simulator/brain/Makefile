@@ -2,6 +2,7 @@
 
 ion_src += $(addprefix ion/src/simulator/brain/, \
   main.cpp \
+  config.cpp \
   logger.cpp \
   display.cpp \
   framebuffer.cpp \
