@@ -114,7 +114,9 @@ static void writeRawLineToLog(const char * line, DWORD createDisposition, void *
     }
     DWORD written = 0;
     WriteFile(hFile, buf, (DWORD)n, &written, NULL);
-    FlushFileBuffers(hFile);
+    // FlushFileBuffers は microSD のハードウェア同期で 100〜300ms のストールを引き起こすため抑止
+    // CloseHandle により OS のファイルシステムキャッシュ経由で安全に書き込まれる
+    // FlushFileBuffers(hFile);
   }
   CloseHandle(hFile);
 }

@@ -99,18 +99,26 @@ void markSidebarDirty() {
 }
 
 static void drawBox(HDC hdc, int x, int y, int w, int h, COLORREF bgColor, COLORREF borderColor) {
-  RECT rc = { x, y, x + w, y + h };
-  HBRUSH hBrush = CreateSolidBrush(bgColor);
-  FillRect(hdc, &rc, hBrush);
-  DeleteObject(hBrush);
+  RECT rcOuter = { x, y, x + w, y + h };
+  if (bgColor == borderColor) {
+    HBRUSH hBrush = CreateSolidBrush(bgColor);
+    FillRect(hdc, &rcOuter, hBrush);
+    DeleteObject(hBrush);
+    return;
+  }
 
-  HPEN hPen = CreatePen(PS_SOLID, 1, borderColor);
-  HGDIOBJ oldPen = SelectObject(hdc, hPen);
-  HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
-  Rectangle(hdc, x, y, x + w, y + h);
-  SelectObject(hdc, oldBrush);
-  SelectObject(hdc, oldPen);
-  DeleteObject(hPen);
+  // 枠線付き矩形: 外枠を borderColor、内側を bgColor で高速 FillRect
+  // Rectangle/CreatePen/SelectObject の重い多角形描画パスを回避し、WinCE ARM で超高速化
+  HBRUSH hBorderBrush = CreateSolidBrush(borderColor);
+  FillRect(hdc, &rcOuter, hBorderBrush);
+  DeleteObject(hBorderBrush);
+
+  if (w > 2 && h > 2) {
+    RECT rcInner = { x + 1, y + 1, x + w - 1, y + h - 1 };
+    HBRUSH hBgBrush = CreateSolidBrush(bgColor);
+    FillRect(hdc, &rcInner, hBgBrush);
+    DeleteObject(hBgBrush);
+  }
 }
 
 static void drawTextLine(HDC hdc, int x, int y, int w, int h, COLORREF color, const wchar_t * text, UINT alignFlags = DT_LEFT | DT_VCENTER | DT_SINGLELINE) {
@@ -1079,6 +1087,38 @@ static void renderResetKeyConfirmDialog(HDC hdc) {
                L"[Enter]: 決定   [Esc]: 戻る   [←/→]: 選択", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
+static void getModalBoundingRect(ModalMode mode, int & x, int & y, int & w, int & h) {
+  switch (mode) {
+    case ModalMode::ExitConfirm:
+      x = kExitDialogX;
+      y = kExitDialogY;
+      w = kExitDialogW + 8;
+      h = kExitDialogH + 8;
+      break;
+    case ModalMode::SettingsMain:
+      x = kSettingsDialogX;
+      y = kSettingsDialogY;
+      w = kSettingsDialogW + 8;
+      h = kSettingsDialogH + 8;
+      break;
+    case ModalMode::KeyConfig:
+    case ModalMode::WaitingForKey:
+    case ModalMode::KeyChangeConfirm:
+    case ModalMode::ResetKeyConfirm:
+      x = kKeyDialogX;
+      y = kKeyDialogY;
+      w = kKeyDialogW + 8;
+      h = kKeyDialogH + 8;
+      break;
+    default:
+      x = 0;
+      y = 0;
+      w = kBrainScreenWidth;
+      h = kBrainScreenHeight;
+      break;
+  }
+}
+
 static void renderActiveModal(HDC hdc) {
   switch (sModalMode) {
     case ModalMode::ExitConfirm:
@@ -1676,14 +1716,14 @@ static const wchar_t * resolvePreferredFontFace(HDC hdc) {
   return kFontCandidates[0];
 }
 
-static HFONT createFontWithFallback(const wchar_t * faceName, int height, LONG weight) {
+static HFONT createFontWithFallback(const wchar_t * faceName, int height, LONG weight, DWORD quality = ANTIALIASED_QUALITY) {
   LOGFONTW lf = {};
   lf.lfHeight = height;
   lf.lfWeight = weight;
   lf.lfCharSet = DEFAULT_CHARSET;
   lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
   lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
-  lf.lfQuality = ANTIALIASED_QUALITY; // 明示的に 4 を指定 (ClearTypeはBrain実機で滲むため禁止)
+  lf.lfQuality = quality; // ドットフォントは NONANTIALIASED_QUALITY (3) で超高速かつ鮮明に描画
   lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
   wcsncpy(lf.lfFaceName, faceName, LF_FACESIZE - 1);
   lf.lfFaceName[LF_FACESIZE - 1] = L'\0';
@@ -1771,9 +1811,10 @@ void init() {
   const wchar_t * faceName = resolvePreferredFontFace(sMemDC);
   bool isDotGothic = (wcsstr(faceName, L"DotGothic") != nullptr);
   bool isMisaki = (wcscmp(faceName, L"MisakiGothic") == 0 || wcscmp(faceName, L"美咲ゴシック") == 0);
-  sUiFontBold  = createFontWithFallback(faceName, (isDotGothic || isMisaki) ? -16 : -14, (isDotGothic || isMisaki) ? FW_NORMAL : FW_BOLD);
-  sUiFontSmall = createFontWithFallback(faceName, (isDotGothic || isMisaki) ? -16 : -12, FW_NORMAL);
-  sUiFontTiny  = createFontWithFallback(faceName, (isDotGothic || isMisaki) ? -8  : -10, FW_NORMAL);
+  DWORD fontQuality = (isDotGothic || isMisaki) ? NONANTIALIASED_QUALITY : ANTIALIASED_QUALITY;
+  sUiFontBold  = createFontWithFallback(faceName, (isDotGothic || isMisaki) ? -16 : -14, (isDotGothic || isMisaki) ? FW_NORMAL : FW_BOLD, fontQuality);
+  sUiFontSmall = createFontWithFallback(faceName, (isDotGothic || isMisaki) ? -16 : -12, FW_NORMAL, fontQuality);
+  sUiFontTiny  = createFontWithFallback(faceName, (isDotGothic || isMisaki) ? -8  : -10, FW_NORMAL, fontQuality);
 
   sCalcDirty = true;
   sDirtyMinX = 0;
@@ -1837,22 +1878,37 @@ void draw() {
   // モーダルダイアログ表示時: 背景キャッシュを使ってダブルバッファ描画
   // 素の電卓画面が実画面に描画されるのを防ぎ、チラつきと遅延を完全解消する
   if (sModalMode != ModalMode::None) {
-    if (!sBackdropValid) {
+    bool isInitialOpen = !sBackdropValid;
+    if (isInitialOpen) {
       createBackdrop();
     }
-    // 1. キャッシュされた暗転背景をメモリDC (sMemDC) に超高速転送 (BitBlt)
-    BitBlt(sMemDC, 0, 0, kBrainScreenWidth, kBrainScreenHeight, sBackdropDC, 0, 0, SRCCOPY);
+
+    // 初回は全画面 (800x480) を転送、以降のカーソル移動等はモーダル矩形のみ部分 BitBlt して高速化
+    int mx = 0, my = 0, mw = kBrainScreenWidth, mh = kBrainScreenHeight;
+    if (!isInitialOpen) {
+      getModalBoundingRect(sModalMode, mx, my, mw, mh);
+    }
+
+    DWORD t0 = GetTickCount();
+
+    // 1. キャッシュされた暗転背景から対象矩形をメモリDC (sMemDC) に超高速転送 (BitBlt)
+    BitBlt(sMemDC, mx, my, mw, mh, sBackdropDC, mx, my, SRCCOPY);
+    DWORD t1 = GetTickCount();
 
     // 2. メモリDC上にモーダルダイアログを描画
     renderActiveModal(sMemDC);
+    DWORD t2 = GetTickCount();
 
-    // 3. 完成したフレームを実画面に1回だけ BitBlt (フリッカー完全ゼロ)
+    // 3. 対象矩形のみを実画面に1回だけ BitBlt (フリッカー完全ゼロ & 転送量最小化)
     HDC hdc = GetDC(sHwnd);
     if (hdc) {
-      BitBlt(hdc, 0, 0, kBrainScreenWidth, kBrainScreenHeight, sMemDC, 0, 0, SRCCOPY);
+      BitBlt(hdc, mx, my, mw, mh, sMemDC, mx, my, SRCCOPY);
       ReleaseDC(sHwnd, hdc);
     }
-    BrainLogInt("draw: modal rendered mode", (int)sModalMode);
+    DWORD t3 = GetTickCount();
+
+    BrainLogInt2("Profile modal (bg_ms, ui_ms)", (int)(t1 - t0), (int)(t2 - t1));
+    BrainLogInt2("Profile modal (scr_ms, total_ms)", (int)(t3 - t2), (int)(t3 - t0));
     return;
   }
 
