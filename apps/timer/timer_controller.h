@@ -32,6 +32,7 @@ private:
   TimerView m_view;
   RefreshTimer m_refreshTimer;
   bool m_timerRunning;
+  uint32_t m_lastDrawnSeconds;
 
   void preventScreenSleep();
 };

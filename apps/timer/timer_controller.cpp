@@ -7,6 +7,9 @@
 extern "C" void WINAPI SystemIdleTimerReset(void);
 #endif
 
+extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText);
+extern "C" void BrainClearHelp();
+
 namespace TimerApp {
 
 bool TimerController::RefreshTimer::fire() {
@@ -18,7 +21,8 @@ TimerController::TimerController(Responder * parentResponder, Snapshot * snapsho
   m_snapshot(snapshot),
   m_view(snapshot),
   m_refreshTimer(this),
-  m_timerRunning(false)
+  m_timerRunning(false),
+  m_lastDrawnSeconds(0xFFFFFFFF)
 {
 }
 
@@ -32,6 +36,8 @@ void TimerController::preventScreenSleep() {
 void TimerController::viewWillAppear() {
   ViewController::viewWillAppear();
   m_snapshot->loadFromStorage();
+  m_lastDrawnSeconds = 0xFFFFFFFF;
+  BrainNotifyHelpText("Timer", nullptr);
   AppsContainer::sharedAppsContainer()->addTimer(&m_refreshTimer);
   m_timerRunning = true;
 }
@@ -39,6 +45,7 @@ void TimerController::viewWillAppear() {
 void TimerController::viewDidDisappear() {
   ViewController::viewDidDisappear();
   m_snapshot->saveToStorage();
+  BrainClearHelp();
   if (m_timerRunning) {
     AppsContainer::sharedAppsContainer()->removeTimer(&m_refreshTimer);
     m_timerRunning = false;
@@ -60,8 +67,18 @@ bool TimerController::onTimerTick() {
       }
     }
 
-    m_view.markDirty();
-    return true;
+    uint32_t currentSec = 0;
+    if (m_snapshot->mode() == Mode::Stopwatch) {
+      currentSec = static_cast<uint32_t>(m_snapshot->elapsedMillis() / 1000);
+    } else {
+      currentSec = static_cast<uint32_t>((m_snapshot->remainingMillis() + 999) / 1000);
+    }
+
+    if (currentSec != m_lastDrawnSeconds) {
+      m_lastDrawnSeconds = currentSec;
+      m_view.markDirty();
+      return true;
+    }
   }
   return false;
 }

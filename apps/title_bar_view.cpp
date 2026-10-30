@@ -14,7 +14,7 @@ TitleBarView::TitleBarView() :
   m_titleView(KDFont::SmallFont, I18n::Message::Default, 0.5f, 0.5f, Palette::ToolbarText, Palette::Toolbar),
   m_preferenceView(KDFont::SmallFont, 1.0f, 0.5, Palette::ToolbarText, Palette::Toolbar),
   m_clockView(KDFont::SmallFont, 0.5f, 0.5f, Palette::ToolbarText, Palette::Toolbar),
-  m_cpuView(KDFont::SmallFont, 1.0f, 0.5f, Palette::ToolbarText, Palette::Toolbar),
+  m_cpuView(KDFont::SmallFont, 0.0f, 0.5f, Palette::ToolbarText, Palette::Toolbar),
   m_hours(-1),
   m_mins(-1),
   m_clockEnabled(false)
@@ -59,7 +59,7 @@ bool TitleBarView::setShiftAlphaLockStatus(Ion::Events::ShiftAlphaStatus status)
 bool TitleBarView::updateCPU() {
   int percent = Ion::Timing::cpuUsagePercentage();
   char buffer[12];
-  snprintf(buffer, sizeof(buffer), "%d%%", percent);
+  snprintf(buffer, sizeof(buffer), "/%d%%", percent);
   if (strcmp(m_cpuView.text(), buffer) != 0) {
     m_cpuView.setText(buffer);
     markRectAsDirty(m_cpuView.bounds());
@@ -101,14 +101,18 @@ void TitleBarView::layoutSubviews(bool force) {
    * (because their glyph never cross the baseline). To avoid this effect, we
    * translate the frame of the title downwards.*/
   m_titleView.setFrame(KDRect(0, 2, bounds().width(), bounds().height()-2), force);
-  m_preferenceView.setFrame(KDRect(Metric::TitleBarExternHorizontalMargin, 0, m_preferenceView.minimalSizeForOptimalDisplay().width(), bounds().height()), force);
+
+  KDCoordinate prefWidth = m_preferenceView.minimalSizeForOptimalDisplay().width();
+  m_preferenceView.setFrame(KDRect(Metric::TitleBarExternHorizontalMargin, 0, prefWidth, bounds().height()), force);
+
+  constexpr KDCoordinate k_cpuWidth = 36;
+  m_cpuView.setFrame(KDRect(Metric::TitleBarExternHorizontalMargin + prefWidth, 0, k_cpuWidth, bounds().height()), force);
+
   m_clockView.setFrame(KDRectZero, force);
   KDSize batterySize = m_batteryView.minimalSizeForOptimalDisplay();
   m_batteryView.setFrame(KDRect(bounds().width() - batterySize.width() - Metric::TitleBarExternHorizontalMargin, (bounds().height()- batterySize.height())/2, batterySize), force);
 
-  constexpr KDCoordinate k_cpuWidth = 30;
-  m_cpuView.setFrame(KDRect(bounds().width() - batterySize.width() - Metric::TitleBarExternHorizontalMargin - k_cpuWidth - 2, 0, k_cpuWidth, bounds().height()), force);
-  KDCoordinate rightOffset = batterySize.width() + Metric::TitleBarExternHorizontalMargin + k_cpuWidth + 4;
+  KDCoordinate rightOffset = batterySize.width() + Metric::TitleBarExternHorizontalMargin + 2;
   if (GlobalPreferences::sharedGlobalPreferences()->isInExamMode()) {
     m_examModeIconView.setFrame(KDRect(bounds().width() - rightOffset - k_examIconWidth, (bounds().height() - k_examIconHeight)/2, k_examIconWidth, k_examIconHeight), force);
     rightOffset += k_examIconWidth + k_alphaRightMargin;

@@ -1,4 +1,15 @@
 {
+  "App_Timer": {
+    "en_keys": [
+      "Timer",
+      "TIMER",
+      "Stopwatch",
+      "Pomodoro"
+    ],
+    "en_desc": "Stopwatch, timer, and pomodoro with quick notes and background tracking.",
+    "ja_title": "タイマーアプリ",
+    "ja_desc": "ストップウォッチ、タイマー、ポモドーロ機能。\n他アプリ中も裏で稼働。\n【Enter】開始/一時停止\n【Back】リセット\n【←/→】モード切替\n【キー直打ち】メモ入力"
+  },
   "App_Calculation": {
     "en_keys": [
       "Calculation",
