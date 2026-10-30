@@ -20,5 +20,9 @@ void msleep(uint32_t ms) {
   SDL_Delay(ms);
 }
 
+int cpuUsagePercentage() {
+  return 0;
+}
+
 }
 }

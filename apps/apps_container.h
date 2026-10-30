@@ -46,6 +46,7 @@ public:
   bool updateBatteryState();
   void refreshPreferences();
   void reloadTitleBarView();
+  void resetDimmingTimer();
   void displayExamModePopUp(GlobalPreferences::ExamMode mode);
   void shutdownDueToLowBattery();
   void setShiftAlphaStatus(Ion::Events::ShiftAlphaStatus newStatus);

@@ -424,6 +424,11 @@ void AppsContainer::reloadTitleBarView() {
   m_window.reloadTitleBarView();
 }
 
+void AppsContainer::resetDimmingTimer() {
+  m_backlightDimmingTimer.reset();
+  m_suspendTimer.reset();
+}
+
 void AppsContainer::displayExamModePopUp(GlobalPreferences::ExamMode mode) {
   m_examPopUpController.setTargetExamMode(mode);
   s_activeApp->displayModalViewController(&m_examPopUpController, 0.f, 0.f, Metric::ExamPopUpTopMargin, Metric::PopUpRightMargin, Metric::ExamPopUpBottomMargin, Metric::PopUpLeftMargin);

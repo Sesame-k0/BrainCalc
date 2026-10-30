@@ -1,6 +1,8 @@
 #include "title_bar_view.h"
 #include "exam_icon.h"
 #include "global_preferences.h"
+#include <ion/timing.h>
+#include <stdio.h>
 extern "C" {
 #include <assert.h>
 }
@@ -12,6 +14,7 @@ TitleBarView::TitleBarView() :
   m_titleView(KDFont::SmallFont, I18n::Message::Default, 0.5f, 0.5f, Palette::ToolbarText, Palette::Toolbar),
   m_preferenceView(KDFont::SmallFont, 1.0f, 0.5, Palette::ToolbarText, Palette::Toolbar),
   m_clockView(KDFont::SmallFont, 0.5f, 0.5f, Palette::ToolbarText, Palette::Toolbar),
+  m_cpuView(KDFont::SmallFont, 1.0f, 0.5f, Palette::ToolbarText, Palette::Toolbar),
   m_hours(-1),
   m_mins(-1),
   m_clockEnabled(false)
@@ -53,8 +56,20 @@ bool TitleBarView::setShiftAlphaLockStatus(Ion::Events::ShiftAlphaStatus status)
   return m_shiftAlphaLockView.setStatus(status);
 }
 
+bool TitleBarView::updateCPU() {
+  int percent = Ion::Timing::cpuUsagePercentage();
+  char buffer[12];
+  snprintf(buffer, sizeof(buffer), "%d%%", percent);
+  if (strcmp(m_cpuView.text(), buffer) != 0) {
+    m_cpuView.setText(buffer);
+    markRectAsDirty(m_cpuView.bounds());
+    return true;
+  }
+  return false;
+}
+
 int TitleBarView::numberOfSubviews() const {
-  return 6;
+  return 7;
 }
 
 View * TitleBarView::subviewAtIndex(int index) {
@@ -73,6 +88,9 @@ View * TitleBarView::subviewAtIndex(int index) {
   if (index == 4) {
     return &m_clockView;
   }
+  if (index == 5) {
+    return &m_cpuView;
+  }
   return &m_batteryView;
 }
 
@@ -87,17 +105,22 @@ void TitleBarView::layoutSubviews(bool force) {
   m_clockView.setFrame(KDRectZero, force);
   KDSize batterySize = m_batteryView.minimalSizeForOptimalDisplay();
   m_batteryView.setFrame(KDRect(bounds().width() - batterySize.width() - Metric::TitleBarExternHorizontalMargin, (bounds().height()- batterySize.height())/2, batterySize), force);
+
+  constexpr KDCoordinate k_cpuWidth = 30;
+  m_cpuView.setFrame(KDRect(bounds().width() - batterySize.width() - Metric::TitleBarExternHorizontalMargin - k_cpuWidth - 2, 0, k_cpuWidth, bounds().height()), force);
+  KDCoordinate rightOffset = batterySize.width() + Metric::TitleBarExternHorizontalMargin + k_cpuWidth + 4;
   if (GlobalPreferences::sharedGlobalPreferences()->isInExamMode()) {
-    m_examModeIconView.setFrame(KDRect(bounds().width() - batterySize.width() - k_examIconWidth - k_alphaRightMargin - Metric::TitleBarExternHorizontalMargin, (bounds().height() - k_examIconHeight)/2, k_examIconWidth, k_examIconHeight), force);
+    m_examModeIconView.setFrame(KDRect(bounds().width() - rightOffset - k_examIconWidth, (bounds().height() - k_examIconHeight)/2, k_examIconWidth, k_examIconHeight), force);
+    rightOffset += k_examIconWidth + k_alphaRightMargin;
   } else {
     m_examModeIconView.setFrame(KDRectZero, force);
   }
   KDSize shiftAlphaLockSize = m_shiftAlphaLockView.minimalSizeForOptimalDisplay();
   if (GlobalPreferences::sharedGlobalPreferences()->isInExamMode()) {
    // The Shift/Alpha frame is shifted when examination mode is active
-    m_shiftAlphaLockView.setFrame(KDRect(bounds().width()-batterySize.width()-k_examIconWidth-Metric::TitleBarExternHorizontalMargin-2*k_alphaRightMargin-shiftAlphaLockSize.width(), (bounds().height()- shiftAlphaLockSize.height())/2, shiftAlphaLockSize), force);
+    m_shiftAlphaLockView.setFrame(KDRect(bounds().width() - rightOffset - shiftAlphaLockSize.width(), (bounds().height()- shiftAlphaLockSize.height())/2, shiftAlphaLockSize), force);
   } else {
-    m_shiftAlphaLockView.setFrame(KDRect(bounds().width()-batterySize.width()-Metric::TitleBarExternHorizontalMargin-k_alphaRightMargin-shiftAlphaLockSize.width(), (bounds().height()- shiftAlphaLockSize.height())/2, shiftAlphaLockSize), force);
+    m_shiftAlphaLockView.setFrame(KDRect(bounds().width() - rightOffset - shiftAlphaLockSize.width(), (bounds().height()- shiftAlphaLockSize.height())/2, shiftAlphaLockSize), force);
   }
 }
 

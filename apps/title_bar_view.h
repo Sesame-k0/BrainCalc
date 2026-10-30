@@ -16,6 +16,7 @@ public:
   bool setIsCharging(bool isCharging);
   bool setIsPlugged(bool isPlugged);
   bool setShiftAlphaLockStatus(Ion::Events::ShiftAlphaStatus status);
+  bool updateCPU();
   void refreshPreferences();
   void reload();
 private:
@@ -32,6 +33,7 @@ private:
   BufferTextView m_preferenceView;
   ImageView m_examModeIconView;
   BufferTextView m_clockView;
+  BufferTextView m_cpuView;
   int m_hours;
   int m_mins;
   bool m_clockEnabled;

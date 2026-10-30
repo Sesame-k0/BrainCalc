@@ -11,6 +11,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Ensure MinGW64 toolchain & libraries (libpng, gcc) are in PATH for host tools (e.g. inliner)
+if [[ -d "/mingw64/bin" ]] && [[ ":$PATH:" != *":/mingw64/bin:"* ]]; then
+  export PATH="/mingw64/bin:${PATH}"
+fi
+
 # Ensure Cygwin runtime is in PATH for CeGCC
 if [[ -d "/c/cygwin64/bin" ]] && [[ ":$PATH:" != *":/c/cygwin64/bin:"* ]]; then
   export PATH="/c/cygwin64/bin:${PATH}"
@@ -43,6 +48,17 @@ fi
 if [[ -f "ion/src/simulator/brain/help_dict.json" ]] && [[ "ion/src/simulator/brain/help_dict.json" -nt "ion/src/simulator/brain/help_data.h" || ! -f "ion/src/simulator/brain/help_data.h" ]]; then
   echo "[INFO] Updating help_data.h from help_dict.json..."
   python3 ion/src/simulator/brain/build_help_dict.py
+fi
+
+# Ensure i18n files are consistent and avoid I/O race conditions during parallel build on cloud storage
+if [[ -f "output/release/simulator/brain-host/apps/i18n.cpp" ]]; then
+  mkdir -p "${OUT_DIR}/apps"
+  if [[ ! -f "${OUT_DIR}/apps/i18n.cpp" || $(wc -c < "${OUT_DIR}/apps/i18n.cpp") -ne 777338 ]]; then
+    echo "[INFO] Syncing complete i18n files to ${OUT_DIR}/apps..."
+    cp -f "output/release/simulator/brain-host/apps/i18n.cpp" "${OUT_DIR}/apps/i18n.cpp"
+    cp -f "output/release/simulator/brain-host/apps/i18n.h" "${OUT_DIR}/apps/i18n.h"
+    touch "${OUT_DIR}/apps/i18n.h" "${OUT_DIR}/apps/i18n.cpp"
+  fi
 fi
 
 echo "[INFO] Building Lilium (PLATFORM=simulator TARGET=brain TOOLCHAIN=${TOOLCHAIN_OPT}) with -j${JOBS}..."

@@ -22,7 +22,9 @@ bool AppsWindow::updateBatteryLevel() {
 
 bool AppsWindow::updateClock() {
   Ion::RTC::DateTime dateTime = Ion::RTC::dateTime();
-  return m_titleBarView.setClock(dateTime.tm_hour, dateTime.tm_min, Ion::RTC::mode() != Ion::RTC::Mode::Disabled);
+  bool clockChanged = m_titleBarView.setClock(dateTime.tm_hour, dateTime.tm_min, Ion::RTC::mode() != Ion::RTC::Mode::Disabled);
+  bool cpuChanged = m_titleBarView.updateCPU();
+  return clockChanged || cpuChanged;
 }
 
 bool AppsWindow::updateIsChargingState() {
