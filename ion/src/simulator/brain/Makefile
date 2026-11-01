@@ -16,6 +16,12 @@ ion_src += $(addprefix ion/src/simulator/brain/, \
   battery.cpp \
 )
 
+ion_src += $(addprefix apps/plot3d/, \
+  render/fixed_math.cpp \
+  render/rasterizer.cpp \
+  benchmark_phase0.cpp \
+)
+
 ion_src += ion/src/shared/collect_registers.cpp
 
 # Remove SDL-dependent simulator files and dummy battery added by ion/src/simulator/Makefile
