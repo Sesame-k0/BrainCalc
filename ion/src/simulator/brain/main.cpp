@@ -479,5 +479,8 @@ int main(int argc, char * argv[]) {
   BrainLog("main: ion_main returned, calling quit");
   Ion::Simulator::Main::quit();
   BrainLog("main: exit 0");
+#if defined(_WIN32_WCE) || defined(__MINGW32CE__)
+  ExitProcess(0);
+#endif
   return 0;
 }

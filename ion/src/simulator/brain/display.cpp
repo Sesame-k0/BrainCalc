@@ -21,7 +21,7 @@
 #include <stdint.h>
 #include <wchar.h>
 
-#define ENABLE_LLCUBIC_PHASE0_BENCHMARK 1
+#define ENABLE_LLCUBIC_PHASE0_BENCHMARK 0
 #if ENABLE_LLCUBIC_PHASE0_BENCHMARK
 #include "apps/plot3d/benchmark_phase0.h"
 #endif
