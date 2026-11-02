@@ -17,12 +17,19 @@ parser.add_argument('--apps_layout', help='the apps_layout from the make command
 args = parser.parse_args()
 
 with io.open(args.layouts, "w", encoding="utf-8") as f:
-    ordered = args.apps_layout.split()
-    line1 = 'Default,'+','.join(ordered)[:-1]+'\n'
-    line2 = 'HidePython,'+','.join(ordered)[:-1]+'\n'
-    after = line1 + line2
+    cleaned = []
+    if args.apps_layout:
+        for token in args.apps_layout.replace(',', ' ').split():
+            token = token.strip()
+            if token and token in args.apps and token not in cleaned:
+                cleaned.append(token)
+    for a in args.apps:
+        if a not in cleaned and a != 'home' and a != 'external':
+            cleaned.append(a)
+    line1 = 'Default,' + ','.join(cleaned) + '\n'
+    line2 = 'HidePython,' + ','.join(cleaned) + '\n'
     f.truncate()
-    f.write(after)
+    f.write(line1 + line2)
 
 def build_permutation(apps, appsOrdered):
     res = [0] * len(apps)
@@ -86,10 +93,12 @@ def print_implementation(implementation, data):
     f.write("  CountryPreferences::HomeAppsLayout currentLayout = GlobalPreferences::sharedGlobalPreferences()->homeAppsLayout();\n")
     for i in range(len(styles)):
         f.write("  if (currentLayout == CountryPreferences::HomeAppsLayout::" + styles[i] + ") {\n")
-        f.write("    return " + styles[i] + "AppsPermutation[index];")
+        f.write("    if (index >= 0 && index < static_cast<int>(sizeof(" + styles[i] + "AppsPermutation)/sizeof(" + styles[i] + "AppsPermutation[0]))) {\n")
+        f.write("      return " + styles[i] + "AppsPermutation[index];\n")
+        f.write("    }\n")
+        f.write("    return index;\n")
         f.write("  }\n")
-    f.write("  assert(false);\n")
-    f.write("  return -1;\n")
+    f.write("  return index;\n")
     f.write("}\n\n")
 
     f.write("}\n\n")

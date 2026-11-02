@@ -126,7 +126,7 @@ bool Controller::handleEvent(Ion::Events::Event event) {
       }
     } else {
 #endif
-    ::App::Snapshot * selectedSnapshot = container->appSnapshotAtIndex(index);
+    ::App::Snapshot * selectedSnapshot = container->appSnapshotAtIndex(PermutedAppSnapshotIndex(index));
     if (ExamModeConfiguration::appIsForbiddenInExamMode(selectedSnapshot->descriptor()->examinationLevel(), GlobalPreferences::sharedGlobalPreferences()->examMode())) {
       App::app()->displayWarning(I18n::Message::ForbiddenAppInExamMode1, I18n::Message::ForbiddenAppInExamMode2);
     } else {
