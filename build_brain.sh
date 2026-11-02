@@ -51,7 +51,7 @@ if [[ -f "ion/src/simulator/brain/help_dict.json" ]] && [[ "ion/src/simulator/br
 fi
 
 # Ensure i18n files are consistent and avoid I/O race conditions during parallel build on cloud storage
-if [[ -f "output/release/simulator/brain-host/apps/i18n.cpp" ]]; then
+if [[ "${OUT_DIR}" != "output/release/simulator/brain-host" ]] && [[ -f "output/release/simulator/brain-host/apps/i18n.cpp" ]]; then
   mkdir -p "${OUT_DIR}/apps"
   if [[ ! -f "${OUT_DIR}/apps/i18n.cpp" || $(wc -c < "${OUT_DIR}/apps/i18n.cpp") -ne 777338 ]]; then
     echo "[INFO] Syncing complete i18n files to ${OUT_DIR}/apps..."

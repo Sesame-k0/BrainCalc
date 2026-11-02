@@ -21,11 +21,6 @@
 #include <stdint.h>
 #include <wchar.h>
 
-#define ENABLE_LLCUBIC_PHASE0_BENCHMARK 0
-#if ENABLE_LLCUBIC_PHASE0_BENCHMARK
-#include "apps/plot3d/benchmark_phase0.h"
-#endif
-
 namespace Ion {
 namespace Simulator {
 namespace Display {
@@ -2044,24 +2039,10 @@ void init() {
   runStartupBenchmark(hdcScreen);
 #endif
 
-#if ENABLE_LLCUBIC_PHASE0_BENCHMARK
-  ::Plot3D::BenchmarkPhase0::runAll();
-  // 目視検証用: 3Dプロット結果を 2倍拡大して DIB バッファ（X=0..639, Y=90..479）に転送
-  ::Plot3D::BenchmarkPhase0::copyToDib2x(sDibPixels, kBrainScreenWidth, kBrainScreenHeight, 0, 90);
-  BitBlt(hdcScreen, 0, 0, kCalcScaledWidth, kBrainScreenHeight, sMemDC, 0, 0, SRCCOPY);
-#endif
-
   ReleaseDC(sHwnd, hdcScreen);
 
   ShowWindow(sHwnd, SW_SHOW);
   UpdateWindow(sHwnd);
-
-#if ENABLE_LLCUBIC_PHASE0_BENCHMARK
-  HDC hdcShow = GetDC(sHwnd);
-  BitBlt(hdcShow, 0, 0, kBrainScreenWidth, kBrainScreenHeight, sMemDC, 0, 0, SRCCOPY);
-  ReleaseDC(sHwnd, hdcShow);
-  Sleep(1500);
-#endif
 
   sHelpReady = true;
   BrainLog("Display::init exit (sHelpReady=true)");

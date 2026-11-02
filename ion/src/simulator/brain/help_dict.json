@@ -10,6 +10,17 @@
     "ja_title": "タイマーアプリ",
     "ja_desc": "ストップウォッチ、タイマー、ポモドーロ機能。\n他アプリ中も裏で稼働。\n【Enter】開始/一時停止\n【Back】リセット\n【←/→】モード切替\n【キー直打ち】メモ入力"
   },
+  "App_Plot3D": {
+    "en_keys": [
+      "LLCubic",
+      "LLCUBIC",
+      "Plot3D",
+      "3D Graph"
+    ],
+    "en_desc": "3D surface grapher with Z-buffer, box view, rotation, and cross-section analysis.",
+    "ja_title": "3Dグラフ (LLCubic)",
+    "ja_desc": "3次元空間の曲面・立体を描画します。\n・↑↓←→：視点回転\n・PgUp/Dn：拡大縮小\n・Enter：視点リセット\n・Q/W/E/R：X/Y/Z正面/斜め\n・Space/5：面/線切替\n・F9：座標トレース\n・F1：断面モード"
+  },
   "App_Calculation": {
     "en_keys": [
       "Calculation",
