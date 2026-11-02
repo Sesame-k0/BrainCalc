@@ -30,13 +30,32 @@ public:
     markDirty();
   }
 
+  // 座標トレースモード (Trace Mode)
+  bool traceMode() const { return m_traceMode; }
+  void setTraceMode(bool mode);
+  void toggleTraceMode() { setTraceMode(!m_traceMode); }
+  void moveTrace(int du, int dv);
+  void nextTraceObject();
+
+  int traceObjectIndex() const { return m_traceObjectIndex; }
+  void getTraceCoordinates(float & outX, float & outY, float & outZ, const char *& outName, KDColor & outColor) const;
+
 private:
   void projectPoint(const Vec3Fix & wPos, const Mat3Fix & rot, fixed_t scale,
                     int & outSx, int & outSy, fixed_t & outSz, uint16_t & outDepth) const;
 
+  void drawTraceCursor(KDContext * ctx, int sx, int sy, KDColor color) const;
+  void drawTraceBanner(KDContext * ctx, const char * name, KDColor color, float x, float y, float z) const;
+
   Snapshot * m_snapshot;
   mutable Rasterizer m_rasterizer;
   RenderMode m_renderMode;
+
+  // トレースモード内部状態
+  bool m_traceMode;
+  int m_traceObjectIndex;
+  int m_traceU;
+  int m_traceV;
 };
 
 } // namespace Plot3D

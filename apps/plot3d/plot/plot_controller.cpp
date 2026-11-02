@@ -17,17 +17,58 @@ PlotController::PlotController(Responder * parentResponder, Snapshot * snapshot)
 void PlotController::viewWillAppear() {
   ViewController::viewWillAppear();
   m_snapshot->loadFromStorage();
-  BrainNotifyHelpText("LLCubic", nullptr);
+  BrainNotifyHelpText("LLCubic 3D描画", "↑↓←→: 視点回転 / 6: 座標トレース / 5: 面/線切替");
   m_view.markDirty();
 }
 
 void PlotController::viewDidDisappear() {
   ViewController::viewDidDisappear();
+  m_view.setTraceMode(false);
   m_snapshot->saveToStorage();
   BrainClearHelp();
 }
 
 bool PlotController::handleEvent(Ion::Events::Event event) {
+  // 座標トレースモードのトグル (6 / T / Var)
+  if (event == Ion::Events::Six || event == Ion::Events::LowerT || event == Ion::Events::Var) {
+    m_view.toggleTraceMode();
+    if (m_view.traceMode()) {
+      BrainNotifyHelpText("LLCubic 座標トレース", "↑↓←→: 曲面を移動 / OK: 立体切替 / 6,Back: 終了");
+    } else {
+      BrainNotifyHelpText("LLCubic 3D描画", "↑↓←→: 視点回転 / 6: 座標トレース / 5: 面/線切替");
+    }
+    return true;
+  }
+
+  // トレースモード中のキー操作 (曲面上をカーソル移動 / 立体切替)
+  if (m_view.traceMode()) {
+    if (event == Ion::Events::Left) {
+      m_view.moveTrace(-1, 0);
+      return true;
+    }
+    if (event == Ion::Events::Right) {
+      m_view.moveTrace(+1, 0);
+      return true;
+    }
+    if (event == Ion::Events::Up) {
+      m_view.moveTrace(0, +1);
+      return true;
+    }
+    if (event == Ion::Events::Down) {
+      m_view.moveTrace(0, -1);
+      return true;
+    }
+    if (event == Ion::Events::OK || event == Ion::Events::EXE) {
+      m_view.nextTraceObject();
+      return true;
+    }
+    if (event == Ion::Events::Back || event == Ion::Events::Backspace || event == Ion::Events::Clear) {
+      m_view.setTraceMode(false);
+      BrainNotifyHelpText("LLCubic 3D描画", "↑↓←→: 視点回転 / 6: 座標トレース / 5: 面/線切替");
+      return true;
+    }
+  }
+
   // 視点回転 (7.5° = 256段階中 5 または 6)
   if (event == Ion::Events::Left) {
     m_snapshot->setAzimuth(static_cast<uint8_t>(m_snapshot->azimuth() - 5));
@@ -99,8 +140,8 @@ bool PlotController::handleEvent(Ion::Events::Event event) {
     return true;
   }
 
-  // 表示モード切替 (Space / T / 5)
-  if (event == Ion::Events::Space || event == Ion::Events::Five || event == Ion::Events::LowerT) {
+  // 表示モード切替 (Space / 5)
+  if (event == Ion::Events::Space || event == Ion::Events::Five) {
     m_view.toggleRenderMode();
     return true;
   }

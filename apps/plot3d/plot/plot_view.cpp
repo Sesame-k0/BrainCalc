@@ -19,7 +19,11 @@ PlotView::PlotView(Snapshot * snapshot) :
   View(),
   m_snapshot(snapshot),
   m_rasterizer(),
-  m_renderMode(RenderMode::Filled)
+  m_renderMode(RenderMode::Filled),
+  m_traceMode(false),
+  m_traceObjectIndex(0),
+  m_traceU(12),
+  m_traceV(12)
 {
 }
 
@@ -292,6 +296,202 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
       ctx->drawString(axes[a].name, KDPoint(sx - 4, sy - 6), KDFont::LargeFont, axes[a].color, KDColorWhite);
     }
   }
+
+  // 4. 座標トレースモード (Trace Mode) のカーソルおよびバナー描画
+  if (m_traceMode) {
+    float tx = 0.0f, ty = 0.0f, tz = 0.0f;
+    const char * objName = "";
+    KDColor objCol = KDColorBlack;
+    getTraceCoordinates(tx, ty, tz, objName, objCol);
+
+    // 画面投影位置の計算
+    fixed_t normFactor = fix_from_float(0.40f);
+    Vec3Fix wPos(fix_mul(fix_from_float(tx), normFactor),
+                 fix_mul(fix_from_float(ty), normFactor),
+                 fix_mul(fix_from_float(tz), normFactor));
+    int tsx, tsy;
+    fixed_t tsz;
+    uint16_t tdepth;
+    projectPoint(wPos, rot, scale, tsx, tsy, tsz, tdepth);
+
+    // カーソル描画 (高視認性クロスヘア)
+    drawTraceCursor(ctx, tsx, tsy, objCol);
+
+    // 下部情報バナー描画 (HUD)
+    drawTraceBanner(ctx, objName, objCol, tx, ty, tz);
+  }
+}
+
+void PlotView::setTraceMode(bool mode) {
+  m_traceMode = mode;
+  if (m_traceMode) {
+    int numObjs = m_snapshot->numberOfObjects();
+    bool found = false;
+    for (int i = 0; i < numObjs; ++i) {
+      Object3D * obj = m_snapshot->objectAtIndex(i);
+      if (obj && obj->enabled) {
+        m_traceObjectIndex = i;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      m_traceMode = false;
+    } else {
+      m_traceU = 12;
+      m_traceV = 12;
+    }
+  }
+  markDirty();
+}
+
+void PlotView::nextTraceObject() {
+  if (!m_traceMode) return;
+  int numObjs = m_snapshot->numberOfObjects();
+  if (numObjs <= 0) return;
+  for (int step = 1; step <= numObjs; ++step) {
+    int nextIdx = (m_traceObjectIndex + step) % numObjs;
+    Object3D * obj = m_snapshot->objectAtIndex(nextIdx);
+    if (obj && obj->enabled) {
+      m_traceObjectIndex = nextIdx;
+      m_traceU = 12;
+      m_traceV = 12;
+      markDirty();
+      return;
+    }
+  }
+}
+
+void PlotView::moveTrace(int du, int dv) {
+  if (!m_traceMode) return;
+  Object3D * obj = m_snapshot->objectAtIndex(m_traceObjectIndex);
+  if (!obj || !obj->enabled) return;
+
+  int Nu = 24, Nv = 24;
+  if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone) {
+    Nu = 24; Nv = 16;
+  }
+
+  bool periodicU = (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone);
+
+  m_traceU += du;
+  if (periodicU) {
+    if (m_traceU < 0) m_traceU += Nu;
+    if (m_traceU >= Nu) m_traceU -= Nu;
+  } else {
+    if (m_traceU < 0) m_traceU = 0;
+    if (m_traceU > Nu) m_traceU = Nu;
+  }
+
+  m_traceV += dv;
+  if (m_traceV < 0) m_traceV = 0;
+  if (m_traceV > Nv) m_traceV = Nv;
+
+  markDirty();
+}
+
+void PlotView::getTraceCoordinates(float & outX, float & outY, float & outZ, const char *& outName, KDColor & outColor) const {
+  outX = 0; outY = 0; outZ = 0;
+  outName = "";
+  outColor = KDColorBlack;
+
+  Object3D * obj = m_snapshot->objectAtIndex(m_traceObjectIndex);
+  if (!obj || !obj->enabled) return;
+
+  outName = obj->name;
+
+  SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % 5);
+  outColor = KDColor::RGB24(0x3B82F6);
+  if (theme == SurfaceTheme::Red) outColor = KDColor::RGB24(0xEF4444);
+  else if (theme == SurfaceTheme::Green) outColor = KDColor::RGB24(0x10B981);
+  else if (theme == SurfaceTheme::Purple) outColor = KDColor::RGB24(0x8B5CF6);
+  else if (theme == SurfaceTheme::Amber) outColor = KDColor::RGB24(0xF59E0B);
+
+  int Nu = 24, Nv = 24;
+  if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone) {
+    Nu = 24; Nv = 16;
+  }
+
+  fixed_t wx, wy, wz, wnx, wny, wnz;
+  Shapes::evaluateObjectVertex(*obj, m_traceU, Nu, m_traceV, Nv, wx, wy, wz, wnx, wny, wnz);
+
+  outX = fix_to_float(wx);
+  outY = fix_to_float(wy);
+  outZ = fix_to_float(wz);
+}
+
+void PlotView::drawTraceCursor(KDContext * ctx, int sx, int sy, KDColor color) const {
+  if (sx < 8 || sx >= bounds().width() - 8 || sy < 8 || sy >= bounds().height() - 8) return;
+
+  // 高視認性クロスヘアカーソル (黒枠 + ネオンイエロー十字 + 中空ターゲット)
+  KDColor borderCol = KDColorBlack;
+  KDColor highlight = KDColor::RGB24(0xFACC15); // ネオンイエロー
+
+  // 1. 水平アーム (左右 7px、中心 2px は空ける)
+  ctx->drawLine(KDPoint(sx - 8, sy - 1), KDPoint(sx - 2, sy - 1), borderCol);
+  ctx->drawLine(KDPoint(sx - 8, sy + 1), KDPoint(sx - 2, sy + 1), borderCol);
+  ctx->drawLine(KDPoint(sx + 2, sy - 1), KDPoint(sx + 8, sy - 1), borderCol);
+  ctx->drawLine(KDPoint(sx + 2, sy + 1), KDPoint(sx + 8, sy + 1), borderCol);
+
+  ctx->drawLine(KDPoint(sx - 7, sy), KDPoint(sx - 2, sy), highlight);
+  ctx->drawLine(KDPoint(sx + 2, sy), KDPoint(sx + 7, sy), highlight);
+
+  // 2. 垂直アーム (上下 7px、中心 2px は空ける)
+  ctx->drawLine(KDPoint(sx - 1, sy - 8), KDPoint(sx - 1, sy - 2), borderCol);
+  ctx->drawLine(KDPoint(sx + 1, sy - 8), KDPoint(sx + 1, sy - 2), borderCol);
+  ctx->drawLine(KDPoint(sx - 1, sy + 2), KDPoint(sx - 1, sy + 8), borderCol);
+  ctx->drawLine(KDPoint(sx + 1, sy + 2), KDPoint(sx + 1, sy + 8), borderCol);
+
+  ctx->drawLine(KDPoint(sx, sy - 7), KDPoint(sx, sy - 2), highlight);
+  ctx->drawLine(KDPoint(sx, sy + 2), KDPoint(sx, sy + 7), highlight);
+
+  // 3. 中心ターゲットドット (外枠黒 3x3, 内側白)
+  ctx->fillRect(KDRect(sx - 1, sy - 1, 3, 3), borderCol);
+  ctx->fillRect(KDRect(sx, sy, 1, 1), KDColorWhite);
+}
+
+void PlotView::drawTraceBanner(KDContext * ctx, const char * name, KDColor color, float x, float y, float z) const {
+  // 1行コンパクト高密度 HUD バナー (高さ 18px)
+  // StackView/TabView 配下での実可視高さは約 154px なので、下端 y=134 付近に配置
+  int bannerH = 18;
+  int bannerY = (bounds().height() > 160) ? (152 - bannerH) : (bounds().height() - bannerH);
+  if (bannerY < 0) bannerY = 0;
+  KDRect bannerRect(0, bannerY, bounds().width(), bannerH);
+
+  // 背景: スレートネイビー (0x0F172A)
+  ctx->fillRect(bannerRect, KDColor::RGB24(0x0F172A));
+
+  // 上端 1px アクセントボーダー (立体のテーマ色)
+  ctx->fillRect(KDRect(0, bannerY, bounds().width(), 1), color);
+
+  int textY = bannerY + 2;
+
+  // [Trace] バッジ (シアン)
+  ctx->drawString("[Trace]", KDPoint(4, textY), KDFont::SmallFont,
+                  KDColor::RGB24(0x38BDF8), KDColor::RGB24(0x0F172A));
+
+  // 立体プレフィックス名 (短縮名)
+  char shortName[16];
+  if (strstr(name, "Cone")) strlcpy(shortName, "Cone", sizeof(shortName));
+  else if (strstr(name, "Plane")) strlcpy(shortName, "Plane", sizeof(shortName));
+  else if (strstr(name, "Sphere")) strlcpy(shortName, "Sphere", sizeof(shortName));
+  else if (strstr(name, "Cylinder")) strlcpy(shortName, "Cyl", sizeof(shortName));
+  else if (strstr(name, "Saddle")) strlcpy(shortName, "Saddle", sizeof(shortName));
+  else if (strstr(name, "Paraboloid")) strlcpy(shortName, "Parab", sizeof(shortName));
+  else strlcpy(shortName, "Obj", sizeof(shortName));
+
+  char nameBuf[20];
+  snprintf(nameBuf, sizeof(nameBuf), "%s:", shortName);
+  ctx->drawString(nameBuf, KDPoint(48, textY), KDFont::SmallFont, color, KDColor::RGB24(0x0F172A));
+
+  // 座標値 (X, Y, Z)
+  char coordBuf[48];
+  snprintf(coordBuf, sizeof(coordBuf), "x:%+.2f y:%+.2f z:%+.2f", x, y, z);
+  ctx->drawString(coordBuf, KDPoint(88, textY), KDFont::SmallFont, KDColorWhite, KDColor::RGB24(0x0F172A));
+
+  // 操作ガイド
+  ctx->drawString("OK:Next", KDPoint(bounds().width() - 52, textY), KDFont::SmallFont,
+                  KDColor::RGB24(0x94A3B8), KDColor::RGB24(0x0F172A));
 }
 
 } // namespace Plot3D
