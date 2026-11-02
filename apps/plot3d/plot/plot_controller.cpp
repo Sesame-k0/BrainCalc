@@ -105,6 +105,12 @@ bool PlotController::handleEvent(Ion::Events::Event event) {
     return true;
   }
 
+  // F2 (切替) または Toolbox で Functions (式リスト) タブへ瞬時ジャンプ
+  if (event == Ion::Events::Toolbox) {
+    App::app()->tabViewController()->setActiveTab(0);
+    return true;
+  }
+
   if (event == Ion::Events::Back) {
     App::app()->setFirstResponder(App::app()->tabViewController());
     return true;

@@ -1,6 +1,8 @@
 #include "plot_view.h"
 #include "../app.h"
 #include "../config.h"
+#include "../render/colormap.h"
+#include "../model/shapes.h"
 #include <kandinsky/font.h>
 #include <math.h>
 #include <stdio.h>
@@ -9,9 +11,9 @@
 namespace Plot3D {
 
 // 頂点キャッシュ配列（App union を肥大化させない独立静的 BSS 領域）
-static ScreenVertex s_projVerts[(48 + 1) * (48 + 1)];
-static Vec3Fix s_camVerts[(48 + 1) * (48 + 1)];
-static float s_worldZ[(48 + 1) * (48 + 1)];
+static ScreenVertex s_projVerts[(32 + 1) * (32 + 1)];
+static Vec3Fix s_camVerts[(32 + 1) * (32 + 1)];
+static float s_worldZ[(32 + 1) * (32 + 1)];
 
 PlotView::PlotView(Snapshot * snapshot) :
   View(),
@@ -78,241 +80,218 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
     // バッファクリア (背景: 白 0xFFFF, 深度: 最遠 0xFFFF)
     m_rasterizer.clear(0xFFFF, 0xFFFF);
 
-    // 格子解像度 N (標準 32)
-    const int N = Config::k_gridN;
-    const float pi = 3.14159265f;
+    int numObjs = m_snapshot->numberOfObjects();
+    for (int oIdx = 0; oIdx < numObjs; ++oIdx) {
+      Object3D * obj = m_snapshot->objectAtIndex(oIdx);
+      if (!obj || !obj->enabled) continue;
 
-    // A. 頂点の計算と投影
-    for (int j = 0; j <= N; ++j) {
-      float y_norm = -1.0f + (2.0f * j) / N;
-      float y_rad = y_norm * pi;
-      for (int i = 0; i <= N; ++i) {
-        float x_norm = -1.0f + (2.0f * i) / N;
-        float x_rad = x_norm * pi;
-        float z_val = sinf(x_rad) * cosf(y_rad);
-
-        int idx = j * (N + 1) + i;
-        s_worldZ[idx] = z_val;
-
-        Vec3Fix wPos(fix_from_float(x_norm),
-                     fix_from_float(y_norm),
-                     fix_from_float(z_val));
-
-        Vec3Fix cPos = rot.transform(wPos);
-        s_camVerts[idx] = cPos;
-
-        int sx, sy;
-        fixed_t sz;
-        uint16_t depth;
-        projectPoint(wPos, rot, scale, sx, sy, sz, depth);
-
-        s_projVerts[idx].x = static_cast<int16_t>(sx);
-        s_projVerts[idx].y = static_cast<int16_t>(sy);
-        s_projVerts[idx].z = depth;
-        s_projVerts[idx].color = 0;
+      int Nu = 24, Nv = 24;
+      if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone) {
+        Nu = 24; Nv = 16;
       }
-    }
 
-    // 光源ベクトル (斜め左上前方向)
-    static constexpr float lx = -0.35f, ly = 0.45f, lz = -0.82f;
+      SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % 5);
 
-    // B. 三角形メッシュのラスタライズ
-    for (int j = 0; j < N; ++j) {
-      for (int i = 0; i < N; ++i) {
-        int idx00 = j * (N + 1) + i;
-        int idx10 = j * (N + 1) + (i + 1);
-        int idx11 = (j + 1) * (N + 1) + (i + 1);
-        int idx01 = (j + 1) * (N + 1) + i;
+      // ワイヤーフレームの色（テーマ別）
+      uint16_t wireColor565 = 0x001F; // Blue
+      if (theme == SurfaceTheme::Red) wireColor565 = 0xF800;
+      else if (theme == SurfaceTheme::Green) wireColor565 = 0x07E0;
+      else if (theme == SurfaceTheme::Purple) wireColor565 = 0x780F;
+      else if (theme == SurfaceTheme::Amber) wireColor565 = 0xFD20;
 
-        // 三角形 1: (00, 10, 11)
-        {
-          float e1x = fix_to_float(s_camVerts[idx10].x - s_camVerts[idx00].x);
-          float e1y = fix_to_float(s_camVerts[idx10].y - s_camVerts[idx00].y);
-          float e1z = fix_to_float(s_camVerts[idx10].z - s_camVerts[idx00].z);
+      // A. 頂点の計算と投影
+      for (int j = 0; j <= Nv; ++j) {
+        for (int i = 0; i <= Nu; ++i) {
+          fixed_t wx, wy, wz, wnx, wny, wnz;
+          Shapes::evaluateObjectVertex(*obj, i, Nu, j, Nv, wx, wy, wz, wnx, wny, wnz);
 
-          float e2x = fix_to_float(s_camVerts[idx11].x - s_camVerts[idx00].x);
-          float e2y = fix_to_float(s_camVerts[idx11].y - s_camVerts[idx00].y);
-          float e2z = fix_to_float(s_camVerts[idx11].z - s_camVerts[idx00].z);
+          // ボックス [-1.0, +1.0] に収まるよう 0.4 を乗算
+          fixed_t normFactor = fix_from_float(0.40f);
+          Vec3Fix wPos(fix_mul(wx, normFactor),
+                       fix_mul(wy, normFactor),
+                       fix_mul(wz, normFactor));
 
-          float nx = e1y * e2z - e1z * e2y;
-          float ny = e1z * e2x - e1x * e2z;
-          float nz = e1x * e2y - e1y * e2x;
-          float len = sqrtf(nx * nx + ny * ny + nz * nz);
-          if (len > 1e-5f) { nx /= len; ny /= len; nz /= len; }
+          int idx = j * (Nu + 1) + i;
+          s_worldZ[idx] = fix_to_float(wz);
 
-          bool isBack = (nz >= 0.0f);
-          float dot = -(nx * lx + ny * ly + nz * lz);
-          if (isBack) dot = -dot;
-          if (dot < 0.0f) dot = 0.0f;
-          if (dot > 1.0f) dot = 1.0f;
+          int sx, sy;
+          fixed_t sz;
+          uint16_t depth;
+          projectPoint(wPos, rot, scale, sx, sy, sz, depth);
 
-          float avgZ = (s_worldZ[idx00] + s_worldZ[idx10] + s_worldZ[idx11]) * 0.333333f;
-          KDColor col = ColorMap::getColor(avgZ, dot, isBack, SurfaceTheme::Blue);
+          s_projVerts[idx].x = static_cast<int16_t>(sx);
+          s_projVerts[idx].y = static_cast<int16_t>(sy);
+          s_projVerts[idx].z = depth;
+          s_projVerts[idx].color = 0;
 
-          m_rasterizer.drawTriangleFlat(s_projVerts[idx00], s_projVerts[idx10], s_projVerts[idx11],
-                                       static_cast<uint16_t>(col));
-        }
-
-        // 三角形 2: (00, 11, 01)
-        {
-          float e1x = fix_to_float(s_camVerts[idx11].x - s_camVerts[idx00].x);
-          float e1y = fix_to_float(s_camVerts[idx11].y - s_camVerts[idx00].y);
-          float e1z = fix_to_float(s_camVerts[idx11].z - s_camVerts[idx00].z);
-
-          float e2x = fix_to_float(s_camVerts[idx01].x - s_camVerts[idx00].x);
-          float e2y = fix_to_float(s_camVerts[idx01].y - s_camVerts[idx00].y);
-          float e2z = fix_to_float(s_camVerts[idx01].z - s_camVerts[idx00].z);
-
-          float nx = e1y * e2z - e1z * e2y;
-          float ny = e1z * e2x - e1x * e2z;
-          float nz = e1x * e2y - e1y * e2x;
-          float len = sqrtf(nx * nx + ny * ny + nz * nz);
-          if (len > 1e-5f) { nx /= len; ny /= len; nz /= len; }
-
-          bool isBack = (nz >= 0.0f);
-          float dot = -(nx * lx + ny * ly + nz * lz);
-          if (isBack) dot = -dot;
-          if (dot < 0.0f) dot = 0.0f;
-          if (dot > 1.0f) dot = 1.0f;
-
-          float avgZ = (s_worldZ[idx00] + s_worldZ[idx11] + s_worldZ[idx01]) * 0.333333f;
-          KDColor col = ColorMap::getColor(avgZ, dot, isBack, SurfaceTheme::Blue);
-
-          m_rasterizer.drawTriangleFlat(s_projVerts[idx00], s_projVerts[idx11], s_projVerts[idx01],
-                                       static_cast<uint16_t>(col));
+          // カメラ空間法線
+          Vec3Fix wNorm(wnx, wny, wnz);
+          s_camVerts[idx] = rot.transform(wNorm);
         }
       }
-    }
 
-    // C. 表面ワイヤーフレーム（等高線グリッド）の重ね描き (深度テスト付き)
-    uint16_t wireColor = static_cast<uint16_t>(KDColor::RGB24(0x1D4ED8));
-    for (int j = 0; j <= N; j += 2) {
-      for (int i = 0; i < N; ++i) {
-        int idxA = j * (N + 1) + i;
-        int idxB = j * (N + 1) + (i + 1);
-        m_rasterizer.drawLineZ(s_projVerts[idxA].x, s_projVerts[idxA].y, s_projVerts[idxA].z,
-                               s_projVerts[idxB].x, s_projVerts[idxB].y, s_projVerts[idxB].z,
-                               wireColor);
+      // B. ポリゴン（三角形）のラスタライズ
+      // 光源ベクトル L = (-0.35, 0.45, -0.82)
+      Vec3Fix lightDir(fix_from_float(-0.35f), fix_from_float(0.45f), fix_from_float(-0.82f));
+
+      for (int j = 0; j < Nv; ++j) {
+        for (int i = 0; i < Nu; ++i) {
+          int idx00 = j * (Nu + 1) + i;
+          int idx10 = j * (Nu + 1) + (i + 1);
+          int idx01 = (j + 1) * (Nu + 1) + i;
+          int idx11 = (j + 1) * (Nu + 1) + (i + 1);
+
+          ScreenVertex v00 = s_projVerts[idx00];
+          ScreenVertex v10 = s_projVerts[idx10];
+          ScreenVertex v01 = s_projVerts[idx01];
+          ScreenVertex v11 = s_projVerts[idx11];
+
+          // 画面外簡易クリップ
+          if ((v00.x < 0 && v10.x < 0 && v01.x < 0 && v11.x < 0) ||
+              (v00.x >= 320 && v10.x >= 320 && v01.x >= 320 && v11.x >= 320) ||
+              (v00.y < 0 && v10.y < 0 && v01.y < 0 && v11.y < 0) ||
+              (v00.y >= 240 && v10.y >= 240 && v01.y >= 240 && v11.y >= 240)) {
+            continue;
+          }
+
+          // 三角形1: (v00, v10, v11)
+          Vec3Fix nCam = s_camVerts[idx00];
+          fixed_t dot = -(fix_mul(nCam.x, lightDir.x) + fix_mul(nCam.y, lightDir.y) + fix_mul(nCam.z, lightDir.z));
+          float diffuse = std::max(0.0f, fix_to_float(dot));
+          bool isBackFace = (nCam.z < 0);
+
+          float avgZ = (s_worldZ[idx00] + s_worldZ[idx10] + s_worldZ[idx11]) * 0.333f;
+          float normZ = avgZ * 0.5f; // [-2, +2] -> [-1, +1]
+          KDColor col = ColorMap::getColor(normZ, diffuse, isBackFace, theme);
+          uint16_t c565 = static_cast<uint16_t>(col);
+
+          m_rasterizer.drawTriangleFlat(v00, v10, v11, c565);
+
+          // 三角形2: (v00, v11, v01)
+          nCam = s_camVerts[idx11];
+          dot = -(fix_mul(nCam.x, lightDir.x) + fix_mul(nCam.y, lightDir.y) + fix_mul(nCam.z, lightDir.z));
+          diffuse = std::max(0.0f, fix_to_float(dot));
+          isBackFace = (nCam.z < 0);
+
+          avgZ = (s_worldZ[idx00] + s_worldZ[idx11] + s_worldZ[idx01]) * 0.333f;
+          normZ = avgZ * 0.5f;
+          col = ColorMap::getColor(normZ, diffuse, isBackFace, theme);
+          c565 = static_cast<uint16_t>(col);
+
+          m_rasterizer.drawTriangleFlat(v00, v11, v01, c565);
+
+          // 表面ワイヤーフレーム（Polygon Offset: Zバイアス -16）
+          m_rasterizer.drawLineZ(v00.x, v00.y, v00.z - 16, v10.x, v10.y, v10.z - 16, wireColor565);
+          m_rasterizer.drawLineZ(v00.x, v00.y, v00.z - 16, v01.x, v01.y, v01.z - 16, wireColor565);
+        }
       }
     }
-    for (int i = 0; i <= N; i += 2) {
-      for (int j = 0; j < N; ++j) {
-        int idxA = j * (N + 1) + i;
-        int idxB = (j + 1) * (N + 1) + i;
-        m_rasterizer.drawLineZ(s_projVerts[idxA].x, s_projVerts[idxA].y, s_projVerts[idxA].z,
-                               s_projVerts[idxB].x, s_projVerts[idxB].y, s_projVerts[idxB].z,
-                               wireColor);
-      }
+
+    // C. バウンディングボックスの枠線を描画（Zバッファ深度テスト付き）
+    static constexpr uint16_t kBoxColor565 = 0x8410; // 中間グレー (RGB 128, 128, 128)
+    for (int e = 0; e < 12; ++e) {
+      const ScreenVertex & p0 = boxScreen[kBoxEdges[e][0]];
+      const ScreenVertex & p1 = boxScreen[kBoxEdges[e][1]];
+      m_rasterizer.drawLineZ(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, kBoxColor565);
     }
 
-    // D. バウンディングボックスの描画 (深度テスト付き: 面の奥にある部分は遮蔽される)
-    uint16_t boxColorNear = static_cast<uint16_t>(KDColor::RGB24(0x64748B));
-    uint16_t boxColorFar  = static_cast<uint16_t>(KDColor::RGB24(0xCBD5E1));
-
-    for (int i = 0; i < 12; ++i) {
-      int v0 = kBoxEdges[i][0];
-      int v1 = kBoxEdges[i][1];
-      uint16_t col = (boxSz[v0] + boxSz[v1] > 0) ? boxColorFar : boxColorNear;
-      m_rasterizer.drawLineZ(boxScreen[v0].x, boxScreen[v0].y, boxScreen[v0].z,
-                             boxScreen[v1].x, boxScreen[v1].y, boxScreen[v1].z,
-                             col);
-    }
-
-    // E. フレームバッファへ一括転送
-    const KDColor * pixels = reinterpret_cast<const KDColor *>(m_rasterizer.colorBuffer());
-    ctx->fillRectWithPixels(bounds(), pixels, const_cast<KDColor *>(pixels));
+    // D. カラーバッファを画面に一括転送
+    ctx->fillRectWithPixels(
+      KDRect(0, 0, bounds().width(), bounds().height()),
+      reinterpret_cast<const KDColor *>(m_rasterizer.colorBuffer()),
+      reinterpret_cast<KDColor *>(m_rasterizer.colorBuffer())
+    );
 
   } else {
     // === 高速ワイヤーフレームモード ===
     ctx->fillRect(bounds(), KDColorWhite);
 
-    KDColor boxColorNear = KDColor::RGB24(0x94A3B8);
-    KDColor boxColorFar  = KDColor::RGB24(0xE2E8F0);
-
-    for (int i = 0; i < 12; ++i) {
-      int v0 = kBoxEdges[i][0];
-      int v1 = kBoxEdges[i][1];
-      KDColor edgeColor = (boxSz[v0] + boxSz[v1] > 0) ? boxColorFar : boxColorNear;
-      ctx->drawLine(KDPoint(boxScreen[v0].x, boxScreen[v0].y),
-                    KDPoint(boxScreen[v1].x, boxScreen[v1].y),
-                    edgeColor);
+    // バウンディングボックス (背景奥側・手前側とも直接描画)
+    for (int e = 0; e < 12; ++e) {
+      const ScreenVertex & p0 = boxScreen[kBoxEdges[e][0]];
+      const ScreenVertex & p1 = boxScreen[kBoxEdges[e][1]];
+      ctx->drawLine(KDPoint(p0.x, p0.y), KDPoint(p1.x, p1.y), KDColor::RGB24(0xA0AEC0));
     }
 
-    constexpr int N = 20;
-    float pi = 3.14159265f;
-    KDColor meshColor = KDColor::RGB24(0x2563EB);
+    int numObjs = m_snapshot->numberOfObjects();
+    for (int oIdx = 0; oIdx < numObjs; ++oIdx) {
+      Object3D * obj = m_snapshot->objectAtIndex(oIdx);
+      if (!obj || !obj->enabled) continue;
 
-    for (int j = 0; j <= N; j += 2) {
-      float y_norm = -1.0f + (2.0f * j) / N;
-      float y_rad = y_norm * pi;
-      int prevX = 0, prevY = 0;
-      for (int i = 0; i <= N; ++i) {
-        float x_norm = -1.0f + (2.0f * i) / N;
-        float x_rad = x_norm * pi;
-        float z_val = sinf(x_rad) * cosf(y_rad);
-        int sx, sy;
-        fixed_t sz;
-        uint16_t depth;
-        projectPoint(Vec3Fix(fix_from_float(x_norm),
-                             fix_from_float(y_norm),
-                             fix_from_float(z_val)),
-                     rot, scale, sx, sy, sz, depth);
-        if (i > 0) {
-          ctx->drawLine(KDPoint(prevX, prevY), KDPoint(sx, sy), meshColor);
+      int Nu = 16, Nv = 16;
+      SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % 5);
+      KDColor wireCol = KDColor::RGB24(0x2563EB);
+      if (theme == SurfaceTheme::Red) wireCol = KDColor::RGB24(0xDC2626);
+      else if (theme == SurfaceTheme::Green) wireCol = KDColor::RGB24(0x16A34A);
+      else if (theme == SurfaceTheme::Purple) wireCol = KDColor::RGB24(0x9333EA);
+      else if (theme == SurfaceTheme::Amber) wireCol = KDColor::RGB24(0xD97706);
+
+      for (int j = 0; j <= Nv; ++j) {
+        for (int i = 0; i <= Nu; ++i) {
+          fixed_t wx, wy, wz, wnx, wny, wnz;
+          Shapes::evaluateObjectVertex(*obj, i, Nu, j, Nv, wx, wy, wz, wnx, wny, wnz);
+
+          fixed_t normFactor = fix_from_float(0.40f);
+          Vec3Fix wPos(fix_mul(wx, normFactor),
+                       fix_mul(wy, normFactor),
+                       fix_mul(wz, normFactor));
+
+          int idx = j * (Nu + 1) + i;
+          int sx, sy;
+          fixed_t sz;
+          uint16_t depth;
+          projectPoint(wPos, rot, scale, sx, sy, sz, depth);
+
+          s_projVerts[idx].x = static_cast<int16_t>(sx);
+          s_projVerts[idx].y = static_cast<int16_t>(sy);
         }
-        prevX = sx;
-        prevY = sy;
       }
-    }
 
-    for (int i = 0; i <= N; i += 2) {
-      float x_norm = -1.0f + (2.0f * i) / N;
-      float x_rad = x_norm * pi;
-      int prevX = 0, prevY = 0;
-      for (int j = 0; j <= N; ++j) {
-        float y_norm = -1.0f + (2.0f * j) / N;
-        float y_rad = y_norm * pi;
-        float z_val = sinf(x_rad) * cosf(y_rad);
-        int sx, sy;
-        fixed_t sz;
-        uint16_t depth;
-        projectPoint(Vec3Fix(fix_from_float(x_norm),
-                             fix_from_float(y_norm),
-                             fix_from_float(z_val)),
-                     rot, scale, sx, sy, sz, depth);
-        if (j > 0) {
-          ctx->drawLine(KDPoint(prevX, prevY), KDPoint(sx, sy), meshColor);
+      for (int j = 0; j <= Nv; ++j) {
+        for (int i = 0; i < Nu; ++i) {
+          int idx0 = j * (Nu + 1) + i;
+          int idx1 = j * (Nu + 1) + (i + 1);
+          ctx->drawLine(
+            KDPoint(s_projVerts[idx0].x, s_projVerts[idx0].y),
+            KDPoint(s_projVerts[idx1].x, s_projVerts[idx1].y),
+            wireCol
+          );
         }
-        prevX = sx;
-        prevY = sy;
+      }
+      for (int i = 0; i <= Nu; ++i) {
+        for (int j = 0; j < Nv; ++j) {
+          int idx0 = j * (Nu + 1) + i;
+          int idx1 = (j + 1) * (Nu + 1) + i;
+          ctx->drawLine(
+            KDPoint(s_projVerts[idx0].x, s_projVerts[idx0].y),
+            KDPoint(s_projVerts[idx1].x, s_projVerts[idx1].y),
+            wireCol
+          );
+        }
       }
     }
   }
 
-  // 3. 座標軸ラベル (X, Y, Z 正方向)
-  int sx, sy;
-  fixed_t sz;
-  uint16_t depth;
+  // 3. 座標軸ラベル (X, Y, Z) の描画
+  struct AxisInfo {
+    Vec3Fix pos;
+    const char * name;
+    KDColor color;
+  } axes[3] = {
+    { Vec3Fix(fix_from_float(1.25f), 0, 0), "x", KDColor::RGB24(0xEF4444) },
+    { Vec3Fix(0, fix_from_float(1.25f), 0), "y", KDColor::RGB24(0x10B981) },
+    { Vec3Fix(0, 0, fix_from_float(1.25f)), "z", KDColor::RGB24(0x3B82F6) }
+  };
 
-  projectPoint(Vec3Fix(fix_from_float(1.15f), 0, 0), rot, scale, sx, sy, sz, depth);
-  ctx->drawString("x", KDPoint(sx - 3, sy - 5), KDFont::SmallFont, KDColor::RGB24(0xEF4444), KDColorWhite);
-
-  projectPoint(Vec3Fix(0, fix_from_float(1.15f), 0), rot, scale, sx, sy, sz, depth);
-  ctx->drawString("y", KDPoint(sx - 3, sy - 5), KDFont::SmallFont, KDColor::RGB24(0x10B981), KDColorWhite);
-
-  projectPoint(Vec3Fix(0, 0, fix_from_float(1.15f)), rot, scale, sx, sy, sz, depth);
-  ctx->drawString("z", KDPoint(sx - 3, sy - 5), KDFont::SmallFont, KDColor::RGB24(0x3B82F6), KDColorWhite);
-
-  // 4. 下部ステータスバー
-  int degAz = (az * 360) / 256;
-  int degEl = (el * 360) / 256;
-  if (degEl > 180) degEl -= 360;
-
-  char infoBuf[64];
-  const char * modeStr = (m_renderMode == RenderMode::Filled) ? "Surface" : "Wire";
-  snprintf(infoBuf, sizeof(infoBuf), "z=sin(x)*cos(y)  Az:%d  El:%d  [%s]", degAz, degEl, modeStr);
-  ctx->drawString(infoBuf, KDPoint(8, bounds().height() - 14), KDFont::SmallFont,
-                  KDColor::RGB24(0x64748B), KDColorWhite);
+  for (int a = 0; a < 3; ++a) {
+    int sx, sy;
+    fixed_t sz;
+    uint16_t depth;
+    projectPoint(axes[a].pos, rot, scale, sx, sy, sz, depth);
+    if (sx >= 8 && sx <= bounds().width() - 16 && sy >= 8 && sy <= bounds().height() - 16) {
+      ctx->drawString(axes[a].name, KDPoint(sx - 4, sy - 6), KDFont::LargeFont, axes[a].color, KDColorWhite);
+    }
+  }
 }
 
 } // namespace Plot3D

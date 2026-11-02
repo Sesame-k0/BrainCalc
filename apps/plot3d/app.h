@@ -7,6 +7,7 @@
 #include "../shared/poincare_local_pool.h"
 #include "config.h"
 #include "render/fixed_math.h"
+#include "model/object3d.h"
 
 namespace Plot3D {
 
@@ -37,6 +38,13 @@ public:
   float zMin() const { return m_zMin; }
   float zMax() const { return m_zMax; }
 
+  // オブジェクト管理 (最大5個)
+  int numberOfObjects() const;
+  Object3D * objectAtIndex(int i);
+  bool addObject(const Object3D & obj);
+  void removeObject(int i);
+  void toggleObject(int i);
+
   // 初期化・保存・復元
   void saveToStorage();
   void loadFromStorage();
@@ -50,6 +58,7 @@ private:
   float m_yMin, m_yMax;
   float m_zMin, m_zMax;
 
+  int m_objectCount;
   bool m_storageLoaded;
 };
 

@@ -11,6 +11,11 @@ typedef int32_t fixed_t;
 constexpr int FIXED_FRAC_BITS = 16;
 constexpr fixed_t FIXED_ONE = (1 << FIXED_FRAC_BITS);
 constexpr fixed_t FIXED_HALF = (1 << (FIXED_FRAC_BITS - 1));
+constexpr fixed_t FIX_ONE = FIXED_ONE;
+
+inline fixed_t fix_abs(fixed_t a) {
+  return (a < 0) ? -a : a;
+}
 
 inline fixed_t fix_from_int(int a) {
   return static_cast<fixed_t>(a) << FIXED_FRAC_BITS;

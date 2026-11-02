@@ -8,16 +8,22 @@
 
 namespace Plot3D {
 
+// 静的 BSS 領域に配置するオブジェクトストア (Apps union を肥大化させない規約遵守)
+static Object3D s_objects[k_maxObjects];
+static int s_objectCount = 0;
+static bool s_objectsInitialized = false;
+
 struct Plot3DConfigRecord {
   uint32_t magic; // 'P3DC' = 0x50334443
   uint8_t azimuth;
   uint8_t elevation;
   uint8_t selectedTab;
-  uint8_t reserved;
+  uint8_t objectCount;
   int32_t scale;
   float xMin, xMax;
   float yMin, yMax;
   float zMin, zMax;
+  Object3D objects[k_maxObjects];
 };
 
 static constexpr const char * k_storageRecordName = "llcubic.cfg";
@@ -35,6 +41,16 @@ const Image * App::Descriptor::icon() {
   return ImageStore::Plot3dIcon;
 }
 
+static void ensureDefaultObjects() {
+  if (s_objectsInitialized && s_objectCount > 0) return;
+  s_objectsInitialized = true;
+  s_objectCount = 0;
+
+  // オブジェクト 0: z1 = sin(x)*cos(y) (青)
+  s_objects[0].initExplicit("z1 = sin(x)*cos(y)", 0, 0);
+  s_objectCount = 1;
+}
+
 Snapshot::Snapshot() :
   m_azimuth(32),              // 45°
   m_elevation(21),            // 30°
@@ -42,10 +58,14 @@ Snapshot::Snapshot() :
   m_xMin(-2.0f), m_xMax(2.0f),
   m_yMin(-2.0f), m_yMax(2.0f),
   m_zMin(-2.0f), m_zMax(2.0f),
+  m_objectCount(0),
   m_storageLoaded(false)
 {
-  setActiveTab(1);
-  setSelectedTab(1); // 初期表示は 3D Plot タブ
+  ensureDefaultObjects();
+  m_objectCount = s_objectCount;
+  setActiveTab(0);
+  setSelectedTab(0); // 初期表示は Expressions (Functions) タブ
+  loadFromStorage();
 }
 
 void Snapshot::reset() {
@@ -56,6 +76,48 @@ void Snapshot::resetView() {
   m_azimuth = 32;             // 45°
   m_elevation = 21;           // 30°
   m_scale = fix_from_int(55); // 55px スケール
+}
+
+int Snapshot::numberOfObjects() const {
+  ensureDefaultObjects();
+  return s_objectCount;
+}
+
+Object3D * Snapshot::objectAtIndex(int i) {
+  ensureDefaultObjects();
+  if (i >= 0 && i < s_objectCount) {
+    return &s_objects[i];
+  }
+  return nullptr;
+}
+
+bool Snapshot::addObject(const Object3D & obj) {
+  ensureDefaultObjects();
+  if (s_objectCount < k_maxObjects) {
+    s_objects[s_objectCount] = obj;
+    s_objectCount++;
+    m_objectCount = s_objectCount;
+    return true;
+  }
+  return false;
+}
+
+void Snapshot::removeObject(int i) {
+  ensureDefaultObjects();
+  if (i >= 0 && i < s_objectCount) {
+    for (int j = i; j < s_objectCount - 1; j++) {
+      s_objects[j] = s_objects[j + 1];
+    }
+    s_objectCount--;
+    m_objectCount = s_objectCount;
+  }
+}
+
+void Snapshot::toggleObject(int i) {
+  ensureDefaultObjects();
+  if (i >= 0 && i < s_objectCount) {
+    s_objects[i].enabled = !s_objects[i].enabled;
+  }
 }
 
 ::App * Snapshot::unpack(Container * container) {
@@ -74,6 +136,7 @@ void Snapshot::saveToStorage() {
   record.azimuth = m_azimuth;
   record.elevation = m_elevation;
   record.selectedTab = static_cast<uint8_t>(selectedTab());
+  record.objectCount = static_cast<uint8_t>(s_objectCount);
   record.scale = m_scale;
   record.xMin = m_xMin;
   record.xMax = m_xMax;
@@ -81,6 +144,9 @@ void Snapshot::saveToStorage() {
   record.yMax = m_yMax;
   record.zMin = m_zMin;
   record.zMax = m_zMax;
+  for (int i = 0; i < s_objectCount && i < k_maxObjects; i++) {
+    record.objects[i] = s_objects[i];
+  }
 
   Ion::Storage * storage = Ion::Storage::sharedStorage();
   Ion::Storage::Record rec = storage->recordNamed(k_storageRecordName);
@@ -112,6 +178,17 @@ void Snapshot::loadFromStorage() {
   if (record->selectedTab <= 1) {
     setActiveTab(record->selectedTab);
     setSelectedTab(record->selectedTab);
+  }
+
+  if (record->objectCount > 0 && record->objectCount <= k_maxObjects) {
+    s_objectCount = record->objectCount;
+    for (int i = 0; i < s_objectCount; i++) {
+      s_objects[i] = record->objects[i];
+    }
+    s_objectsInitialized = true;
+    m_objectCount = s_objectCount;
+  } else {
+    ensureDefaultObjects();
   }
 }
 
