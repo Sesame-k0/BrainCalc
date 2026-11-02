@@ -18,7 +18,7 @@ class ListController : public ViewController, public ListViewDataSource, public 
 public:
   ListController(Responder * parentResponder, Snapshot * snapshot);
 
-  const char * title() override { return I18n::translate(I18n::Message::Functions); }
+  const char * title() override { return I18n::translate(I18n::Message::Plot3DExpressions); }
   View * view() override { return &m_selectableTableView; }
   void viewWillAppear() override;
   bool handleEvent(Ion::Events::Event event) override;

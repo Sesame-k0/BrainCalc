@@ -13,7 +13,7 @@ class PlotController : public ViewController {
 public:
   PlotController(Responder * parentResponder, Snapshot * snapshot);
 
-  const char * title() override { return I18n::translate(I18n::Message::Plot); }
+  const char * title() override { return I18n::translate(I18n::Message::Plot3DPlot); }
   View * view() override { return &m_view; }
   void viewWillAppear() override;
   void viewDidDisappear() override;

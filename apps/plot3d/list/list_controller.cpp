@@ -27,7 +27,7 @@ ListController::ListController(Responder * parentResponder, Snapshot * snapshot)
 
 void ListController::viewWillAppear() {
   ViewController::viewWillAppear();
-  BrainNotifyHelpText("LLCubic", nullptr);
+  BrainNotifyHelpText("Plot3D_Expressions", nullptr);
   if (m_selectableTableView.selectedRow() < 0) {
     m_selectableTableView.selectCellAtLocation(0, 0);
   }

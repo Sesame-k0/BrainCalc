@@ -42,13 +42,9 @@ const Image * App::Descriptor::icon() {
 }
 
 static void ensureDefaultObjects() {
-  if (s_objectsInitialized && s_objectCount > 0) return;
+  if (s_objectsInitialized) return;
   s_objectsInitialized = true;
   s_objectCount = 0;
-
-  // オブジェクト 0: z1 = sin(x)*cos(y) (青)
-  s_objects[0].initExplicit("z1 = sin(x)*cos(y)", 0, 0);
-  s_objectCount = 1;
 }
 
 Snapshot::Snapshot() :

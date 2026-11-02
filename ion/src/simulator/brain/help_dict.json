@@ -3646,5 +3646,36 @@
     "en_desc": "Element Oganesson (Og) - Atomic number 118.",
     "ja_title": "オガネソン",
     "ja_desc": "原子番号: 118 (Og)\n18族元素\n原子量: 294\n【特徴と用途】\n超重元素物理学者ユーリ・オガネシアンにちなむ全118番目の希ガス。周期表第7周期を締めくくる最も重い元素で、安定の島理論の検証に使われる。"
+  },
+  "Plot3D_View": {
+    "en_keys": [
+      "Plot3D_View",
+      "LLCubic 3D Plot",
+      "3D Plot",
+      "3D Graph Plot"
+    ],
+    "en_desc": "3D plot view with rotation, zoom, axis views, and trace.",
+    "ja_title": "3D立体描画 (LLCubic)",
+    "ja_desc": "3D空間の立体を表示・操作します。\n・↑↓←→：視点回転\n・PgUp/Dn(+/-)：ズーム\n・6 または T：座標トレース開始\n・5 / Space：面/線切替\n・1〜4：各座標軸の正面視\n・Enter：視点リセット\n・F1：式・立体リストへ"
+  },
+  "Plot3D_Trace": {
+    "en_keys": [
+      "Plot3D_Trace",
+      "LLCubic Trace",
+      "3D Trace"
+    ],
+    "en_desc": "3D coordinate trace mode on surface.",
+    "ja_title": "3D座標トレース",
+    "ja_desc": "曲面上の座標値を読み取ります。\n・↑↓←→：曲面上を移動\n・Enter/OK：立体切替\n・6 または Back：トレース終了\n下部バナーに(X, Y, Z)の数学的座標値をリアルタイム表示します。"
+  },
+  "Plot3D_Expressions": {
+    "en_keys": [
+      "Plot3D_Expressions",
+      "Expressions",
+      "LLCubic Expressions"
+    ],
+    "en_desc": "3D mathematical expressions and template objects list.",
+    "ja_title": "3D式・立体一覧",
+    "ja_desc": "描画する関数や立体を管理します。\n・+ Add an element：新しい立体を追加\n・Enter：選択または詳細設定\n・Space：表示/非表示切替\n・Back：削除\n・右矢印：3D Plot タブへ移動"
   }
 }

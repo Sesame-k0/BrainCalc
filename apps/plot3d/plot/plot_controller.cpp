@@ -17,7 +17,7 @@ PlotController::PlotController(Responder * parentResponder, Snapshot * snapshot)
 void PlotController::viewWillAppear() {
   ViewController::viewWillAppear();
   m_snapshot->loadFromStorage();
-  BrainNotifyHelpText("LLCubic 3D描画", "↑↓←→: 視点回転 / 6: 座標トレース / 5: 面/線切替");
+  BrainNotifyHelpText("Plot3D_View", nullptr);
   m_view.markDirty();
 }
 
@@ -33,9 +33,9 @@ bool PlotController::handleEvent(Ion::Events::Event event) {
   if (event == Ion::Events::Six || event == Ion::Events::LowerT || event == Ion::Events::Var) {
     m_view.toggleTraceMode();
     if (m_view.traceMode()) {
-      BrainNotifyHelpText("LLCubic 座標トレース", "↑↓←→: 曲面を移動 / OK: 立体切替 / 6,Back: 終了");
+      BrainNotifyHelpText("Plot3D_Trace", nullptr);
     } else {
-      BrainNotifyHelpText("LLCubic 3D描画", "↑↓←→: 視点回転 / 6: 座標トレース / 5: 面/線切替");
+      BrainNotifyHelpText("Plot3D_View", nullptr);
     }
     return true;
   }
@@ -64,7 +64,7 @@ bool PlotController::handleEvent(Ion::Events::Event event) {
     }
     if (event == Ion::Events::Back || event == Ion::Events::Backspace || event == Ion::Events::Clear) {
       m_view.setTraceMode(false);
-      BrainNotifyHelpText("LLCubic 3D描画", "↑↓←→: 視点回転 / 6: 座標トレース / 5: 面/線切替");
+      BrainNotifyHelpText("Plot3D_View", nullptr);
       return true;
     }
   }
