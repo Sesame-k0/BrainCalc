@@ -1,6 +1,9 @@
 #include "type_menu_controller.h"
+#include "parameter_controller.h"
 #include "../app.h"
 #include <escher/stack_view_controller.h>
+
+extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText);
 
 namespace Plot3D {
 
@@ -29,6 +32,7 @@ void TypeMenuController::viewWillAppear() {
 
 void TypeMenuController::didBecomeFirstResponder() {
   App::app()->setFirstResponder(&m_selectableTableView);
+  BrainNotifyHelpText("Plot3D_Expressions", nullptr);
 }
 
 HighlightCell * TypeMenuController::reusableCell(int index, int type) {
@@ -95,6 +99,7 @@ bool TypeMenuController::handleEvent(Ion::Events::Event event) {
         break;
     }
 
+    ParameterController::updateObjectName(obj);
     m_snapshot->addObject(obj);
     stackController()->pop();
     return true;

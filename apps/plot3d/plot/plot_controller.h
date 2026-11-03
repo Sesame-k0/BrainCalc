@@ -17,6 +17,7 @@ public:
   View * view() override { return &m_view; }
   void viewWillAppear() override;
   void viewDidDisappear() override;
+  void didBecomeFirstResponder() override;
   bool handleEvent(Ion::Events::Event event) override;
   TELEMETRY_ID("Plot3D");
 

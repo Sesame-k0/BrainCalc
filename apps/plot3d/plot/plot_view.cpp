@@ -113,14 +113,8 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
         Nu = 24; Nv = 16;
       }
 
-      SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % 5);
-
-      // ワイヤーフレームの色（テーマ別）
-      uint16_t wireColor565 = 0x001F; // Blue
-      if (theme == SurfaceTheme::Red) wireColor565 = 0xF800;
-      else if (theme == SurfaceTheme::Green) wireColor565 = 0x07E0;
-      else if (theme == SurfaceTheme::Purple) wireColor565 = 0x780F;
-      else if (theme == SurfaceTheme::Amber) wireColor565 = 0xFD20;
+      SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % k_numberOfThemes);
+      uint16_t wireColor565 = ColorMap::getThemeWireColor565(theme);
 
       // A. 頂点の計算と投影
       for (int j = 0; j <= Nv; ++j) {
@@ -242,12 +236,8 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
       if (!obj || !obj->enabled) continue;
 
       int Nu = 16, Nv = 16;
-      SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % 5);
-      KDColor wireCol = KDColor::RGB24(0x2563EB);
-      if (theme == SurfaceTheme::Red) wireCol = KDColor::RGB24(0xDC2626);
-      else if (theme == SurfaceTheme::Green) wireCol = KDColor::RGB24(0x16A34A);
-      else if (theme == SurfaceTheme::Purple) wireCol = KDColor::RGB24(0x9333EA);
-      else if (theme == SurfaceTheme::Amber) wireCol = KDColor::RGB24(0xD97706);
+      SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % k_numberOfThemes);
+      KDColor wireCol = ColorMap::getThemeBaseColor(theme);
 
       for (int j = 0; j <= Nv; ++j) {
         for (int i = 0; i <= Nu; ++i) {
@@ -427,12 +417,8 @@ void PlotView::getTraceCoordinates(float & outX, float & outY, float & outZ, con
 
   outName = obj->name;
 
-  SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % 5);
-  outColor = KDColor::RGB24(0x3B82F6);
-  if (theme == SurfaceTheme::Red) outColor = KDColor::RGB24(0xEF4444);
-  else if (theme == SurfaceTheme::Green) outColor = KDColor::RGB24(0x10B981);
-  else if (theme == SurfaceTheme::Purple) outColor = KDColor::RGB24(0x8B5CF6);
-  else if (theme == SurfaceTheme::Amber) outColor = KDColor::RGB24(0xF59E0B);
+  SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % k_numberOfThemes);
+  outColor = ColorMap::getThemeBaseColor(theme);
 
   int Nu = 24, Nv = 24;
   if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone) {
@@ -582,12 +568,8 @@ void PlotView::extractSliceSegments() const {
       Nu = 24; Nv = 16;
     }
 
-    SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % 5);
-    KDColor segColor = KDColor::RGB24(0x3B82F6); // Blue
-    if (theme == SurfaceTheme::Red) segColor = KDColor::RGB24(0xEF4444);
-    else if (theme == SurfaceTheme::Green) segColor = KDColor::RGB24(0x10B981);
-    else if (theme == SurfaceTheme::Purple) segColor = KDColor::RGB24(0x8B5CF6);
-    else if (theme == SurfaceTheme::Amber) segColor = KDColor::RGB24(0xF59E0B);
+    SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % k_numberOfThemes);
+    KDColor segColor = ColorMap::getThemeBaseColor(theme);
 
     // 1. 全頂点の実座標を s_worldVerts に格納
     for (int j = 0; j <= Nv; ++j) {

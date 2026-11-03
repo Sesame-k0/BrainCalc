@@ -7,17 +7,59 @@
 
 namespace Plot3D {
 
-// 5色テーマ定義 (Upsilon 標準の関数カラーに対応)
+// 8色テーマ定義 (Upsilon 標準＋追加カラーに対応)
 enum class SurfaceTheme : uint8_t {
   Blue = 0,
   Red = 1,
   Green = 2,
   Amber = 3,
-  Purple = 4
+  Purple = 4,
+  Cyan = 5,
+  Yellow = 6,
+  Magenta = 7
 };
+
+static constexpr int k_numberOfThemes = 8;
 
 class ColorMap {
 public:
+  static KDColor getThemeBaseColor(SurfaceTheme theme) {
+    static const KDColor s_colors[8] = {
+      KDColor::RGB24(0x2563EB), // 0: Blue
+      KDColor::RGB24(0xDC2626), // 1: Red
+      KDColor::RGB24(0x16A34A), // 2: Green
+      KDColor::RGB24(0xD97706), // 3: Amber
+      KDColor::RGB24(0x9333EA), // 4: Purple
+      KDColor::RGB24(0x0891B2), // 5: Cyan
+      KDColor::RGB24(0xCA8A04), // 6: Yellow
+      KDColor::RGB24(0xDB2777)  // 7: Magenta
+    };
+    uint8_t idx = static_cast<uint8_t>(theme) % 8;
+    return s_colors[idx];
+  }
+
+  static uint16_t getThemeWireColor565(SurfaceTheme theme) {
+    static const uint16_t s_colors565[8] = {
+      0x001F, // 0: Blue
+      0xF800, // 1: Red
+      0x07E0, // 2: Green
+      0xFD20, // 3: Amber
+      0x780F, // 4: Purple
+      0x07FF, // 5: Cyan
+      0xFFE0, // 6: Yellow
+      0xF81F  // 7: Magenta
+    };
+    uint8_t idx = static_cast<uint8_t>(theme) % 8;
+    return s_colors565[idx];
+  }
+
+  static const char * getThemeName(SurfaceTheme theme) {
+    static const char * const s_names[8] = {
+      "Blue", "Red", "Green", "Amber", "Purple", "Cyan", "Yellow", "Magenta"
+    };
+    uint8_t idx = static_cast<uint8_t>(theme) % 8;
+    return s_names[idx];
+  }
   // normalizedZ: [-1.0f, +1.0f]
   // diffuseIntensity: [0.0f, 1.0f]
   // isBackFace: bool
@@ -60,6 +102,24 @@ public:
         r0 = 49;  g0 = 46;  b0 = 129;
         r1 = 147; g1 = 51;  b1 = 234;
         r2 = 243; g2 = 232; b2 = 255;
+        break;
+      case SurfaceTheme::Cyan:
+        // Deep Teal -> Cyan -> Pale Aqua
+        r0 = 15;  g0 = 70;  b0 = 90;
+        r1 = 6;   g1 = 182; b1 = 212;
+        r2 = 207; g2 = 250; b2 = 254;
+        break;
+      case SurfaceTheme::Yellow:
+        // Bronze Gold -> Bright Yellow -> Light Cream
+        r0 = 140; g0 = 80;  b0 = 10;
+        r1 = 234; g1 = 179; b1 = 8;
+        r2 = 254; g2 = 249; b2 = 195;
+        break;
+      case SurfaceTheme::Magenta:
+        // Dark Wine -> Hot Magenta -> Soft Rose
+        r0 = 131; g0 = 24;  b0 = 67;
+        r1 = 219; g1 = 39;  b1 = 119;
+        r2 = 252; g2 = 231; b2 = 243;
         break;
       case SurfaceTheme::Blue:
       default:

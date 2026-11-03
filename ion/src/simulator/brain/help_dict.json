@@ -3655,7 +3655,7 @@
       "3D Graph Plot"
     ],
     "en_desc": "3D plot view with rotation, zoom, axis views, and trace.",
-    "ja_title": "3D立体描画 (LLCubic)",
+    "ja_title": "3D立体描画",
     "ja_desc": "3D空間の立体を表示・操作します。\n・↑↓←→：視点回転\n・PgUp/Dn(+/-)：ズーム\n・6 または T：座標トレース開始\n・5 / Space：面/線切替\n・1〜4：各座標軸の正面視\n・Enter：視点リセット\n・F1：式・立体リストへ"
   },
   "Plot3D_Trace": {
@@ -3697,5 +3697,15 @@
     "en_desc": "2D cross-section shape viewer for sliced objects.",
     "ja_title": "断面2D図形表示",
     "ja_desc": "立体の切り口を真上から観察します。\n・←→：切断位置 c を移動\n・Enter または Back：3D空間へ戻る\n・7：切断軸切替(Z/X/Y)\n幾何学的な断面形状を歪みなく確認可能。"
+  },
+  "Plot3D_Param": {
+    "en_keys": [
+      "Plot3D_Param",
+      "Parameters",
+      "Object Details"
+    ],
+    "en_desc": "Edit 3D object parameters and color theme.",
+    "ja_title": "パラメータ詳細設定",
+    "ja_desc": "立体の数値や色を編集します。\n・←→：値を増減(±0.1)\n・Enter：色や形状の切替\n・Back：一覧へ戻る\n3D空間へ即座に反映されます。"
   }
 }

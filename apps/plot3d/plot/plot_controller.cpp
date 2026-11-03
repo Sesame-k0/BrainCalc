@@ -21,6 +21,18 @@ void PlotController::viewWillAppear() {
   m_view.markDirty();
 }
 
+void PlotController::didBecomeFirstResponder() {
+  if (m_view.section2DMode()) {
+    BrainNotifyHelpText("Plot3D_Section2D", nullptr);
+  } else if (m_view.sliceAxis() != PlotView::SliceAxis::None) {
+    BrainNotifyHelpText("Plot3D_Slice", nullptr);
+  } else if (m_view.traceMode()) {
+    BrainNotifyHelpText("Plot3D_Trace", nullptr);
+  } else {
+    BrainNotifyHelpText("Plot3D_View", nullptr);
+  }
+}
+
 void PlotController::viewDidDisappear() {
   ViewController::viewDidDisappear();
   m_view.setTraceMode(false);
@@ -46,7 +58,7 @@ bool PlotController::handleEvent(Ion::Events::Event event) {
       BrainNotifyHelpText("Plot3D_Slice", nullptr);
       return true;
     }
-    if (event == Ion::Events::Seven || event == Ion::Events::LowerS || event == Ion::Events::Toolbox) {
+    if (event == Ion::Events::Seven || event == Ion::Events::LowerS) {
       m_view.cycleSliceAxis();
       if (m_view.sliceAxis() == PlotView::SliceAxis::None) {
         m_view.setSection2DMode(false);
@@ -59,8 +71,8 @@ bool PlotController::handleEvent(Ion::Events::Event event) {
     return true; // 2Dモード中は他イベントを消費
   }
 
-  // 2. 断面スライサーモードのトグル / 循環切替 (7 / S / Toolbox)
-  if (event == Ion::Events::Seven || event == Ion::Events::LowerS || event == Ion::Events::Toolbox) {
+  // 2. 断面スライサーモードのトグル / 循環切替 (7 / S)
+  if (event == Ion::Events::Seven || event == Ion::Events::LowerS) {
     if (m_view.traceMode()) {
       m_view.setTraceMode(false);
     }

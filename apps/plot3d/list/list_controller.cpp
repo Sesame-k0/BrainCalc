@@ -1,5 +1,6 @@
 #include "list_controller.h"
 #include "../app.h"
+#include "../render/colormap.h"
 #include <apps/i18n.h>
 #include <escher/stack_view_controller.h>
 #include <stdio.h>
@@ -8,19 +9,12 @@ extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText)
 
 namespace Plot3D {
 
-static const KDColor k_themeColors[] = {
-  KDColor::RGB24(0x2563EB), // 0: Blue
-  KDColor::RGB24(0xDC2626), // 1: Red
-  KDColor::RGB24(0x16A34A), // 2: Green
-  KDColor::RGB24(0x9333EA), // 3: Purple
-  KDColor::RGB24(0x0891B2)  // 4: Cyan
-};
-
 ListController::ListController(Responder * parentResponder, Snapshot * snapshot) :
   ViewController(parentResponder),
   m_snapshot(snapshot),
   m_selectableTableView(this, this, this),
-  m_typeMenuController(parentResponder, snapshot)
+  m_typeMenuController(parentResponder, snapshot),
+  m_parameterController(parentResponder, snapshot)
 {
   m_selectableTableView.setMargins(0, 0, 0, 0);
 }
@@ -48,8 +42,11 @@ int ListController::numberOfRows() const {
 }
 
 HighlightCell * ListController::reusableCell(int index, int type) {
-  assert(index >= 0 && index < k_maxCells);
-  return &m_cells[index];
+  if (type == 1) {
+    return &m_addCell;
+  }
+  assert(index >= 0 && index < k_maxObjects);
+  return &m_objectCells[index];
 }
 
 void ListController::willDisplayCellForIndex(HighlightCell * cell, int index) {
@@ -60,13 +57,13 @@ void ListController::willDisplayCellForIndex(HighlightCell * cell, int index) {
   if (index < count) {
     Object3D * obj = m_snapshot->objectAtIndex(index);
     if (obj) {
-      char buf[40];
+      char buf[44];
       snprintf(buf, sizeof(buf), "%s %s", obj->enabled ? "[x]" : "[ ]", obj->name);
       myCell->setText(buf);
 
       if (obj->enabled) {
-        uint8_t cIdx = obj->colorTheme % (sizeof(k_themeColors) / sizeof(k_themeColors[0]));
-        myCell->setTextColor(k_themeColors[cIdx]);
+        SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % k_numberOfThemes);
+        myCell->setTextColor(ColorMap::getThemeBaseColor(theme));
       } else {
         myCell->setTextColor(KDColor::RGB24(0x94A3B8)); // 無効時はグレー
       }
@@ -87,13 +84,22 @@ bool ListController::handleEvent(Ion::Events::Event event) {
     return true;
   }
 
-  // 表示/非表示の切り替え (Space / OK / EXE)
-  if (event == Ion::Events::Space || event == Ion::Events::OK || event == Ion::Events::EXE) {
+  // 表示/非表示の切り替え (Space)
+  if (event == Ion::Events::Space) {
     if (row < count) {
       m_snapshot->toggleObject(row);
       m_selectableTableView.reloadData();
       return true;
-    } else if (event == Ion::Events::OK || event == Ion::Events::EXE) {
+    }
+  }
+
+  // 決定 (OK / EXE): 立体のパラメータ編集画面を開く、または Add を開く
+  if (event == Ion::Events::OK || event == Ion::Events::EXE) {
+    if (row < count) {
+      m_parameterController.setObject(row);
+      stackController()->push(&m_parameterController);
+      return true;
+    } else {
       // "+ Add an element" の決定で追加メニューを開く
       stackController()->push(&m_typeMenuController);
       return true;
