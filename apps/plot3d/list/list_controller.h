@@ -9,6 +9,7 @@
 #include "../model/object3d.h"
 #include "type_menu_controller.h"
 #include "parameter_controller.h"
+#include "range_controller.h"
 #include "clean_table_view.h"
 
 namespace Plot3D {
@@ -34,8 +35,8 @@ public:
   int numberOfRows() const override;
   KDCoordinate rowHeight(int j) override { return 36; }
   HighlightCell * reusableCell(int index, int type) override;
-  int reusableCellCount(int type) override { return (type == 1) ? 1 : k_maxObjects; }
-  int typeAtLocation(int i, int j) override { return (j < objectCount()) ? 0 : 1; }
+  int reusableCellCount(int type) override { return (type == 0) ? k_maxObjects : 1; }
+  int typeAtLocation(int i, int j) override;
   void willDisplayCellForIndex(HighlightCell * cell, int index) override;
 
 private:
@@ -45,8 +46,10 @@ private:
   CleanSelectableTableView m_selectableTableView;
   EvenOddBufferTextCell m_objectCells[k_maxObjects];
   EvenOddBufferTextCell m_addCell;
+  EvenOddBufferTextCell m_rangeCell;
   TypeMenuController m_typeMenuController;
   ParameterController m_parameterController;
+  RangeController m_rangeController;
 };
 
 } // namespace Plot3D

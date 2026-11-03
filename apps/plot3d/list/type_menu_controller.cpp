@@ -14,8 +14,8 @@ static const char * const k_menuTitles[] = {
   "4. Plane (z = 0.6x - 0.4y)",
   "5. Revolution: Vase (X-Axis)",
   "6. Parametric: Torus",
-  "7. Saddle: z = 0.3(x^2 - y^2)",
-  "8. Paraboloid: z = 0.25(x^2 + y^2)"
+  "7. z = f(x, y)  [x^2 + y^2]",
+  "8. z = f(x, y)  [sin(x)cos(y)]"
 };
 
 TypeMenuController::TypeMenuController(Responder * parentResponder, Snapshot * snapshot) :
@@ -101,11 +101,11 @@ bool TypeMenuController::handleEvent(Ion::Events::Event event) {
       case 5: // Parametric: Torus
         obj.initParametric(0 /* Torus */, fix_from_float(1.5f), fix_from_float(0.55f), 0, 5 /* Cyan */);
         break;
-      case 6: // Saddle
-        obj.initExplicit("z = 0.3(x^2 - y^2)", 1, 4 /* Purple */);
+      case 6: // z = f(x, y) [x^2 + y^2]
+        obj.initExplicit("z = x^2 + y^2", "x^2 + y^2", 0, 0 /* Blue */);
         break;
-      case 7: // Paraboloid
-        obj.initExplicit("z = 0.25(x^2 + y^2)", 2, 2 /* Green */);
+      case 7: // z = f(x, y) [sin(x)*cos(y)]
+        obj.initExplicit("z = sin(x)*cos(y)", "sin(x)*cos(y)", 2, 5 /* Cyan */);
         break;
       default:
         break;

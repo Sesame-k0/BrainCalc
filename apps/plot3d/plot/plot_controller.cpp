@@ -10,7 +10,8 @@ namespace Plot3D {
 PlotController::PlotController(Responder * parentResponder, Snapshot * snapshot) :
   ViewController(parentResponder),
   m_snapshot(snapshot),
-  m_view(snapshot)
+  m_view(snapshot),
+  m_rangeController(parentResponder, snapshot)
 {
 }
 
@@ -221,8 +222,14 @@ bool PlotController::handleEvent(Ion::Events::Event event) {
     return true;
   }
 
-  // 表示モード切替 (Space / 5)
-  if (event == Ion::Events::Space || event == Ion::Events::Five) {
+  // 軸・表示範囲設定 (5 / A: Axes)
+  if (event == Ion::Events::Five || event == Ion::Events::LowerA) {
+    stackController()->push(&m_rangeController);
+    return true;
+  }
+
+  // 表示モード切替 (Space)
+  if (event == Ion::Events::Space) {
     m_view.toggleRenderMode();
     return true;
   }

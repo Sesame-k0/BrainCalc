@@ -176,6 +176,19 @@ void Snapshot::loadFromStorage() {
     setSelectedTab(record->selectedTab);
   }
 
+  if (record->xMax > record->xMin) {
+    m_xMin = record->xMin;
+    m_xMax = record->xMax;
+  }
+  if (record->yMax > record->yMin) {
+    m_yMin = record->yMin;
+    m_yMax = record->yMax;
+  }
+  if (record->zMax > record->zMin) {
+    m_zMin = record->zMin;
+    m_zMax = record->zMax;
+  }
+
   if (record->objectCount > 0 && record->objectCount <= k_maxObjects) {
     s_objectCount = record->objectCount;
     for (int i = 0; i < s_objectCount; i++) {

@@ -10,6 +10,7 @@ apps_src += $(addprefix apps/plot3d/,\
   list/list_controller.cpp \
   list/type_menu_controller.cpp \
   list/parameter_controller.cpp \
+  list/range_controller.cpp \
 )
 
 i18n_files += $(call i18n_for_locale,plot3d/base,universal)

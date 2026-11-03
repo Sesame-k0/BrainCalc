@@ -7,6 +7,25 @@ extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText)
 
 namespace Plot3D {
 
+struct FormulaPreset {
+  const char * label;
+  const char * expr;
+};
+static constexpr FormulaPreset k_formulaPresets[] = {
+  { "x^2 + y^2",          "x^2 + y^2" },
+  { "x^2 - y^2",          "x^2 - y^2" },
+  { "sin(x)*cos(y)",      "sin(x)*cos(y)" },
+  { "-(x^2 + y^2) + 2",   "-(x^2 + y^2) + 2" },
+  { "x * y",              "x * y" },
+  { "cos(x) + sin(y)",    "cos(x) + sin(y)" },
+  { "sqrt(4-x^2-y^2)",    "sqrt(4 - x^2 - y^2)" },
+  { "2*exp(-(x^2+y^2))",  "2*exp(-(x^2+y^2))" },
+  { "sin(x^2 + y^2)",     "sin(x^2 + y^2)" },
+  { "x^3 - 3*x*y^2",      "x^3 - 3*x*y^2" }
+};
+static constexpr int k_numFormulaPresets = sizeof(k_formulaPresets) / sizeof(k_formulaPresets[0]);
+
+
 ParameterController::ParameterController(Responder * parentResponder, Snapshot * snapshot) :
   ViewController(parentResponder),
   m_snapshot(snapshot),
@@ -47,7 +66,7 @@ int ParameterController::numberOfRows() const {
     case ObjectType::RevolutionX:
     case ObjectType::RevolutionY:      return 7; // Color, preset, axis, coeffA, min, max, Delete
     case ObjectType::Parametric:       return 5; // Color, preset, majorR, minorR/pitch, Delete
-    case ObjectType::ExplicitFunction: return 3; // Color, preset, Delete
+    case ObjectType::ExplicitFunction: return 4; // Color, preset, expr, Delete
     default:                           return 2; // Color, Delete
   }
 }
@@ -97,12 +116,10 @@ void ParameterController::updateObjectName(Object3D & obj) {
       break;
     }
     case ObjectType::ExplicitFunction:
-      if (obj.params.explicitFunc.funcPreset == 0) {
-        strlcpy(obj.name, "z = 1.8*sin(x)cos(y)", sizeof(obj.name));
-      } else if (obj.params.explicitFunc.funcPreset == 1) {
-        strlcpy(obj.name, "z = 0.3(x^2 - y^2)", sizeof(obj.name));
+      if (obj.params.explicitFunc.expression[0] != '\0') {
+        snprintf(obj.name, sizeof(obj.name), "z = %s", obj.params.explicitFunc.expression);
       } else {
-        strlcpy(obj.name, "z = 0.25(x^2 + y^2)", sizeof(obj.name));
+        strlcpy(obj.name, "z = x^2 + y^2", sizeof(obj.name));
       }
       break;
     default:
@@ -209,10 +226,10 @@ void ParameterController::willDisplayCellForIndex(HighlightCell * cell, int inde
 
     case ObjectType::ExplicitFunction:
       if (index == 1) {
-        const char * pName = (obj->params.explicitFunc.funcPreset == 0) ? "Wave: sin(x)cos(y)" :
-                             (obj->params.explicitFunc.funcPreset == 1) ? "Saddle: x^2 - y^2" :
-                             "Paraboloid: x^2 + y^2";
-        snprintf(buf, sizeof(buf), " Formula:  <%s>", pName);
+        int pIdx = obj->params.explicitFunc.funcPreset % k_numFormulaPresets;
+        snprintf(buf, sizeof(buf), " Preset:  <%s>", k_formulaPresets[pIdx].label);
+      } else if (index == 2) {
+        snprintf(buf, sizeof(buf), " Expr:    z = %s", obj->params.explicitFunc.expression);
       }
       break;
 
@@ -361,8 +378,33 @@ bool ParameterController::handleEvent(Ion::Events::Event event) {
 
     case ObjectType::ExplicitFunction:
       if (row == 1) {
-        obj->params.explicitFunc.funcPreset = (obj->params.explicitFunc.funcPreset + 1) % 3;
+        int p = obj->params.explicitFunc.funcPreset;
+        if (event == Ion::Events::Left) {
+          p = (p + k_numFormulaPresets - 1) % k_numFormulaPresets;
+        } else {
+          p = (p + 1) % k_numFormulaPresets;
+        }
+        obj->params.explicitFunc.funcPreset = static_cast<uint8_t>(p);
+        strlcpy(obj->params.explicitFunc.expression, k_formulaPresets[p].expr, sizeof(obj->params.explicitFunc.expression));
         changed = true;
+      } else if (row == 2) {
+        char * expr = obj->params.explicitFunc.expression;
+        int len = strlen(expr);
+        if (event == Ion::Events::Backspace) {
+          if (len > 0) {
+            expr[len - 1] = '\0';
+            changed = true;
+          }
+        } else if (event == Ion::Events::Clear) {
+          expr[0] = '\0';
+          changed = true;
+        } else if (event.hasText()) {
+          const char * t = event.text();
+          if (t && t[0] != '\0' && len + strlen(t) < sizeof(obj->params.explicitFunc.expression) - 1) {
+            strcat(expr, t);
+            changed = true;
+          }
+        }
       }
       break;
 

@@ -59,14 +59,15 @@ struct ParametricParams {
 };
 
 struct ExplicitParams {
-  uint8_t funcPreset;   // 0: sin(x)cos(y), 1: x^2 - y^2 (馬の鞍), 2: x^2 + y^2, 3: exp(-(x^2+y^2))
+  uint8_t funcPreset;   // 0: Custom, 1: x^2 + y^2, 2: x^2 - y^2, 3: sin(x)*cos(y), 4: -(x^2+y^2)+2, 5: x*y, 6: cos(x)+sin(y), 7: exp(-(x^2+y^2))
+  char expression[64];  // ユーザー入力・プリセット数式 (例: "x^2 + y^2")
 };
 
 struct Object3D {
   ObjectType type;
   bool enabled;
   uint8_t colorTheme;   // 0: Blue, 1: Red/Amber, 2: Green, 3: Purple, 4: Cyan ...
-  char name[28];        // 表示用タイトル (例: "Sphere(r=1.8)", "Torus(R=1.5)")
+  char name[36];        // 表示用タイトル (例: "z = x^2 + y^2", "Sphere(r=1.8)")
 
   union {
     SphereParams sphere;
@@ -78,11 +79,12 @@ struct Object3D {
     ExplicitParams explicitFunc;
   } params;
 
-  void initExplicit(const char * title, uint8_t preset, uint8_t color = 0) {
+  void initExplicit(const char * title, const char * exprText = "x^2 + y^2", uint8_t preset = 1, uint8_t color = 0) {
     type = ObjectType::ExplicitFunction;
     enabled = true;
     colorTheme = color;
     params.explicitFunc.funcPreset = preset;
+    strlcpy(params.explicitFunc.expression, exprText, sizeof(params.explicitFunc.expression));
     strlcpy(name, title, sizeof(name));
   }
 

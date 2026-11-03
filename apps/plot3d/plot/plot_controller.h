@@ -2,8 +2,10 @@
 #define PLOT3D_PLOT_CONTROLLER_H
 
 #include <escher/view_controller.h>
+#include <escher/stack_view_controller.h>
 #include <apps/i18n.h>
 #include "plot_view.h"
+#include "../list/range_controller.h"
 
 namespace Plot3D {
 
@@ -21,9 +23,14 @@ public:
   bool handleEvent(Ion::Events::Event event) override;
   TELEMETRY_ID("Plot3D");
 
+  StackViewController * stackController() const {
+    return static_cast<StackViewController *>(parentResponder());
+  }
+
 private:
   Snapshot * m_snapshot;
   PlotView m_view;
+  RangeController m_rangeController;
 };
 
 } // namespace Plot3D

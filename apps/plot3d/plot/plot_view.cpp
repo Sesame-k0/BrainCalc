@@ -41,6 +41,26 @@ PlotView::PlotView(Snapshot * snapshot) :
 {
 }
 
+
+// 世界座標 (wx, wy, wz) を描画ボックス空間 [-1.0, +1.0] へ正規化
+static inline Vec3Fix worldToBox(fixed_t wx, fixed_t wy, fixed_t wz, const Snapshot * snapshot) {
+  float xSpan = snapshot->xMax() - snapshot->xMin();
+  float ySpan = snapshot->yMax() - snapshot->yMin();
+  float zSpan = snapshot->zMax() - snapshot->zMin();
+  if (xSpan < 0.1f) xSpan = 0.1f;
+  if (ySpan < 0.1f) ySpan = 0.1f;
+  if (zSpan < 0.1f) zSpan = 0.1f;
+
+  float xMid = (snapshot->xMax() + snapshot->xMin()) * 0.5f;
+  float yMid = (snapshot->yMax() + snapshot->yMin()) * 0.5f;
+  float zMid = (snapshot->zMax() + snapshot->zMin()) * 0.5f;
+
+  fixed_t bx = fix_div(wx - fix_from_float(xMid), fix_from_float(xSpan * 0.5f));
+  fixed_t by = fix_div(wy - fix_from_float(yMid), fix_from_float(ySpan * 0.5f));
+  fixed_t bz = fix_div(wz - fix_from_float(zMid), fix_from_float(zSpan * 0.5f));
+  return Vec3Fix(bx, by, bz);
+}
+
 void PlotView::projectPoint(const Vec3Fix & wPos, const Mat3Fix & rot, fixed_t scale,
                             int & outSx, int & outSy, fixed_t & outSz, uint16_t & outDepth) const {
   Vec3Fix cPos = rot.transform(wPos);
@@ -121,13 +141,11 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
       for (int j = 0; j <= Nv; ++j) {
         for (int i = 0; i <= Nu; ++i) {
           fixed_t wx, wy, wz, wnx, wny, wnz;
-          Shapes::evaluateObjectVertex(*obj, i, Nu, j, Nv, wx, wy, wz, wnx, wny, wnz);
+          Shapes::evaluateObjectVertex(*obj, i, Nu, j, Nv, wx, wy, wz, wnx, wny, wnz,
+                                       m_snapshot->xMin(), m_snapshot->xMax(),
+                                       m_snapshot->yMin(), m_snapshot->yMax());
 
-          // ボックス [-1.0, +1.0] に収まるよう 0.4 を乗算
-          fixed_t normFactor = fix_from_float(0.40f);
-          Vec3Fix wPos(fix_mul(wx, normFactor),
-                       fix_mul(wy, normFactor),
-                       fix_mul(wz, normFactor));
+          Vec3Fix wPos = worldToBox(wx, wy, wz, m_snapshot);
 
           int idx = j * (Nu + 1) + i;
           s_worldZ[idx] = fix_to_float(wz);
@@ -243,12 +261,11 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
       for (int j = 0; j <= Nv; ++j) {
         for (int i = 0; i <= Nu; ++i) {
           fixed_t wx, wy, wz, wnx, wny, wnz;
-          Shapes::evaluateObjectVertex(*obj, i, Nu, j, Nv, wx, wy, wz, wnx, wny, wnz);
+          Shapes::evaluateObjectVertex(*obj, i, Nu, j, Nv, wx, wy, wz, wnx, wny, wnz,
+                                       m_snapshot->xMin(), m_snapshot->xMax(),
+                                       m_snapshot->yMin(), m_snapshot->yMax());
 
-          fixed_t normFactor = fix_from_float(0.40f);
-          Vec3Fix wPos(fix_mul(wx, normFactor),
-                       fix_mul(wy, normFactor),
-                       fix_mul(wz, normFactor));
+          Vec3Fix wPos = worldToBox(wx, wy, wz, m_snapshot);
 
           int idx = j * (Nu + 1) + i;
           int sx, sy;
@@ -307,6 +324,16 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
     }
   }
 
+  // 3b. 画面左上に現在の表示範囲を小さくガイド表示
+  if (!m_traceMode && m_sliceAxis == SliceAxis::None) {
+    char rangeStr[48];
+    snprintf(rangeStr, sizeof(rangeStr), "X[%.0f,%.0f] Y[%.0f,%.0f] Z[%.0f,%.0f]",
+             m_snapshot->xMin(), m_snapshot->xMax(),
+             m_snapshot->yMin(), m_snapshot->yMax(),
+             m_snapshot->zMin(), m_snapshot->zMax());
+    ctx->drawString(rangeStr, KDPoint(6, 4), KDFont::SmallFont, KDColor::RGB24(0x94A3B8), KDColorWhite);
+  }
+
   // 4. 座標トレースモード (Trace Mode) のカーソルおよびバナー描画
   if (m_traceMode) {
     float tx = 0.0f, ty = 0.0f, tz = 0.0f;
@@ -315,10 +342,7 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
     getTraceCoordinates(tx, ty, tz, objName, objCol);
 
     // 画面投影位置の計算
-    fixed_t normFactor = fix_from_float(0.40f);
-    Vec3Fix wPos(fix_mul(fix_from_float(tx), normFactor),
-                 fix_mul(fix_from_float(ty), normFactor),
-                 fix_mul(fix_from_float(tz), normFactor));
+    Vec3Fix wPos = worldToBox(fix_from_float(tx), fix_from_float(ty), fix_from_float(tz), m_snapshot);
     int tsx, tsy;
     fixed_t tsz;
     uint16_t tdepth;
@@ -437,7 +461,9 @@ void PlotView::getTraceCoordinates(float & outX, float & outY, float & outZ, con
   }
 
   fixed_t wx, wy, wz, wnx, wny, wnz;
-  Shapes::evaluateObjectVertex(*obj, m_traceU, Nu, m_traceV, Nv, wx, wy, wz, wnx, wny, wnz);
+  Shapes::evaluateObjectVertex(*obj, m_traceU, Nu, m_traceV, Nv, wx, wy, wz, wnx, wny, wnz,
+                               m_snapshot->xMin(), m_snapshot->xMax(),
+                               m_snapshot->yMin(), m_snapshot->yMax());
 
   outX = fix_to_float(wx);
   outY = fix_to_float(wy);

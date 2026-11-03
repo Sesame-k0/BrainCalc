@@ -3656,7 +3656,7 @@
     ],
     "en_desc": "3D plot view with rotation, zoom, axis views, and trace.",
     "ja_title": "3D立体描画",
-    "ja_desc": "3D空間の立体を表示・操作します。\n・↑↓←→：視点回転\n・PgUp/Dn(+/-)：ズーム\n・6 または T：座標トレース開始\n・5 / Space：面/線切替\n・1〜4：各座標軸の正面視\n・Enter：視点リセット\n・F1：式・立体リストへ"
+    "ja_desc": "3D空間の立体を表示・操作します。\n・↑↓←→：視点回転\n・PgUp/Dn(+/-)：ズーム\n・5 または A：表示範囲設定(Axes)\n・6 または T：座標トレース開始\n・7：断面スライサー起動\n・Space：面/線切替\n・1〜4：各軸正面視 / Enter：リセット"
   },
   "Plot3D_Trace": {
     "en_keys": [
@@ -3707,5 +3707,16 @@
     "en_desc": "Edit 3D object parameters and color theme.",
     "ja_title": "パラメータ詳細設定",
     "ja_desc": "立体の数値や色を編集します。\n・←→：値を増減(±0.1)\n・Enter：色や形状の切替\n・Back：一覧へ戻る\n3D空間へ即座に反映されます。"
+  },
+  "Plot3D_Range": {
+    "en_keys": [
+      "Plot3D_Range",
+      "Axes Range",
+      "3D Range",
+      "Range Settings"
+    ],
+    "en_desc": "Set 3D bounding box range for X, Y, Z axes.",
+    "ja_title": "表示範囲設定（Axes）",
+    "ja_desc": "3D空間の描画範囲(min〜max)を設定します。\n・←→：値を増減(±0.5)\n・Preset行で←→：標準/広域等のプリセット切替\n・Back：元の画面へ戻る\nグラフが見切れる場合に調整してください。"
   }
 }

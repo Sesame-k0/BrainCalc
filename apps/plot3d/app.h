@@ -38,6 +38,15 @@ public:
   float zMin() const { return m_zMin; }
   float zMax() const { return m_zMax; }
 
+  void setXRange(float min, float max) { m_xMin = min; m_xMax = max; }
+  void setYRange(float min, float max) { m_yMin = min; m_yMax = max; }
+  void setZRange(float min, float max) { m_zMin = min; m_zMax = max; }
+  void setRange(float xmin, float xmax, float ymin, float ymax, float zmin, float zmax) {
+    m_xMin = xmin; m_xMax = xmax;
+    m_yMin = ymin; m_yMax = ymax;
+    m_zMin = zmin; m_zMax = zmax;
+  }
+
   // オブジェクト管理 (最大5個)
   int numberOfObjects() const;
   Object3D * objectAtIndex(int i);

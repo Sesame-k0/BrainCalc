@@ -14,7 +14,8 @@ ListController::ListController(Responder * parentResponder, Snapshot * snapshot)
   m_snapshot(snapshot),
   m_selectableTableView(this, this, this),
   m_typeMenuController(parentResponder, snapshot),
-  m_parameterController(parentResponder, snapshot)
+  m_parameterController(parentResponder, snapshot),
+  m_rangeController(parentResponder, snapshot)
 {
   m_selectableTableView.setMargins(0, 0, 0, 0);
 }
@@ -38,12 +39,23 @@ int ListController::objectCount() const {
 
 int ListController::numberOfRows() const {
   int count = objectCount();
-  return (count < k_maxObjects) ? count + 1 : count;
+  bool hasAdd = (count < k_maxObjects);
+  return count + (hasAdd ? 1 : 0) + 1; // オブジェクト + (Add) + Axes Range
+}
+
+int ListController::typeAtLocation(int i, int j) {
+  int count = objectCount();
+  if (j < count) return 0;
+  if (count < k_maxObjects && j == count) return 1;
+  return 2;
 }
 
 HighlightCell * ListController::reusableCell(int index, int type) {
   if (type == 1) {
     return &m_addCell;
+  }
+  if (type == 2) {
+    return &m_rangeCell;
   }
   assert(index >= 0 && index < k_maxObjects);
   return &m_objectCells[index];
@@ -54,10 +66,14 @@ void ListController::willDisplayCellForIndex(HighlightCell * cell, int index) {
   myCell->setEven(index % 2 == 0);
 
   int count = objectCount();
+  bool hasAdd = (count < k_maxObjects);
+  int addRow = count;
+  int rangeRow = count + (hasAdd ? 1 : 0);
+
   if (index < count) {
     Object3D * obj = m_snapshot->objectAtIndex(index);
     if (obj) {
-      char buf[44];
+      char buf[48];
       snprintf(buf, sizeof(buf), "%s %s", obj->enabled ? "[x]" : "[ ]", obj->name);
       myCell->setText(buf);
 
@@ -68,15 +84,26 @@ void ListController::willDisplayCellForIndex(HighlightCell * cell, int index) {
         myCell->setTextColor(KDColor::RGB24(0x94A3B8)); // 無効時はグレー
       }
     }
-  } else {
+  } else if (hasAdd && index == addRow) {
     myCell->setText("+ Add an element");
     myCell->setTextColor(KDColor::RGB24(0x64748B));
+  } else if (index == rangeRow) {
+    char buf[48];
+    snprintf(buf, sizeof(buf), "Axes: X[%.0f,%.0f] Y[%.0f,%.0f] Z[%.0f,%.0f]",
+             m_snapshot->xMin(), m_snapshot->xMax(),
+             m_snapshot->yMin(), m_snapshot->yMax(),
+             m_snapshot->zMin(), m_snapshot->zMax());
+    myCell->setText(buf);
+    myCell->setTextColor(KDColor::RGB24(0x0284C7)); // スレートシアン
   }
 }
 
 bool ListController::handleEvent(Ion::Events::Event event) {
   int row = m_selectableTableView.selectedRow();
   int count = objectCount();
+  bool hasAdd = (count < k_maxObjects);
+  int addRow = count;
+  int rangeRow = count + (hasAdd ? 1 : 0);
 
   // 右キーで行0にいる時、または F1 (Toolbox) で 3D Plot タブへ瞬時ジャンプ
   if (event == Ion::Events::Toolbox || (event == Ion::Events::Right && row == 0)) {
@@ -93,15 +120,19 @@ bool ListController::handleEvent(Ion::Events::Event event) {
     }
   }
 
-  // 決定 (OK / EXE): 立体のパラメータ編集画面を開く、または Add を開く
+  // 決定 (OK / EXE): 立体のパラメータ編集画面を開く、Add を開く、または Axes Range を開く
   if (event == Ion::Events::OK || event == Ion::Events::EXE) {
     if (row < count) {
       m_parameterController.setObject(row);
       stackController()->push(&m_parameterController);
       return true;
-    } else {
+    } else if (hasAdd && row == addRow) {
       // "+ Add an element" の決定で追加メニューを開く
       stackController()->push(&m_typeMenuController);
+      return true;
+    } else if (row == rangeRow) {
+      // Axes Range 設定画面を開く
+      stackController()->push(&m_rangeController);
       return true;
     }
   }

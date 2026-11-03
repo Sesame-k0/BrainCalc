@@ -3,6 +3,12 @@
 
 #include "object3d.h"
 #include "../render/fixed_math.h"
+#include <poincare/expression.h>
+#include <poincare/variable_context.h>
+#include <poincare/preferences.h>
+#include <math.h>
+#include <string.h>
+#include <algorithm>
 
 namespace Plot3D {
 
@@ -15,11 +21,13 @@ public:
       int uIndex, int nu,
       int vIndex, int nv,
       fixed_t & outX, fixed_t & outY, fixed_t & outZ,
-      fixed_t & outNx, fixed_t & outNy, fixed_t & outNz)
+      fixed_t & outNx, fixed_t & outNy, fixed_t & outNz,
+      float xMin = -2.0f, float xMax = 2.0f,
+      float yMin = -2.0f, float yMax = 2.0f)
   {
     switch (obj.type) {
       case ObjectType::ExplicitFunction:
-        return evaluateExplicit(obj.params.explicitFunc, uIndex, nu, vIndex, nv, outX, outY, outZ, outNx, outNy, outNz);
+        return evaluateExplicit(obj.params.explicitFunc, uIndex, nu, vIndex, nv, outX, outY, outZ, outNx, outNy, outNz, xMin, xMax, yMin, yMax);
       case ObjectType::Sphere:
         return evaluateSphere(obj.params.sphere, uIndex, nu, vIndex, nv, outX, outY, outZ, outNx, outNy, outNz);
       case ObjectType::Cylinder:
@@ -39,44 +47,83 @@ public:
   }
 
 private:
+  // 数式評価ヘルパー (プリセット高速パス + Poincare 汎用フォールバック)
+  static float evalFormula(const char * exprStr, float xVal, float yVal) {
+    if (!exprStr || exprStr[0] == '\0') {
+      return xVal * xVal + yVal * yVal; // デフォルト
+    }
+    // 高速パス: 代表的数式
+    if (strstr(exprStr, "x^2") && strstr(exprStr, "+") && strstr(exprStr, "y^2")) {
+      return xVal * xVal + yVal * yVal;
+    }
+    if (strstr(exprStr, "x^2") && strstr(exprStr, "-") && strstr(exprStr, "y^2")) {
+      return xVal * xVal - yVal * yVal;
+    }
+    if (strstr(exprStr, "sin") && strstr(exprStr, "cos")) {
+      return 1.8f * sinf(xVal) * cosf(yVal);
+    }
+    if (strcmp(exprStr, "x*y") == 0 || strcmp(exprStr, "x * y") == 0 || strcmp(exprStr, "xy") == 0) {
+      return xVal * yVal;
+    }
+
+    // Poincare 式パース & 評価
+    Poincare::Expression expr = Poincare::Expression::Parse(exprStr, nullptr);
+    if (expr.isUninitialized()) {
+      return 0.0f;
+    }
+    Poincare::VariableContext ctxUpperX("X", nullptr);
+    ctxUpperX.setApproximationForVariable<float>(xVal);
+    Poincare::VariableContext ctxX("x", &ctxUpperX);
+    ctxX.setApproximationForVariable<float>(xVal);
+    Poincare::VariableContext ctxUpperY("Y", &ctxX);
+    ctxUpperY.setApproximationForVariable<float>(yVal);
+    Poincare::VariableContext ctxY("y", &ctxUpperY);
+    ctxY.setApproximationForVariable<float>(yVal);
+
+    float val = expr.approximateToScalar<float>(
+        &ctxY,
+        Poincare::Preferences::ComplexFormat::Real,
+        Poincare::Preferences::AngleUnit::Radian);
+
+    if (std::isnan(val) || std::isinf(val)) {
+      return 0.0f;
+    }
+    return val;
+  }
+
   // 1. 明示関数 z = f(x, y)
   static bool evaluateExplicit(
       const ExplicitParams & p,
       int uIndex, int nu, int vIndex, int nv,
       fixed_t & x, fixed_t & y, fixed_t & z,
-      fixed_t & nx, fixed_t & ny, fixed_t & nz)
+      fixed_t & nx, fixed_t & ny, fixed_t & nz,
+      float xMin = -2.0f, float xMax = 2.0f,
+      float yMin = -2.0f, float yMax = 2.0f)
   {
-    // x, y は [-3.0, +3.0]
-    fixed_t minCoord = fix_from_float(-3.0f);
-    fixed_t maxCoord = fix_from_float(3.0f);
-    x = minCoord + fix_mul(maxCoord - minCoord, fix_div(fix_from_int(uIndex), fix_from_int(nu)));
-    y = minCoord + fix_mul(maxCoord - minCoord, fix_div(fix_from_int(vIndex), fix_from_int(nv)));
+    float uNorm = static_cast<float>(uIndex) / static_cast<float>(nu);
+    float vNorm = static_cast<float>(vIndex) / static_cast<float>(nv);
+    float xf = xMin + uNorm * (xMax - xMin);
+    float yf = yMin + vNorm * (yMax - yMin);
 
-    if (p.funcPreset == 0) {
-      // z = 1.8 * sin(x) * cos(y)
-      fixed_t sx = fix_sin(x);
-      fixed_t cy = fix_cos(y);
-      z = fix_mul(fix_from_float(1.8f), fix_mul(sx, cy));
-      // 勾配法線: (-dz/dx, -dz/dy, 1)
-      fixed_t dzdx = fix_mul(fix_from_float(1.8f), fix_mul(fix_cos(x), cy));
-      fixed_t dzdy = fix_mul(fix_from_float(1.8f), fix_mul(sx, -fix_sin(y)));
-      nx = -dzdx; ny = -dzdy; nz = FIX_ONE;
-    } else if (p.funcPreset == 1) {
-      // z = 0.3 * (x^2 - y^2) (馬の鞍)
-      fixed_t x2 = fix_mul(x, x);
-      fixed_t y2 = fix_mul(y, y);
-      z = fix_mul(fix_from_float(0.3f), x2 - y2);
-      fixed_t dzdx = fix_mul(fix_from_float(0.6f), x);
-      fixed_t dzdy = fix_mul(fix_from_float(-0.6f), y);
-      nx = -dzdx; ny = -dzdy; nz = FIX_ONE;
-    } else {
-      // z = 0.25 * (x^2 + y^2) (回転放物面)
-      fixed_t r2 = fix_mul(x, x) + fix_mul(y, y);
-      z = fix_mul(fix_from_float(0.25f), r2) - fix_from_float(1.5f);
-      fixed_t dzdx = fix_mul(fix_from_float(0.5f), x);
-      fixed_t dzdy = fix_mul(fix_from_float(0.5f), y);
-      nx = -dzdx; ny = -dzdy; nz = FIX_ONE;
-    }
+    float zf = evalFormula(p.expression, xf, yf);
+
+    // 勾配 (有限差分) による法線ベクトル (-dz/dx, -dz/dy, 1)
+    const float eps = 0.01f;
+    float z_xp = evalFormula(p.expression, xf + eps, yf);
+    float z_xm = evalFormula(p.expression, xf - eps, yf);
+    float z_yp = evalFormula(p.expression, xf, yf + eps);
+    float z_ym = evalFormula(p.expression, xf, yf - eps);
+
+    float dzdx = (z_xp - z_xm) / (2.0f * eps);
+    float dzdy = (z_yp - z_ym) / (2.0f * eps);
+
+    x = fix_from_float(xf);
+    y = fix_from_float(yf);
+    z = fix_from_float(zf);
+
+    nx = fix_from_float(-dzdx);
+    ny = fix_from_float(-dzdy);
+    nz = FIX_ONE;
 
     // 法線正規化
     normalize(nx, ny, nz);
