@@ -52,10 +52,13 @@ struct RevolutionParams {
 };
 
 struct ParametricParams {
-  uint8_t preset;       // 0: Torus, 1: Helicoid, 2: Mobius
+  uint8_t preset;       // 0: Custom (Formula X,Y,Z), 1: Torus, 2: Helicoid, 3: Mobius
   fixed_t majorR;       // 大半径 R
   fixed_t minorR;       // 小半径 r
   fixed_t pitch;        // 螺旋ピッチ c
+  char exprX[32];       // X(u, v) 式 (例: "cos(u)*cos(v)")
+  char exprY[32];       // Y(u, v) 式 (例: "sin(u)*cos(v)")
+  char exprZ[32];       // Z(u, v) 式 (例: "sin(v)")
 };
 
 struct ExplicitParams {
@@ -157,7 +160,24 @@ struct Object3D {
     params.parametric.majorR = rMajor;
     params.parametric.minorR = rMinor;
     params.parametric.pitch = pitch;
-    strlcpy(name, (preset == 0) ? "Torus" : (preset == 1) ? "Helicoid" : "Mobius", sizeof(name));
+    strlcpy(params.parametric.exprX, "cos(u)*cos(v)", sizeof(params.parametric.exprX));
+    strlcpy(params.parametric.exprY, "sin(u)*cos(v)", sizeof(params.parametric.exprY));
+    strlcpy(params.parametric.exprZ, "sin(v)", sizeof(params.parametric.exprZ));
+    strlcpy(name, (preset == 1) ? "Torus" : (preset == 2) ? "Helicoid" : (preset == 3) ? "Mobius" : "Parametric", sizeof(name));
+  }
+
+  void initParametricSurface(const char * title, const char * xExpr = "cos(u)*cos(v)", const char * yExpr = "sin(u)*cos(v)", const char * zExpr = "sin(v)", uint8_t color = 5) {
+    type = ObjectType::Parametric;
+    enabled = true;
+    colorTheme = color;
+    params.parametric.preset = 0; // Custom (X, Y, Z式)
+    params.parametric.majorR = fix_from_float(1.8f);
+    params.parametric.minorR = fix_from_float(0.6f);
+    params.parametric.pitch = fix_from_float(0.5f);
+    strlcpy(params.parametric.exprX, xExpr, sizeof(params.parametric.exprX));
+    strlcpy(params.parametric.exprY, yExpr, sizeof(params.parametric.exprY));
+    strlcpy(params.parametric.exprZ, zExpr, sizeof(params.parametric.exprZ));
+    strlcpy(name, title, sizeof(name));
   }
 };
 

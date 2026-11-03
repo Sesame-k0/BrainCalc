@@ -2,6 +2,7 @@
 #include "../app.h"
 #include "../render/colormap.h"
 #include <stdio.h>
+#include <string.h>
 
 extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText);
 
@@ -25,6 +26,85 @@ static constexpr FormulaPreset k_formulaPresets[] = {
 };
 static constexpr int k_numFormulaPresets = sizeof(k_formulaPresets) / sizeof(k_formulaPresets[0]);
 
+// 電卓キーボードからの数式入力ヘルパー
+static bool handleFormulaInput(char * buffer, size_t maxLen, Ion::Events::Event event, char var1 = 'x', char var2 = 'y') {
+  int len = strlen(buffer);
+  if (event == Ion::Events::Backspace) {
+    if (len > 0) {
+      if (len >= 4 && (strcmp(buffer + len - 4, "sin(") == 0 || strcmp(buffer + len - 4, "cos(") == 0 || strcmp(buffer + len - 4, "tan(") == 0 || strcmp(buffer + len - 4, "exp(") == 0)) {
+        buffer[len - 4] = '\0';
+      } else if (len >= 5 && strcmp(buffer + len - 5, "sqrt(") == 0) {
+        buffer[len - 5] = '\0';
+      } else if (len >= 3 && strcmp(buffer + len - 3, "ln(") == 0) {
+        buffer[len - 3] = '\0';
+      } else if (len >= 2 && strcmp(buffer + len - 2, "^2") == 0) {
+        buffer[len - 2] = '\0';
+      } else {
+        buffer[len - 1] = '\0';
+      }
+      return true;
+    }
+    return false;
+  }
+  if (event == Ion::Events::Clear) {
+    buffer[0] = '\0';
+    return true;
+  }
+  if (event == Ion::Events::XNT) {
+    if (len > 0 && (buffer[len - 1] == var1 || buffer[len - 1] == (var1 - 32))) {
+      buffer[len - 1] = var2;
+      return true;
+    }
+    if (len > 0 && (buffer[len - 1] == var2 || buffer[len - 1] == (var2 - 32))) {
+      buffer[len - 1] = var1;
+      return true;
+    }
+    if (len + 1 < (int)maxLen) {
+      buffer[len] = var1;
+      buffer[len + 1] = '\0';
+      return true;
+    }
+    return false;
+  }
+
+  const char * toAppend = nullptr;
+  if (event == Ion::Events::Sine) toAppend = "sin(";
+  else if (event == Ion::Events::Cosine) toAppend = "cos(";
+  else if (event == Ion::Events::Tangent) toAppend = "tan(";
+  else if (event == Ion::Events::Sqrt) toAppend = "sqrt(";
+  else if (event == Ion::Events::Square) toAppend = "^2";
+  else if (event == Ion::Events::Power) toAppend = "^";
+  else if (event == Ion::Events::Exp) toAppend = "exp(";
+  else if (event == Ion::Events::Ln) toAppend = "ln(";
+  else if (event == Ion::Events::LeftParenthesis) toAppend = "(";
+  else if (event == Ion::Events::RightParenthesis) toAppend = ")";
+  else if (event == Ion::Events::Plus) toAppend = "+";
+  else if (event == Ion::Events::Minus) toAppend = "-";
+  else if (event == Ion::Events::Multiplication) toAppend = "*";
+  else if (event == Ion::Events::Division) toAppend = "/";
+  else if (event == Ion::Events::Dot) toAppend = ".";
+  else if (event == Ion::Events::Zero) toAppend = "0";
+  else if (event == Ion::Events::One) toAppend = "1";
+  else if (event == Ion::Events::Two) toAppend = "2";
+  else if (event == Ion::Events::Three) toAppend = "3";
+  else if (event == Ion::Events::Four) toAppend = "4";
+  else if (event == Ion::Events::Five) toAppend = "5";
+  else if (event == Ion::Events::Six) toAppend = "6";
+  else if (event == Ion::Events::Seven) toAppend = "7";
+  else if (event == Ion::Events::Eight) toAppend = "8";
+  else if (event == Ion::Events::Nine) toAppend = "9";
+  else if (event.hasText()) {
+    toAppend = event.text();
+  }
+
+  if (toAppend && toAppend[0] != '\0') {
+    if (len + (int)strlen(toAppend) < (int)maxLen) {
+      strcat(buffer, toAppend);
+      return true;
+    }
+  }
+  return false;
+}
 
 ParameterController::ParameterController(Responder * parentResponder, Snapshot * snapshot) :
   ViewController(parentResponder),
@@ -65,7 +145,7 @@ int ParameterController::numberOfRows() const {
     case ObjectType::Plane:            return 6; // Color, a, b, c, d, Delete
     case ObjectType::RevolutionX:
     case ObjectType::RevolutionY:      return 7; // Color, preset, axis, coeffA, min, max, Delete
-    case ObjectType::Parametric:       return 5; // Color, preset, majorR, minorR/pitch, Delete
+    case ObjectType::Parametric:       return (obj->params.parametric.preset == 0) ? 6 : 5; // Color, X, Y, Z, preset, Delete OR Color, preset, majorR, minorR, Delete
     case ObjectType::ExplicitFunction: return 4; // Color, preset, expr, Delete
     default:                           return 2; // Color, Delete
   }
@@ -107,8 +187,10 @@ void ParameterController::updateObjectName(Object3D & obj) {
     }
     case ObjectType::Parametric: {
       if (obj.params.parametric.preset == 0) {
-        snprintf(obj.name, sizeof(obj.name), "Torus (R=%.1f)", fix_to_float(obj.params.parametric.majorR));
+        snprintf(obj.name, sizeof(obj.name), "Param: [%s]", obj.params.parametric.exprZ);
       } else if (obj.params.parametric.preset == 1) {
+        snprintf(obj.name, sizeof(obj.name), "Torus (R=%.1f)", fix_to_float(obj.params.parametric.majorR));
+      } else if (obj.params.parametric.preset == 2) {
         strlcpy(obj.name, "Helicoid", sizeof(obj.name));
       } else {
         strlcpy(obj.name, "Mobius Strip", sizeof(obj.name));
@@ -138,98 +220,98 @@ void ParameterController::willDisplayCellForIndex(HighlightCell * cell, int inde
   char buf[48];
   int totalRows = numberOfRows();
 
-  // 1. Color row (Row 0)
-  if (index == 0) {
-    SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % k_numberOfThemes);
-    snprintf(buf, sizeof(buf), " Color:  <%s>", ColorMap::getThemeName(theme));
-    myCell->setText(buf);
-    myCell->setTextColor(ColorMap::getThemeBaseColor(theme));
-    return;
-  }
-
-  // 2. Delete row (Last Row)
+  // 最終行は Delete
   if (index == totalRows - 1) {
-    myCell->setText(" Delete this object");
-    myCell->setTextColor(KDColor::RGB24(0xDC2626)); // Red
+    myCell->setText("[ Delete Object ]");
+    myCell->setTextColor(KDColorRed);
     return;
   }
 
-  // 3. Parameter rows
+  // Row 0 は常に Color
+  if (index == 0) {
+    const char * colName = ColorMap::getThemeName(static_cast<SurfaceTheme>(obj->colorTheme));
+    snprintf(buf, sizeof(buf), "Color:  %s  (< >)", colName);
+    myCell->setText(buf);
+    myCell->setTextColor(ColorMap::getThemeBaseColor(static_cast<SurfaceTheme>(obj->colorTheme)));
+    return;
+  }
+
   myCell->setTextColor(KDColorBlack);
-  buf[0] = '\0';
 
   switch (obj->type) {
     case ObjectType::Sphere:
-      if (index == 1) snprintf(buf, sizeof(buf), " Radius (r):    %.2f", fix_to_float(obj->params.sphere.radius));
-      else if (index == 2) snprintf(buf, sizeof(buf), " Center X0:     %.2f", fix_to_float(obj->params.sphere.x0));
-      else if (index == 3) snprintf(buf, sizeof(buf), " Center Y0:     %.2f", fix_to_float(obj->params.sphere.y0));
-      else if (index == 4) snprintf(buf, sizeof(buf), " Center Z0:     %.2f", fix_to_float(obj->params.sphere.z0));
+      if (index == 1) snprintf(buf, sizeof(buf), "Radius r:      %.2f", fix_to_float(obj->params.sphere.radius));
+      else if (index == 2) snprintf(buf, sizeof(buf), "Center X:      %.2f", fix_to_float(obj->params.sphere.x0));
+      else if (index == 3) snprintf(buf, sizeof(buf), "Center Y:      %.2f", fix_to_float(obj->params.sphere.y0));
+      else if (index == 4) snprintf(buf, sizeof(buf), "Center Z:      %.2f", fix_to_float(obj->params.sphere.z0));
       break;
 
     case ObjectType::Cylinder:
-      if (index == 1) snprintf(buf, sizeof(buf), " Radius (r):    %.2f", fix_to_float(obj->params.cylinder.radius));
-      else if (index == 2) snprintf(buf, sizeof(buf), " Center X0:     %.2f", fix_to_float(obj->params.cylinder.x0));
-      else if (index == 3) snprintf(buf, sizeof(buf), " Center Y0:     %.2f", fix_to_float(obj->params.cylinder.y0));
-      else if (index == 4) snprintf(buf, sizeof(buf), " Height min:    %.2f", fix_to_float(obj->params.cylinder.zMin));
-      else if (index == 5) snprintf(buf, sizeof(buf), " Height max:    %.2f", fix_to_float(obj->params.cylinder.zMax));
+      if (index == 1) snprintf(buf, sizeof(buf), "Radius r:      %.2f", fix_to_float(obj->params.cylinder.radius));
+      else if (index == 2) snprintf(buf, sizeof(buf), "Center X:      %.2f", fix_to_float(obj->params.cylinder.x0));
+      else if (index == 3) snprintf(buf, sizeof(buf), "Center Y:      %.2f", fix_to_float(obj->params.cylinder.y0));
+      else if (index == 4) snprintf(buf, sizeof(buf), "Height Min:    %.2f", fix_to_float(obj->params.cylinder.zMin));
+      else if (index == 5) snprintf(buf, sizeof(buf), "Height Max:    %.2f", fix_to_float(obj->params.cylinder.zMax));
       break;
 
     case ObjectType::Cone:
-      if (index == 1) snprintf(buf, sizeof(buf), " Slope (k):     %.2f", fix_to_float(obj->params.cone.slope));
-      else if (index == 2) snprintf(buf, sizeof(buf), " Vertex X0:     %.2f", fix_to_float(obj->params.cone.x0));
-      else if (index == 3) snprintf(buf, sizeof(buf), " Vertex Y0:     %.2f", fix_to_float(obj->params.cone.y0));
-      else if (index == 4) snprintf(buf, sizeof(buf), " Vertex Z0:     %.2f", fix_to_float(obj->params.cone.z0));
-      else if (index == 5) snprintf(buf, sizeof(buf), " Sheets:      <%s>", obj->params.cone.twoSheets ? "Double" : "Single");
-      else if (index == 6) snprintf(buf, sizeof(buf), " Height min:    %.2f", fix_to_float(obj->params.cone.zMin));
-      else if (index == 7) snprintf(buf, sizeof(buf), " Height max:    %.2f", fix_to_float(obj->params.cone.zMax));
+      if (index == 1) snprintf(buf, sizeof(buf), "Slope k:       %.2f", fix_to_float(obj->params.cone.slope));
+      else if (index == 2) snprintf(buf, sizeof(buf), "Vertex X:      %.2f", fix_to_float(obj->params.cone.x0));
+      else if (index == 3) snprintf(buf, sizeof(buf), "Vertex Y:      %.2f", fix_to_float(obj->params.cone.y0));
+      else if (index == 4) snprintf(buf, sizeof(buf), "Vertex Z:      %.2f", fix_to_float(obj->params.cone.z0));
+      else if (index == 5) snprintf(buf, sizeof(buf), "Sheets:        %s", obj->params.cone.twoSheets ? "Double" : "Single");
+      else if (index == 6) snprintf(buf, sizeof(buf), "Z Min:         %.2f", fix_to_float(obj->params.cone.zMin));
+      else if (index == 7) snprintf(buf, sizeof(buf), "Z Max:         %.2f", fix_to_float(obj->params.cone.zMax));
       break;
 
     case ObjectType::Plane:
-      if (index == 1) snprintf(buf, sizeof(buf), " Normal a (X):  %.2f", fix_to_float(obj->params.plane.a));
-      else if (index == 2) snprintf(buf, sizeof(buf), " Normal b (Y):  %.2f", fix_to_float(obj->params.plane.b));
-      else if (index == 3) snprintf(buf, sizeof(buf), " Normal c (Z):  %.2f", fix_to_float(obj->params.plane.c));
-      else if (index == 4) snprintf(buf, sizeof(buf), " Constant d:    %.2f", fix_to_float(obj->params.plane.d));
+      if (index == 1) snprintf(buf, sizeof(buf), "Coeff a (x):   %.2f", fix_to_float(obj->params.plane.a));
+      else if (index == 2) snprintf(buf, sizeof(buf), "Coeff b (y):   %.2f", fix_to_float(obj->params.plane.b));
+      else if (index == 3) snprintf(buf, sizeof(buf), "Coeff c (z):   %.2f", fix_to_float(obj->params.plane.c));
+      else if (index == 4) snprintf(buf, sizeof(buf), "Constant d:    %.2f", fix_to_float(obj->params.plane.d));
       break;
 
     case ObjectType::RevolutionX:
-    case ObjectType::RevolutionY:
-      if (index == 1) {
-        const char * pName = (obj->params.revolution.curvePreset == 0) ? "Vase" :
-                             (obj->params.revolution.curvePreset == 1) ? "Wine Glass" : "Barrel";
-        snprintf(buf, sizeof(buf), " Preset:    <%s>", pName);
-      } else if (index == 2) {
-        snprintf(buf, sizeof(buf), " Axis:      <%s>", (obj->params.revolution.axis == 0) ? "X-Axis" : "Y-Axis");
-      } else if (index == 3) {
-        snprintf(buf, sizeof(buf), " Coeff a:     %.2f", fix_to_float(obj->params.revolution.coeffA));
-      } else if (index == 4) {
-        snprintf(buf, sizeof(buf), " Range min:   %.2f", fix_to_float(obj->params.revolution.minCoord));
-      } else if (index == 5) {
-        snprintf(buf, sizeof(buf), " Range max:   %.2f", fix_to_float(obj->params.revolution.maxCoord));
-      }
+    case ObjectType::RevolutionY: {
+      const char * pName = (obj->params.revolution.curvePreset == 0) ? "Vase" :
+                           (obj->params.revolution.curvePreset == 1) ? "WineGlass" : "Barrel";
+      if (index == 1) snprintf(buf, sizeof(buf), "Preset:   %s (< >)", pName);
+      else if (index == 2) snprintf(buf, sizeof(buf), "Axis:     %s-Axis (< >)", (obj->params.revolution.axis == 0) ? "X" : "Y");
+      else if (index == 3) snprintf(buf, sizeof(buf), "Scale a:  %.2f", fix_to_float(obj->params.revolution.coeffA));
+      else if (index == 4) snprintf(buf, sizeof(buf), "Min u:    %.2f", fix_to_float(obj->params.revolution.minCoord));
+      else if (index == 5) snprintf(buf, sizeof(buf), "Max u:    %.2f", fix_to_float(obj->params.revolution.maxCoord));
       break;
+    }
 
     case ObjectType::Parametric:
-      if (index == 1) {
-        const char * pName = (obj->params.parametric.preset == 0) ? "Torus" :
-                             (obj->params.parametric.preset == 1) ? "Helicoid" : "Mobius Strip";
-        snprintf(buf, sizeof(buf), " Preset:    <%s>", pName);
-      } else if (index == 2) {
-        snprintf(buf, sizeof(buf), " Major R:     %.2f", fix_to_float(obj->params.parametric.majorR));
-      } else if (index == 3) {
-        if (obj->params.parametric.preset == 1) {
-          snprintf(buf, sizeof(buf), " Pitch c:     %.2f", fix_to_float(obj->params.parametric.pitch));
-        } else {
-          snprintf(buf, sizeof(buf), " Minor r:     %.2f", fix_to_float(obj->params.parametric.minorR));
+      if (obj->params.parametric.preset == 0) {
+        // Custom 3項目入力 (fx-CG50ライク)
+        if (index == 1) snprintf(buf, sizeof(buf), "X(u,v) = %s_", obj->params.parametric.exprX);
+        else if (index == 2) snprintf(buf, sizeof(buf), "Y(u,v) = %s_", obj->params.parametric.exprY);
+        else if (index == 3) snprintf(buf, sizeof(buf), "Z(u,v) = %s_", obj->params.parametric.exprZ);
+        else if (index == 4) snprintf(buf, sizeof(buf), "Preset: Custom (< >)");
+      } else {
+        const char * pName = (obj->params.parametric.preset == 1) ? "Torus" :
+                             (obj->params.parametric.preset == 2) ? "Helicoid" : "Mobius";
+        if (index == 1) snprintf(buf, sizeof(buf), "Preset:   %s (< >)", pName);
+        else if (index == 2) snprintf(buf, sizeof(buf), "Major R:  %.2f", fix_to_float(obj->params.parametric.majorR));
+        else if (index == 3) {
+          if (obj->params.parametric.preset == 2) {
+            snprintf(buf, sizeof(buf), "Pitch c:  %.2f", fix_to_float(obj->params.parametric.pitch));
+          } else {
+            snprintf(buf, sizeof(buf), "Minor r:  %.2f", fix_to_float(obj->params.parametric.minorR));
+          }
         }
       }
       break;
 
     case ObjectType::ExplicitFunction:
       if (index == 1) {
-        int pIdx = obj->params.explicitFunc.funcPreset % k_numFormulaPresets;
-        snprintf(buf, sizeof(buf), " Preset:  <%s>", k_formulaPresets[pIdx].label);
+        int p = obj->params.explicitFunc.funcPreset;
+        const char * lbl = (p >= 0 && p < k_numFormulaPresets) ? k_formulaPresets[p].label : "Custom";
+        snprintf(buf, sizeof(buf), "Preset: %s (< >)", lbl);
       } else if (index == 2) {
-        snprintf(buf, sizeof(buf), " Expr:    z = %s", obj->params.explicitFunc.expression);
+        snprintf(buf, sizeof(buf), "z = %s_", obj->params.explicitFunc.expression);
       }
       break;
 
@@ -241,11 +323,6 @@ void ParameterController::willDisplayCellForIndex(HighlightCell * cell, int inde
 }
 
 bool ParameterController::handleEvent(Ion::Events::Event event) {
-  if (event == Ion::Events::Back) {
-    stackController()->pop();
-    return true;
-  }
-
   if (m_objectIndex < 0 || m_objectIndex >= m_snapshot->numberOfObjects()) {
     return false;
   }
@@ -255,40 +332,37 @@ bool ParameterController::handleEvent(Ion::Events::Event event) {
   int row = m_selectableTableView.selectedRow();
   int totalRows = numberOfRows();
 
-  // Delete row
+  if (event == Ion::Events::Back) {
+    stackController()->pop();
+    return true;
+  }
+
+  // 削除行
   if (row == totalRows - 1) {
     if (event == Ion::Events::OK || event == Ion::Events::EXE) {
       m_snapshot->removeObject(m_objectIndex);
       stackController()->pop();
       return true;
     }
-    return false;
   }
 
-  // Row 0: Color
+  // Row 0: カラー変更
   if (row == 0) {
-    if (event == Ion::Events::Right || event == Ion::Events::OK || event == Ion::Events::EXE) {
-      obj->colorTheme = (obj->colorTheme + 1) % k_numberOfThemes;
-      m_selectableTableView.reloadData();
-      return true;
-    } else if (event == Ion::Events::Left) {
+    if (event == Ion::Events::Left) {
       obj->colorTheme = (obj->colorTheme + k_numberOfThemes - 1) % k_numberOfThemes;
       m_selectableTableView.reloadData();
       return true;
+    } else if (event == Ion::Events::Right || event == Ion::Events::OK || event == Ion::Events::EXE) {
+      obj->colorTheme = (obj->colorTheme + 1) % k_numberOfThemes;
+      m_selectableTableView.reloadData();
+      return true;
     }
-    return false;
   }
 
-  // Helper lambda for delta
-  fixed_t step = fix_from_float(0.10f);
+  // 数値編集用デルタ
   fixed_t delta = 0;
-  if (event == Ion::Events::Right) delta = step;
-  else if (event == Ion::Events::Left) delta = -step;
-  else if (event == Ion::Events::OK || event == Ion::Events::EXE) delta = step;
-
-  if (delta == 0 && event != Ion::Events::OK && event != Ion::Events::EXE) {
-    return false;
-  }
+  if (event == Ion::Events::Right) delta = fix_from_float(0.10f);
+  else if (event == Ion::Events::Left) delta = fix_from_float(-0.10f);
 
   bool changed = false;
 
@@ -296,7 +370,7 @@ bool ParameterController::handleEvent(Ion::Events::Event event) {
     case ObjectType::Sphere:
       if (row == 1) {
         obj->params.sphere.radius += delta;
-        if (obj->params.sphere.radius < fix_from_float(0.2f)) obj->params.sphere.radius = fix_from_float(0.2f);
+        if (obj->params.sphere.radius < fix_from_float(0.1f)) obj->params.sphere.radius = fix_from_float(0.1f);
         changed = true;
       } else if (row == 2) { obj->params.sphere.x0 += delta; changed = true; }
       else if (row == 3) { obj->params.sphere.y0 += delta; changed = true; }
@@ -323,8 +397,10 @@ bool ParameterController::handleEvent(Ion::Events::Event event) {
       else if (row == 3) { obj->params.cone.y0 += delta; changed = true; }
       else if (row == 4) { obj->params.cone.z0 += delta; changed = true; }
       else if (row == 5) {
-        obj->params.cone.twoSheets = !obj->params.cone.twoSheets;
-        changed = true;
+        if (event == Ion::Events::OK || event == Ion::Events::EXE || event == Ion::Events::Left || event == Ion::Events::Right) {
+          obj->params.cone.twoSheets = !obj->params.cone.twoSheets;
+          changed = true;
+        }
       } else if (row == 6) { obj->params.cone.zMin += delta; changed = true; }
       else if (row == 7) { obj->params.cone.zMax += delta; changed = true; }
       break;
@@ -339,72 +415,74 @@ bool ParameterController::handleEvent(Ion::Events::Event event) {
     case ObjectType::RevolutionX:
     case ObjectType::RevolutionY:
       if (row == 1) {
-        obj->params.revolution.curvePreset = (obj->params.revolution.curvePreset + 1) % 3;
-        changed = true;
+        if (event == Ion::Events::Left || event == Ion::Events::Right || event == Ion::Events::OK || event == Ion::Events::EXE) {
+          obj->params.revolution.curvePreset = (obj->params.revolution.curvePreset + 1) % 3;
+          changed = true;
+        }
       } else if (row == 2) {
-        obj->params.revolution.axis = 1 - obj->params.revolution.axis;
-        obj->type = (obj->params.revolution.axis == 0) ? ObjectType::RevolutionX : ObjectType::RevolutionY;
-        changed = true;
-      } else if (row == 3) {
-        obj->params.revolution.coeffA += delta;
-        changed = true;
-      } else if (row == 4) {
-        obj->params.revolution.minCoord += delta;
-        changed = true;
-      } else if (row == 5) {
-        obj->params.revolution.maxCoord += delta;
-        changed = true;
-      }
+        if (event == Ion::Events::Left || event == Ion::Events::Right || event == Ion::Events::OK || event == Ion::Events::EXE) {
+          obj->params.revolution.axis = 1 - obj->params.revolution.axis;
+          obj->type = (obj->params.revolution.axis == 0) ? ObjectType::RevolutionX : ObjectType::RevolutionY;
+          changed = true;
+        }
+      } else if (row == 3) { obj->params.revolution.coeffA += delta; changed = true; }
+      else if (row == 4) { obj->params.revolution.minCoord += delta; changed = true; }
+      else if (row == 5) { obj->params.revolution.maxCoord += delta; changed = true; }
       break;
 
     case ObjectType::Parametric:
-      if (row == 1) {
-        obj->params.parametric.preset = (obj->params.parametric.preset + 1) % 3;
-        changed = true;
-      } else if (row == 2) {
-        obj->params.parametric.majorR += delta;
-        if (obj->params.parametric.majorR < fix_from_float(0.5f)) obj->params.parametric.majorR = fix_from_float(0.5f);
-        changed = true;
-      } else if (row == 3) {
-        if (obj->params.parametric.preset == 1) {
-          obj->params.parametric.pitch += delta;
-        } else {
-          obj->params.parametric.minorR += delta;
-          if (obj->params.parametric.minorR < fix_from_float(0.1f)) obj->params.parametric.minorR = fix_from_float(0.1f);
+      if (obj->params.parametric.preset == 0) {
+        // Custom 3項目入力 (X, Y, Z 式)
+        if (row == 1) {
+          changed = handleFormulaInput(obj->params.parametric.exprX, sizeof(obj->params.parametric.exprX), event, 'u', 'v');
+        } else if (row == 2) {
+          changed = handleFormulaInput(obj->params.parametric.exprY, sizeof(obj->params.parametric.exprY), event, 'u', 'v');
+        } else if (row == 3) {
+          changed = handleFormulaInput(obj->params.parametric.exprZ, sizeof(obj->params.parametric.exprZ), event, 'u', 'v');
+        } else if (row == 4) {
+          if (event == Ion::Events::Left || event == Ion::Events::Right || event == Ion::Events::OK || event == Ion::Events::EXE) {
+            obj->params.parametric.preset = 1; // Torus へ切替
+            changed = true;
+          }
         }
-        changed = true;
+      } else {
+        if (row == 1) {
+          if (event == Ion::Events::Left || event == Ion::Events::Right || event == Ion::Events::OK || event == Ion::Events::EXE) {
+            obj->params.parametric.preset = (obj->params.parametric.preset + 1) % 4;
+            changed = true;
+          }
+        } else if (row == 2) {
+          obj->params.parametric.majorR += delta;
+          if (obj->params.parametric.majorR < fix_from_float(0.5f)) obj->params.parametric.majorR = fix_from_float(0.5f);
+          changed = true;
+        } else if (row == 3) {
+          if (obj->params.parametric.preset == 2) {
+            obj->params.parametric.pitch += delta;
+          } else {
+            obj->params.parametric.minorR += delta;
+            if (obj->params.parametric.minorR < fix_from_float(0.1f)) obj->params.parametric.minorR = fix_from_float(0.1f);
+          }
+          changed = true;
+        }
       }
       break;
 
     case ObjectType::ExplicitFunction:
       if (row == 1) {
-        int p = obj->params.explicitFunc.funcPreset;
-        if (event == Ion::Events::Left) {
-          p = (p + k_numFormulaPresets - 1) % k_numFormulaPresets;
-        } else {
-          p = (p + 1) % k_numFormulaPresets;
-        }
-        obj->params.explicitFunc.funcPreset = static_cast<uint8_t>(p);
-        strlcpy(obj->params.explicitFunc.expression, k_formulaPresets[p].expr, sizeof(obj->params.explicitFunc.expression));
-        changed = true;
-      } else if (row == 2) {
-        char * expr = obj->params.explicitFunc.expression;
-        int len = strlen(expr);
-        if (event == Ion::Events::Backspace) {
-          if (len > 0) {
-            expr[len - 1] = '\0';
-            changed = true;
+        if (event == Ion::Events::Left || event == Ion::Events::Right) {
+          int p = obj->params.explicitFunc.funcPreset;
+          if (event == Ion::Events::Left) {
+            p = (p + k_numFormulaPresets - 1) % k_numFormulaPresets;
+          } else {
+            p = (p + 1) % k_numFormulaPresets;
           }
-        } else if (event == Ion::Events::Clear) {
-          expr[0] = '\0';
+          obj->params.explicitFunc.funcPreset = static_cast<uint8_t>(p);
+          strlcpy(obj->params.explicitFunc.expression, k_formulaPresets[p].expr, sizeof(obj->params.explicitFunc.expression));
           changed = true;
-        } else if (event.hasText()) {
-          const char * t = event.text();
-          if (t && t[0] != '\0' && len + strlen(t) < sizeof(obj->params.explicitFunc.expression) - 1) {
-            strcat(expr, t);
-            changed = true;
-          }
         }
+      } else if (row == 2) {
+        // キーボードから直接任意の式を入力・編集！
+        changed = handleFormulaInput(obj->params.explicitFunc.expression, sizeof(obj->params.explicitFunc.expression), event, 'x', 'y');
       }
       break;
 

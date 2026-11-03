@@ -2,26 +2,27 @@
 #include "parameter_controller.h"
 #include "../app.h"
 #include <escher/stack_view_controller.h>
+#include <stdio.h>
 
 extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText);
 
 namespace Plot3D {
 
 static const char * const k_menuTitles[] = {
-  "1. Sphere (r = 1.8)",
-  "2. Cylinder (r = 1.5)",
-  "3. Cone (Double Sheet, k = 0.8)",
-  "4. Plane (z = 0.6x - 0.4y)",
-  "5. Revolution: Vase (X-Axis)",
-  "6. Parametric: Torus",
-  "7. z = f(x, y)  [x^2 + y^2]",
-  "8. z = f(x, y)  [sin(x)cos(y)]"
+  "1. z = f(x, y)  [Formula]",
+  "2. Parametric [X,Y,Z(u,v)]",
+  "3. Sphere (r = 1.8)",
+  "4. Cylinder (r = 1.5)",
+  "5. Cone (Double, k = 0.8)",
+  "6. Plane (ax + by + cz = d)",
+  "7. Revolution: Vase (X)",
+  "8. Torus (Donut, R = 1.8)"
 };
 
 TypeMenuController::TypeMenuController(Responder * parentResponder, Snapshot * snapshot) :
   ViewController(parentResponder),
   m_snapshot(snapshot),
-  m_selectableTableView(this, this, this)
+  m_selectableTableView(this, this, this, this)
 {
   m_selectableTableView.setMargins(0, 0, 0, 0);
 }
@@ -30,11 +31,25 @@ void TypeMenuController::viewWillAppear() {
   ViewController::viewWillAppear();
   m_selectableTableView.selectCellAtLocation(0, 0);
   m_selectableTableView.reloadData();
+  BrainNotifyHelpText("Plot3D_Menu_0", nullptr);
 }
 
 void TypeMenuController::didBecomeFirstResponder() {
   App::app()->setFirstResponder(&m_selectableTableView);
-  BrainNotifyHelpText("Plot3D_Expressions", nullptr);
+  int row = m_selectableTableView.selectedRow();
+  if (row < 0 || row >= k_numberOfMenuRows) row = 0;
+  char key[32];
+  snprintf(key, sizeof(key), "Plot3D_Menu_%d", row);
+  BrainNotifyHelpText(key, nullptr);
+}
+
+void TypeMenuController::tableViewDidChangeSelection(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection) {
+  int row = m_selectableTableView.selectedRow();
+  if (row >= 0 && row < k_numberOfMenuRows) {
+    char key[32];
+    snprintf(key, sizeof(key), "Plot3D_Menu_%d", row);
+    BrainNotifyHelpText(key, nullptr);
+  }
 }
 
 HighlightCell * TypeMenuController::reusableCell(int index, int type) {
@@ -78,34 +93,33 @@ bool TypeMenuController::handleEvent(Ion::Events::Event event) {
     memset(&obj, 0, sizeof(obj));
 
     switch (selectedIndex) {
-      case 0: // Sphere
+      case 0: // z = f(x, y) [Formula]
+        obj.initExplicit("z = x^2 + y^2", "x^2 + y^2", 0, 0 /* Blue */);
+        break;
+      case 1: // Parametric [X, Y, Z] (fx-CG50ライク)
+        obj.initParametricSurface("Parametric [X,Y,Z]", "cos(u)*cos(v)", "sin(u)*cos(v)", "sin(v)", 5 /* Magenta */);
+        break;
+      case 2: // Sphere
         obj.initSphere(0, 0, 0, fix_from_float(1.8f), 1 /* Red */);
         strlcpy(obj.name, "Sphere (r=1.8)", sizeof(obj.name));
         break;
-      case 1: // Cylinder
+      case 3: // Cylinder
         obj.initCylinder(0, 0, fix_from_float(1.5f), fix_from_float(-2.5f), fix_from_float(2.5f), 2 /* Green */);
         strlcpy(obj.name, "Cylinder (r=1.5)", sizeof(obj.name));
         break;
-      case 2: // Cone
+      case 4: // Cone
         obj.initCone(0, 0, 0, fix_from_float(0.75f), fix_from_float(-2.5f), fix_from_float(2.5f), true, 1 /* Red */);
         strlcpy(obj.name, "Cone (Double, k=0.8)", sizeof(obj.name));
         break;
-      case 3: // Plane (z = 0.6x - 0.4y)
-        // ax + by + cz = d -> 0.6x - 0.4y - 1.0z = 0
+      case 5: // Plane (z = 0.6x - 0.4y)
         obj.initPlane(fix_from_float(0.6f), fix_from_float(-0.4f), fix_from_float(-1.0f), 0, 3 /* Purple */);
         strlcpy(obj.name, "Plane (z = 0.6x - 0.4y)", sizeof(obj.name));
         break;
-      case 4: // Revolution: Vase
-        obj.initRevolution(0 /* X-Axis */, 0 /* Vase */, fix_from_float(0.35f), fix_from_float(-2.0f), fix_from_float(2.0f), 3 /* Amber */);
+      case 6: // Revolution: Vase
+        obj.initRevolution(0 /* X-Axis */, 0 /* Vase */, fix_from_float(0.35f), fix_from_float(-2.0f), fix_from_float(2.0f), 4 /* Amber */);
         break;
-      case 5: // Parametric: Torus
-        obj.initParametric(0 /* Torus */, fix_from_float(1.5f), fix_from_float(0.55f), 0, 5 /* Cyan */);
-        break;
-      case 6: // z = f(x, y) [x^2 + y^2]
-        obj.initExplicit("z = x^2 + y^2", "x^2 + y^2", 0, 0 /* Blue */);
-        break;
-      case 7: // z = f(x, y) [sin(x)*cos(y)]
-        obj.initExplicit("z = sin(x)*cos(y)", "sin(x)*cos(y)", 2, 5 /* Cyan */);
+      case 7: // Parametric: Torus
+        obj.initParametric(1 /* Torus */, fix_from_float(1.8f), fix_from_float(0.6f), 0, 5 /* Cyan */);
         break;
       default:
         break;
@@ -117,7 +131,7 @@ bool TypeMenuController::handleEvent(Ion::Events::Event event) {
     return true;
   }
 
-  if (event == Ion::Events::Back) {
+  if (event == Ion::Events::Back || event == Ion::Events::Backspace || event == Ion::Events::Clear) {
     stackController()->pop();
     return true;
   }

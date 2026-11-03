@@ -5,13 +5,14 @@
 #include <escher/list_view_data_source.h>
 #include <escher/even_odd_buffer_text_cell.h>
 #include <escher/stack_view_controller.h>
+#include <escher/selectable_table_view_delegate.h>
 #include "clean_table_view.h"
 
 namespace Plot3D {
 
 class Snapshot;
 
-class TypeMenuController : public ViewController, public ListViewDataSource, public SelectableTableViewDataSource {
+class TypeMenuController : public ViewController, public ListViewDataSource, public SelectableTableViewDataSource, public SelectableTableViewDelegate {
 public:
   TypeMenuController(Responder * parentResponder, Snapshot * snapshot);
 
@@ -21,6 +22,8 @@ public:
   bool handleEvent(Ion::Events::Event event) override;
   void didBecomeFirstResponder() override;
   TELEMETRY_ID("Plot3DTypeMenu");
+
+  void tableViewDidChangeSelection(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection = false) override;
 
   StackViewController * stackController() const {
     return static_cast<StackViewController *>(parentResponder());

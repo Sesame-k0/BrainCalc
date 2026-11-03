@@ -91,6 +91,47 @@ private:
     return val;
   }
 
+  // 媒介変数曲面評価ヘルパー (u, v 変数)
+  static float evalFormulaUV(const char * exprStr, float uVal, float vVal) {
+    if (!exprStr || exprStr[0] == '\0') {
+      return 0.0f;
+    }
+    // 代表的簡易パターンの高速パス
+    if (strcmp(exprStr, "u") == 0) return uVal;
+    if (strcmp(exprStr, "v") == 0) return vVal;
+    if (strcmp(exprStr, "cos(u)") == 0) return cosf(uVal);
+    if (strcmp(exprStr, "sin(u)") == 0) return sinf(uVal);
+    if (strcmp(exprStr, "cos(v)") == 0) return cosf(vVal);
+    if (strcmp(exprStr, "sin(v)") == 0) return sinf(vVal);
+    if (strstr(exprStr, "cos(u)") && strstr(exprStr, "cos(v)")) return 1.8f * cosf(uVal) * cosf(vVal);
+    if (strstr(exprStr, "sin(u)") && strstr(exprStr, "cos(v)")) return 1.8f * sinf(uVal) * cosf(vVal);
+    if (strstr(exprStr, "sin(v)")) return 1.8f * sinf(vVal);
+
+    // Poincare 式パース & 評価
+    Poincare::Expression expr = Poincare::Expression::Parse(exprStr, nullptr);
+    if (expr.isUninitialized()) {
+      return 0.0f;
+    }
+    Poincare::VariableContext ctxUpperU("U", nullptr);
+    ctxUpperU.setApproximationForVariable<float>(uVal);
+    Poincare::VariableContext ctxU("u", &ctxUpperU);
+    ctxU.setApproximationForVariable<float>(uVal);
+    Poincare::VariableContext ctxUpperV("V", &ctxU);
+    ctxUpperV.setApproximationForVariable<float>(vVal);
+    Poincare::VariableContext ctxV("v", &ctxUpperV);
+    ctxV.setApproximationForVariable<float>(vVal);
+
+    float val = expr.approximateToScalar<float>(
+        &ctxV,
+        Poincare::Preferences::ComplexFormat::Real,
+        Poincare::Preferences::AngleUnit::Radian);
+
+    if (std::isnan(val) || std::isinf(val)) {
+      return 0.0f;
+    }
+    return val;
+  }
+
   // 1. 明示関数 z = f(x, y)
   static bool evaluateExplicit(
       const ExplicitParams & p,
@@ -301,6 +342,50 @@ private:
       fixed_t & nx, fixed_t & ny, fixed_t & nz)
   {
     if (p.preset == 0) {
+      // ユーザー定義媒介変数曲面 X(u, v), Y(u, v), Z(u, v) (fx-CG50ライク)
+      float uNorm = static_cast<float>(uIndex) / static_cast<float>(nu);
+      float vNorm = static_cast<float>(vIndex) / static_cast<float>(nv);
+      const float pi = 3.14159265f;
+      float uVal = -pi + uNorm * (2.0f * pi);
+      float vVal = -pi + vNorm * (2.0f * pi);
+
+      float xf = evalFormulaUV(p.exprX, uVal, vVal);
+      float yf = evalFormulaUV(p.exprY, uVal, vVal);
+      float zf = evalFormulaUV(p.exprZ, uVal, vVal);
+
+      // 有限差分による法線ベクトル (dr/du x dr/dv)
+      const float eps = 0.02f;
+      float x_up = evalFormulaUV(p.exprX, uVal + eps, vVal);
+      float y_up = evalFormulaUV(p.exprY, uVal + eps, vVal);
+      float z_up = evalFormulaUV(p.exprZ, uVal + eps, vVal);
+      float x_um = evalFormulaUV(p.exprX, uVal - eps, vVal);
+      float y_um = evalFormulaUV(p.exprY, uVal - eps, vVal);
+      float z_um = evalFormulaUV(p.exprZ, uVal - eps, vVal);
+
+      float x_vp = evalFormulaUV(p.exprX, uVal, vVal + eps);
+      float y_vp = evalFormulaUV(p.exprY, uVal, vVal + eps);
+      float z_vp = evalFormulaUV(p.exprZ, uVal, vVal + eps);
+      float x_vm = evalFormulaUV(p.exprX, uVal, vVal - eps);
+      float y_vm = evalFormulaUV(p.exprY, uVal, vVal - eps);
+      float z_vm = evalFormulaUV(p.exprZ, uVal, vVal - eps);
+
+      float duX = (x_up - x_um); float duY = (y_up - y_um); float duZ = (z_up - z_um);
+      float dvX = (x_vp - x_vm); float dvY = (y_vp - y_vm); float dvZ = (z_vp - z_vm);
+
+      // 外積
+      float crossX = duY * dvZ - duZ * dvY;
+      float crossY = duZ * dvX - duX * dvZ;
+      float crossZ = duX * dvY - duY * dvX;
+
+      x = fix_from_float(xf);
+      y = fix_from_float(yf);
+      z = fix_from_float(zf);
+      nx = fix_from_float(crossX);
+      ny = fix_from_float(crossY);
+      nz = fix_from_float(crossZ);
+      normalize(nx, ny, nz);
+      return true;
+    } else if (p.preset == 1) {
       uint8_t thetaIdx = static_cast<uint8_t>((uIndex * 256) / nu);
       uint8_t phiIdx = static_cast<uint8_t>((vIndex * 256) / nv);
 
@@ -319,7 +404,7 @@ private:
       nz = sinPhi;
       normalize(nx, ny, nz);
       return true;
-    } else if (p.preset == 1) {
+    } else if (p.preset == 2) {
       fixed_t minU = fix_from_float(-1.8f);
       fixed_t maxU = fix_from_float(1.8f);
       fixed_t u = minU + fix_mul(maxU - minU, fix_div(fix_from_int(uIndex), fix_from_int(nu)));
