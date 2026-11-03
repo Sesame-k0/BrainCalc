@@ -12,8 +12,10 @@ static const char * const k_menuTitles[] = {
   "2. Cylinder (r = 1.5)",
   "3. Cone (Double Sheet, k = 0.8)",
   "4. Plane (z = 0.6x - 0.4y)",
-  "5. Saddle: z = 0.3(x^2 - y^2)",
-  "6. Paraboloid: z = 0.25(x^2 + y^2)"
+  "5. Revolution: Vase (X-Axis)",
+  "6. Parametric: Torus",
+  "7. Saddle: z = 0.3(x^2 - y^2)",
+  "8. Paraboloid: z = 0.25(x^2 + y^2)"
 };
 
 TypeMenuController::TypeMenuController(Responder * parentResponder, Snapshot * snapshot) :
@@ -65,6 +67,10 @@ bool TypeMenuController::handleEvent(Ion::Events::Event event) {
     selectedIndex = 4;
   } else if (event == Ion::Events::Six) {
     selectedIndex = 5;
+  } else if (event == Ion::Events::Seven) {
+    selectedIndex = 6;
+  } else if (event == Ion::Events::Eight) {
+    selectedIndex = 7;
   }
 
   if (selectedIndex >= 0 && selectedIndex < k_numberOfMenuRows) {
@@ -89,10 +95,16 @@ bool TypeMenuController::handleEvent(Ion::Events::Event event) {
         obj.initPlane(fix_from_float(0.6f), fix_from_float(-0.4f), fix_from_float(-1.0f), 0, 3 /* Purple */);
         strlcpy(obj.name, "Plane (z = 0.6x - 0.4y)", sizeof(obj.name));
         break;
-      case 4: // Saddle
-        obj.initExplicit("z = 0.3(x^2 - y^2)", 1, 4 /* Cyan */);
+      case 4: // Revolution: Vase
+        obj.initRevolution(0 /* X-Axis */, 0 /* Vase */, fix_from_float(0.35f), fix_from_float(-2.0f), fix_from_float(2.0f), 3 /* Amber */);
         break;
-      case 5: // Paraboloid
+      case 5: // Parametric: Torus
+        obj.initParametric(0 /* Torus */, fix_from_float(1.5f), fix_from_float(0.55f), 0, 5 /* Cyan */);
+        break;
+      case 6: // Saddle
+        obj.initExplicit("z = 0.3(x^2 - y^2)", 1, 4 /* Purple */);
+        break;
+      case 7: // Paraboloid
         obj.initExplicit("z = 0.25(x^2 + y^2)", 2, 2 /* Green */);
         break;
       default:

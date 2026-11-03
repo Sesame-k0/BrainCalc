@@ -109,7 +109,8 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
       if (!obj || !obj->enabled) continue;
 
       int Nu = 24, Nv = 24;
-      if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone) {
+      if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone ||
+          obj->type == ObjectType::RevolutionX || obj->type == ObjectType::RevolutionY || obj->type == ObjectType::Parametric) {
         Nu = 24; Nv = 16;
       }
 
@@ -385,11 +386,15 @@ void PlotView::moveTrace(int du, int dv) {
   if (!obj || !obj->enabled) return;
 
   int Nu = 24, Nv = 24;
-  if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone) {
+  if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone ||
+          obj->type == ObjectType::RevolutionX || obj->type == ObjectType::RevolutionY || obj->type == ObjectType::Parametric) {
     Nu = 24; Nv = 16;
   }
 
-  bool periodicU = (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone);
+  bool periodicU = (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone ||
+                    obj->type == ObjectType::Parametric);
+  bool periodicV = (obj->type == ObjectType::RevolutionX || obj->type == ObjectType::RevolutionY ||
+                    (obj->type == ObjectType::Parametric && obj->params.parametric.preset == 0));
 
   m_traceU += du;
   if (periodicU) {
@@ -401,8 +406,13 @@ void PlotView::moveTrace(int du, int dv) {
   }
 
   m_traceV += dv;
-  if (m_traceV < 0) m_traceV = 0;
-  if (m_traceV > Nv) m_traceV = Nv;
+  if (periodicV) {
+    if (m_traceV < 0) m_traceV += Nv;
+    if (m_traceV >= Nv) m_traceV -= Nv;
+  } else {
+    if (m_traceV < 0) m_traceV = 0;
+    if (m_traceV > Nv) m_traceV = Nv;
+  }
 
   markDirty();
 }
@@ -421,7 +431,8 @@ void PlotView::getTraceCoordinates(float & outX, float & outY, float & outZ, con
   outColor = ColorMap::getThemeBaseColor(theme);
 
   int Nu = 24, Nv = 24;
-  if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone) {
+  if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone ||
+          obj->type == ObjectType::RevolutionX || obj->type == ObjectType::RevolutionY || obj->type == ObjectType::Parametric) {
     Nu = 24; Nv = 16;
   }
 
@@ -564,7 +575,8 @@ void PlotView::extractSliceSegments() const {
     if (!obj || !obj->enabled) continue;
 
     int Nu = 24, Nv = 24;
-    if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone) {
+    if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone ||
+          obj->type == ObjectType::RevolutionX || obj->type == ObjectType::RevolutionY || obj->type == ObjectType::Parametric) {
       Nu = 24; Nv = 16;
     }
 

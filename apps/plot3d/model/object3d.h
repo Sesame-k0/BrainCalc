@@ -42,6 +42,22 @@ struct PlaneParams {
   fixed_t a, b, c, d;   // ax + by + cz = d
 };
 
+struct RevolutionParams {
+  uint8_t axis;         // 0: X-axis, 1: Y-axis
+  uint8_t curvePreset;  // 0: Vase, 1: WineGlass/Horn, 2: Barrel
+  fixed_t coeffA;       // 振幅 / 主係数
+  fixed_t coeffB;       // オフセット
+  fixed_t minCoord;     // 軸範囲 min
+  fixed_t maxCoord;     // 軸範囲 max
+};
+
+struct ParametricParams {
+  uint8_t preset;       // 0: Torus, 1: Helicoid, 2: Mobius
+  fixed_t majorR;       // 大半径 R
+  fixed_t minorR;       // 小半径 r
+  fixed_t pitch;        // 螺旋ピッチ c
+};
+
 struct ExplicitParams {
   uint8_t funcPreset;   // 0: sin(x)cos(y), 1: x^2 - y^2 (馬の鞍), 2: x^2 + y^2, 3: exp(-(x^2+y^2))
 };
@@ -49,14 +65,16 @@ struct ExplicitParams {
 struct Object3D {
   ObjectType type;
   bool enabled;
-  uint8_t colorTheme;   // 0: Blue, 1: Red/Amber, 2: Green, 3: Purple, 4: Cyan
-  char name[28];        // 表示用タイトル (例: "z1 = sin(x)*cos(y)", "Sphere(r=2)")
+  uint8_t colorTheme;   // 0: Blue, 1: Red/Amber, 2: Green, 3: Purple, 4: Cyan ...
+  char name[28];        // 表示用タイトル (例: "Sphere(r=1.8)", "Torus(R=1.5)")
 
   union {
     SphereParams sphere;
     CylinderParams cylinder;
     ConeParams cone;
     PlaneParams plane;
+    RevolutionParams revolution;
+    ParametricParams parametric;
     ExplicitParams explicitFunc;
   } params;
 
@@ -114,6 +132,30 @@ struct Object3D {
     params.plane.c = c;
     params.plane.d = d;
     strlcpy(name, "Plane", sizeof(name));
+  }
+
+  void initRevolution(uint8_t axis, uint8_t preset, fixed_t coeffA, fixed_t minCoord, fixed_t maxCoord, uint8_t color = 4) {
+    type = (axis == 0) ? ObjectType::RevolutionX : ObjectType::RevolutionY;
+    enabled = true;
+    colorTheme = color;
+    params.revolution.axis = axis;
+    params.revolution.curvePreset = preset;
+    params.revolution.coeffA = coeffA;
+    params.revolution.coeffB = fix_from_float(0.8f);
+    params.revolution.minCoord = minCoord;
+    params.revolution.maxCoord = maxCoord;
+    strlcpy(name, "Revolution", sizeof(name));
+  }
+
+  void initParametric(uint8_t preset, fixed_t rMajor, fixed_t rMinor, fixed_t pitch, uint8_t color = 5) {
+    type = ObjectType::Parametric;
+    enabled = true;
+    colorTheme = color;
+    params.parametric.preset = preset;
+    params.parametric.majorR = rMajor;
+    params.parametric.minorR = rMinor;
+    params.parametric.pitch = pitch;
+    strlcpy(name, (preset == 0) ? "Torus" : (preset == 1) ? "Helicoid" : "Mobius", sizeof(name));
   }
 };
 

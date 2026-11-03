@@ -35,7 +35,7 @@ public:
   void willDisplayCellForIndex(HighlightCell * cell, int index) override;
 
 private:
-  static constexpr int k_numberOfMenuRows = 6;
+  static constexpr int k_numberOfMenuRows = 8;
   Snapshot * m_snapshot;
   CleanSelectableTableView m_selectableTableView;
   EvenOddBufferTextCell m_cells[k_numberOfMenuRows];

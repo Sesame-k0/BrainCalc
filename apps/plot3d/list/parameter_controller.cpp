@@ -44,6 +44,9 @@ int ParameterController::numberOfRows() const {
     case ObjectType::Cylinder:         return 7; // Color, r, x0, y0, zMin, zMax, Delete
     case ObjectType::Cone:             return 9; // Color, slope, x0, y0, z0, sheets, zMin, zMax, Delete
     case ObjectType::Plane:            return 6; // Color, a, b, c, d, Delete
+    case ObjectType::RevolutionX:
+    case ObjectType::RevolutionY:      return 7; // Color, preset, axis, coeffA, min, max, Delete
+    case ObjectType::Parametric:       return 5; // Color, preset, majorR, minorR/pitch, Delete
     case ObjectType::ExplicitFunction: return 3; // Color, preset, Delete
     default:                           return 2; // Color, Delete
   }
@@ -73,6 +76,24 @@ void ParameterController::updateObjectName(Object3D & obj) {
       float c = fix_to_float(obj.params.plane.c);
       float d = fix_to_float(obj.params.plane.d);
       snprintf(obj.name, sizeof(obj.name), "%.1fx%+.1fy%+.1fz=%.1f", a, b, c, d);
+      break;
+    }
+    case ObjectType::RevolutionX:
+    case ObjectType::RevolutionY: {
+      const char * pName = (obj.params.revolution.curvePreset == 0) ? "Vase" :
+                           (obj.params.revolution.curvePreset == 1) ? "Glass" : "Barrel";
+      const char * ax = (obj.params.revolution.axis == 0) ? "X" : "Y";
+      snprintf(obj.name, sizeof(obj.name), "Revol: %s (%s)", pName, ax);
+      break;
+    }
+    case ObjectType::Parametric: {
+      if (obj.params.parametric.preset == 0) {
+        snprintf(obj.name, sizeof(obj.name), "Torus (R=%.1f)", fix_to_float(obj.params.parametric.majorR));
+      } else if (obj.params.parametric.preset == 1) {
+        strlcpy(obj.name, "Helicoid", sizeof(obj.name));
+      } else {
+        strlcpy(obj.name, "Mobius Strip", sizeof(obj.name));
+      }
       break;
     }
     case ObjectType::ExplicitFunction:
@@ -151,6 +172,39 @@ void ParameterController::willDisplayCellForIndex(HighlightCell * cell, int inde
       else if (index == 2) snprintf(buf, sizeof(buf), " Normal b (Y):  %.2f", fix_to_float(obj->params.plane.b));
       else if (index == 3) snprintf(buf, sizeof(buf), " Normal c (Z):  %.2f", fix_to_float(obj->params.plane.c));
       else if (index == 4) snprintf(buf, sizeof(buf), " Constant d:    %.2f", fix_to_float(obj->params.plane.d));
+      break;
+
+    case ObjectType::RevolutionX:
+    case ObjectType::RevolutionY:
+      if (index == 1) {
+        const char * pName = (obj->params.revolution.curvePreset == 0) ? "Vase" :
+                             (obj->params.revolution.curvePreset == 1) ? "Wine Glass" : "Barrel";
+        snprintf(buf, sizeof(buf), " Preset:    <%s>", pName);
+      } else if (index == 2) {
+        snprintf(buf, sizeof(buf), " Axis:      <%s>", (obj->params.revolution.axis == 0) ? "X-Axis" : "Y-Axis");
+      } else if (index == 3) {
+        snprintf(buf, sizeof(buf), " Coeff a:     %.2f", fix_to_float(obj->params.revolution.coeffA));
+      } else if (index == 4) {
+        snprintf(buf, sizeof(buf), " Range min:   %.2f", fix_to_float(obj->params.revolution.minCoord));
+      } else if (index == 5) {
+        snprintf(buf, sizeof(buf), " Range max:   %.2f", fix_to_float(obj->params.revolution.maxCoord));
+      }
+      break;
+
+    case ObjectType::Parametric:
+      if (index == 1) {
+        const char * pName = (obj->params.parametric.preset == 0) ? "Torus" :
+                             (obj->params.parametric.preset == 1) ? "Helicoid" : "Mobius Strip";
+        snprintf(buf, sizeof(buf), " Preset:    <%s>", pName);
+      } else if (index == 2) {
+        snprintf(buf, sizeof(buf), " Major R:     %.2f", fix_to_float(obj->params.parametric.majorR));
+      } else if (index == 3) {
+        if (obj->params.parametric.preset == 1) {
+          snprintf(buf, sizeof(buf), " Pitch c:     %.2f", fix_to_float(obj->params.parametric.pitch));
+        } else {
+          snprintf(buf, sizeof(buf), " Minor r:     %.2f", fix_to_float(obj->params.parametric.minorR));
+        }
+      }
       break;
 
     case ObjectType::ExplicitFunction:
@@ -263,6 +317,46 @@ bool ParameterController::handleEvent(Ion::Events::Event event) {
       else if (row == 2) { obj->params.plane.b += delta; changed = true; }
       else if (row == 3) { obj->params.plane.c += delta; changed = true; }
       else if (row == 4) { obj->params.plane.d += delta; changed = true; }
+      break;
+
+    case ObjectType::RevolutionX:
+    case ObjectType::RevolutionY:
+      if (row == 1) {
+        obj->params.revolution.curvePreset = (obj->params.revolution.curvePreset + 1) % 3;
+        changed = true;
+      } else if (row == 2) {
+        obj->params.revolution.axis = 1 - obj->params.revolution.axis;
+        obj->type = (obj->params.revolution.axis == 0) ? ObjectType::RevolutionX : ObjectType::RevolutionY;
+        changed = true;
+      } else if (row == 3) {
+        obj->params.revolution.coeffA += delta;
+        changed = true;
+      } else if (row == 4) {
+        obj->params.revolution.minCoord += delta;
+        changed = true;
+      } else if (row == 5) {
+        obj->params.revolution.maxCoord += delta;
+        changed = true;
+      }
+      break;
+
+    case ObjectType::Parametric:
+      if (row == 1) {
+        obj->params.parametric.preset = (obj->params.parametric.preset + 1) % 3;
+        changed = true;
+      } else if (row == 2) {
+        obj->params.parametric.majorR += delta;
+        if (obj->params.parametric.majorR < fix_from_float(0.5f)) obj->params.parametric.majorR = fix_from_float(0.5f);
+        changed = true;
+      } else if (row == 3) {
+        if (obj->params.parametric.preset == 1) {
+          obj->params.parametric.pitch += delta;
+        } else {
+          obj->params.parametric.minorR += delta;
+          if (obj->params.parametric.minorR < fix_from_float(0.1f)) obj->params.parametric.minorR = fix_from_float(0.1f);
+        }
+        changed = true;
+      }
       break;
 
     case ObjectType::ExplicitFunction:

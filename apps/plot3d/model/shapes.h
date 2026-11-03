@@ -28,6 +28,11 @@ public:
         return evaluateCone(obj.params.cone, uIndex, nu, vIndex, nv, outX, outY, outZ, outNx, outNy, outNz);
       case ObjectType::Plane:
         return evaluatePlane(obj.params.plane, uIndex, nu, vIndex, nv, outX, outY, outZ, outNx, outNy, outNz);
+      case ObjectType::RevolutionX:
+      case ObjectType::RevolutionY:
+        return evaluateRevolution(obj.params.revolution, uIndex, nu, vIndex, nv, outX, outY, outZ, outNx, outNy, outNz);
+      case ObjectType::Parametric:
+        return evaluateParametric(obj.params.parametric, uIndex, nu, vIndex, nv, outX, outY, outZ, outNx, outNy, outNz);
       default:
         return false;
     }
@@ -190,6 +195,123 @@ private:
     }
     normalize(nx, ny, nz);
     return true;
+  }
+
+  // 6. 回転体 (Solid of Revolution: X軸 / Y軸)
+  static bool evaluateRevolution(
+      const RevolutionParams & p,
+      int uIndex, int nu, int vIndex, int nv,
+      fixed_t & x, fixed_t & y, fixed_t & z,
+      fixed_t & nx, fixed_t & ny, fixed_t & nz)
+  {
+    fixed_t t = p.minCoord + fix_mul(p.maxCoord - p.minCoord, fix_div(fix_from_int(uIndex), fix_from_int(nu)));
+    uint8_t thetaIdx = static_cast<uint8_t>((vIndex * 256) / nv);
+    fixed_t cosTheta = fix_cos(thetaIdx);
+    fixed_t sinTheta = fix_sin(thetaIdx);
+
+    fixed_t r = FIX_ONE;
+    fixed_t drdt = 0;
+
+    if (p.curvePreset == 0) {
+      uint8_t angle2 = static_cast<uint8_t>(fix_to_float(t) * 40.74f);
+      r = p.coeffB + fix_mul(p.coeffA, fix_cos(angle2));
+      drdt = -fix_mul(fix_mul(fix_from_float(2.0f), p.coeffA), fix_sin(angle2));
+    } else if (p.curvePreset == 1) {
+      fixed_t t2 = fix_mul(t, t);
+      r = fix_mul(p.coeffA, fix_from_float(0.8f) + fix_mul(fix_from_float(0.2f), t2));
+      drdt = fix_mul(p.coeffA, fix_mul(fix_from_float(0.4f), t));
+    } else {
+      fixed_t t2 = fix_mul(t, t);
+      r = p.coeffB - fix_mul(p.coeffA, t2);
+      drdt = -fix_mul(fix_mul(fix_from_float(2.0f), p.coeffA), t);
+    }
+    if (r < fix_from_float(0.1f)) r = fix_from_float(0.1f);
+
+    if (p.axis == 0) {
+      x = t;
+      y = fix_mul(r, cosTheta);
+      z = fix_mul(r, sinTheta);
+      nx = -drdt;
+      ny = cosTheta;
+      nz = sinTheta;
+    } else {
+      x = fix_mul(r, cosTheta);
+      y = t;
+      z = fix_mul(r, sinTheta);
+      nx = cosTheta;
+      ny = -drdt;
+      nz = sinTheta;
+    }
+    normalize(nx, ny, nz);
+    return true;
+  }
+
+  // 7. 媒介変数曲面 (Parametric Surface: Torus, Helicoid, Mobius)
+  static bool evaluateParametric(
+      const ParametricParams & p,
+      int uIndex, int nu, int vIndex, int nv,
+      fixed_t & x, fixed_t & y, fixed_t & z,
+      fixed_t & nx, fixed_t & ny, fixed_t & nz)
+  {
+    if (p.preset == 0) {
+      uint8_t thetaIdx = static_cast<uint8_t>((uIndex * 256) / nu);
+      uint8_t phiIdx = static_cast<uint8_t>((vIndex * 256) / nv);
+
+      fixed_t cosTheta = fix_cos(thetaIdx);
+      fixed_t sinTheta = fix_sin(thetaIdx);
+      fixed_t cosPhi = fix_cos(phiIdx);
+      fixed_t sinPhi = fix_sin(phiIdx);
+
+      fixed_t distFromZ = p.majorR + fix_mul(p.minorR, cosPhi);
+      x = fix_mul(distFromZ, cosTheta);
+      y = fix_mul(distFromZ, sinTheta);
+      z = fix_mul(p.minorR, sinPhi);
+
+      nx = fix_mul(cosPhi, cosTheta);
+      ny = fix_mul(cosPhi, sinTheta);
+      nz = sinPhi;
+      normalize(nx, ny, nz);
+      return true;
+    } else if (p.preset == 1) {
+      fixed_t minU = fix_from_float(-1.8f);
+      fixed_t maxU = fix_from_float(1.8f);
+      fixed_t u = minU + fix_mul(maxU - minU, fix_div(fix_from_int(uIndex), fix_from_int(nu)));
+      int vAngle = -128 + (vIndex * 256) / nv;
+      uint8_t vIdx = static_cast<uint8_t>(vAngle);
+
+      fixed_t cosV = fix_cos(vIdx);
+      fixed_t sinV = fix_sin(vIdx);
+
+      x = fix_mul(u, cosV);
+      y = fix_mul(u, sinV);
+      z = fix_mul(p.pitch, fix_div(fix_from_int(vAngle), fix_from_int(64)));
+
+      nx = sinV;
+      ny = -cosV;
+      nz = (u != 0) ? fix_div(p.pitch, u) : 0;
+      normalize(nx, ny, nz);
+      return true;
+    } else {
+      uint8_t uIdx = static_cast<uint8_t>((uIndex * 256) / nu);
+      uint8_t halfUIdx = static_cast<uint8_t>(uIdx / 2);
+      fixed_t minV = fix_from_float(-0.7f);
+      fixed_t maxV = fix_from_float(0.7f);
+      fixed_t v = minV + fix_mul(maxV - minV, fix_div(fix_from_int(vIndex), fix_from_int(nv)));
+
+      fixed_t cosU = fix_cos(uIdx);
+      fixed_t sinU = fix_sin(uIdx);
+      fixed_t cosHalf = fix_cos(halfUIdx);
+      fixed_t sinHalf = fix_sin(halfUIdx);
+
+      fixed_t r = FIX_ONE + fix_mul(v, cosHalf);
+      x = fix_mul(r, cosU);
+      y = fix_mul(r, sinU);
+      z = fix_mul(v, sinHalf);
+
+      nx = cosU; ny = sinU; nz = sinHalf;
+      normalize(nx, ny, nz);
+      return true;
+    }
   }
 
   static void normalize(fixed_t & vx, fixed_t & vy, fixed_t & vz) {
