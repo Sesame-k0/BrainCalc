@@ -24,13 +24,82 @@ void PlotController::viewWillAppear() {
 void PlotController::viewDidDisappear() {
   ViewController::viewDidDisappear();
   m_view.setTraceMode(false);
+  m_view.setSliceAxis(PlotView::SliceAxis::None);
   m_snapshot->saveToStorage();
   BrainClearHelp();
 }
 
 bool PlotController::handleEvent(Ion::Events::Event event) {
-  // 座標トレースモードのトグル (6 / T / Var)
+  // 1. 2D 断面モード中のキー操作 (最優先)
+  if (m_view.section2DMode()) {
+    if (event == Ion::Events::Left || event == Ion::Events::Minus) {
+      m_view.moveSlicePosition(-0.10f);
+      return true;
+    }
+    if (event == Ion::Events::Right || event == Ion::Events::Plus) {
+      m_view.moveSlicePosition(+0.10f);
+      return true;
+    }
+    if (event == Ion::Events::OK || event == Ion::Events::EXE ||
+        event == Ion::Events::Back || event == Ion::Events::Backspace || event == Ion::Events::Clear) {
+      m_view.setSection2DMode(false);
+      BrainNotifyHelpText("Plot3D_Slice", nullptr);
+      return true;
+    }
+    if (event == Ion::Events::Seven || event == Ion::Events::LowerS || event == Ion::Events::Toolbox) {
+      m_view.cycleSliceAxis();
+      if (m_view.sliceAxis() == PlotView::SliceAxis::None) {
+        m_view.setSection2DMode(false);
+        BrainNotifyHelpText("Plot3D_View", nullptr);
+      } else {
+        BrainNotifyHelpText("Plot3D_Section2D", nullptr);
+      }
+      return true;
+    }
+    return true; // 2Dモード中は他イベントを消費
+  }
+
+  // 2. 断面スライサーモードのトグル / 循環切替 (7 / S / Toolbox)
+  if (event == Ion::Events::Seven || event == Ion::Events::LowerS || event == Ion::Events::Toolbox) {
+    if (m_view.traceMode()) {
+      m_view.setTraceMode(false);
+    }
+    m_view.cycleSliceAxis();
+    if (m_view.sliceAxis() != PlotView::SliceAxis::None) {
+      BrainNotifyHelpText("Plot3D_Slice", nullptr);
+    } else {
+      BrainNotifyHelpText("Plot3D_View", nullptr);
+    }
+    return true;
+  }
+
+  // 3. 3D スライサーモード中のキー操作 (位置移動 / 2D断面トグル / 終了)
+  if (m_view.sliceAxis() != PlotView::SliceAxis::None && !m_view.traceMode()) {
+    if (event == Ion::Events::Left || event == Ion::Events::Minus) {
+      m_view.moveSlicePosition(-0.10f);
+      return true;
+    }
+    if (event == Ion::Events::Right || event == Ion::Events::Plus) {
+      m_view.moveSlicePosition(+0.10f);
+      return true;
+    }
+    if (event == Ion::Events::OK || event == Ion::Events::EXE) {
+      m_view.setSection2DMode(true);
+      BrainNotifyHelpText("Plot3D_Section2D", nullptr);
+      return true;
+    }
+    if (event == Ion::Events::Back || event == Ion::Events::Backspace || event == Ion::Events::Clear) {
+      m_view.setSliceAxis(PlotView::SliceAxis::None);
+      BrainNotifyHelpText("Plot3D_View", nullptr);
+      return true;
+    }
+  }
+
+  // 4. 座標トレースモードのトグル (6 / T / Var)
   if (event == Ion::Events::Six || event == Ion::Events::LowerT || event == Ion::Events::Var) {
+    if (m_view.sliceAxis() != PlotView::SliceAxis::None) {
+      m_view.setSliceAxis(PlotView::SliceAxis::None);
+    }
     m_view.toggleTraceMode();
     if (m_view.traceMode()) {
       BrainNotifyHelpText("Plot3D_Trace", nullptr);

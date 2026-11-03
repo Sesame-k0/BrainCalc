@@ -14,6 +14,17 @@ namespace Plot3D {
 static ScreenVertex s_projVerts[(32 + 1) * (32 + 1)];
 static Vec3Fix s_camVerts[(32 + 1) * (32 + 1)];
 static float s_worldZ[(32 + 1) * (32 + 1)];
+static Vec3Fix s_worldVerts[(32 + 1) * (32 + 1)];
+
+// 断面スライサー用交線セグメント配列
+struct SliceSegment {
+  Vec3Fix p1;
+  Vec3Fix p2;
+  KDColor color;
+};
+static constexpr int k_maxSliceSegments = 600;
+static SliceSegment s_sliceSegments[k_maxSliceSegments];
+static int s_sliceSegmentCount = 0;
 
 PlotView::PlotView(Snapshot * snapshot) :
   View(),
@@ -23,7 +34,10 @@ PlotView::PlotView(Snapshot * snapshot) :
   m_traceMode(false),
   m_traceObjectIndex(0),
   m_traceU(12),
-  m_traceV(12)
+  m_traceV(12),
+  m_sliceAxis(SliceAxis::None),
+  m_slicePos(0.0f),
+  m_section2DMode(false)
 {
 }
 
@@ -46,6 +60,11 @@ void PlotView::projectPoint(const Vec3Fix & wPos, const Mat3Fix & rot, fixed_t s
 }
 
 void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
+  if (m_section2DMode && m_sliceAxis != SliceAxis::None) {
+    drawSection2DView(ctx);
+    return;
+  }
+
   uint8_t az = m_snapshot->azimuth();
   uint8_t el = m_snapshot->elevation();
   fixed_t scale = m_snapshot->scale();
@@ -320,6 +339,14 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
     // 下部情報バナー描画 (HUD)
     drawTraceBanner(ctx, objName, objCol, tx, ty, tz);
   }
+
+  // 5. 断面スライサーモード (Section Slicer Mode) の切断面・交線およびバナー描画
+  if (m_sliceAxis != SliceAxis::None) {
+    extractSliceSegments();
+    drawSlicePlane(ctx, rot, scale);
+    drawSliceContours(ctx, rot, scale);
+    drawSliceBanner(ctx);
+  }
 }
 
 void PlotView::setTraceMode(bool mode) {
@@ -491,6 +518,346 @@ void PlotView::drawTraceBanner(KDContext * ctx, const char * name, KDColor color
 
   // 操作ガイド
   ctx->drawString("OK:Next", KDPoint(bounds().width() - 52, textY), KDFont::SmallFont,
+                  KDColor::RGB24(0x94A3B8), KDColor::RGB24(0x0F172A));
+}
+
+void PlotView::setSliceAxis(SliceAxis axis) {
+  m_sliceAxis = axis;
+  if (m_sliceAxis == SliceAxis::None) {
+    m_section2DMode = false;
+  }
+  markDirty();
+}
+
+void PlotView::cycleSliceAxis() {
+  switch (m_sliceAxis) {
+    case SliceAxis::None: setSliceAxis(SliceAxis::Z); break;
+    case SliceAxis::Z:    setSliceAxis(SliceAxis::X); break;
+    case SliceAxis::X:    setSliceAxis(SliceAxis::Y); break;
+    case SliceAxis::Y:    setSliceAxis(SliceAxis::None); break;
+  }
+}
+
+void PlotView::moveSlicePosition(float delta) {
+  m_slicePos += delta;
+  if (m_slicePos < -2.0f) m_slicePos = -2.0f;
+  if (m_slicePos > +2.0f) m_slicePos = +2.0f;
+  markDirty();
+}
+
+void PlotView::setSlicePosition(float pos) {
+  m_slicePos = pos;
+  if (m_slicePos < -2.0f) m_slicePos = -2.0f;
+  if (m_slicePos > +2.0f) m_slicePos = +2.0f;
+  markDirty();
+}
+
+void PlotView::setSection2DMode(bool mode) {
+  m_section2DMode = mode;
+  markDirty();
+}
+
+void PlotView::toggleSection2DMode() {
+  if (m_sliceAxis == SliceAxis::None) {
+    m_section2DMode = false;
+  } else {
+    m_section2DMode = !m_section2DMode;
+  }
+  markDirty();
+}
+
+void PlotView::extractSliceSegments() const {
+  s_sliceSegmentCount = 0;
+  if (m_sliceAxis == SliceAxis::None) return;
+
+  fixed_t cFix = fix_from_float(m_slicePos);
+  int numObjs = m_snapshot->numberOfObjects();
+
+  for (int oIdx = 0; oIdx < numObjs; ++oIdx) {
+    Object3D * obj = m_snapshot->objectAtIndex(oIdx);
+    if (!obj || !obj->enabled) continue;
+
+    int Nu = 24, Nv = 24;
+    if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone) {
+      Nu = 24; Nv = 16;
+    }
+
+    SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % 5);
+    KDColor segColor = KDColor::RGB24(0x3B82F6); // Blue
+    if (theme == SurfaceTheme::Red) segColor = KDColor::RGB24(0xEF4444);
+    else if (theme == SurfaceTheme::Green) segColor = KDColor::RGB24(0x10B981);
+    else if (theme == SurfaceTheme::Purple) segColor = KDColor::RGB24(0x8B5CF6);
+    else if (theme == SurfaceTheme::Amber) segColor = KDColor::RGB24(0xF59E0B);
+
+    // 1. 全頂点の実座標を s_worldVerts に格納
+    for (int j = 0; j <= Nv; ++j) {
+      for (int i = 0; i <= Nu; ++i) {
+        fixed_t wx, wy, wz, wnx, wny, wnz;
+        Shapes::evaluateObjectVertex(*obj, i, Nu, j, Nv, wx, wy, wz, wnx, wny, wnz);
+        int idx = j * (Nu + 1) + i;
+        s_worldVerts[idx] = Vec3Fix(wx, wy, wz);
+      }
+    }
+
+    auto getCoord = [this](const Vec3Fix & v) -> fixed_t {
+      if (m_sliceAxis == SliceAxis::Z) return v.z;
+      if (m_sliceAxis == SliceAxis::X) return v.x;
+      return v.y; // SliceAxis::Y
+    };
+
+    auto intersectEdge = [cFix, &getCoord](const Vec3Fix & vA, const Vec3Fix & vB, Vec3Fix & outP) -> bool {
+      fixed_t sA = getCoord(vA);
+      fixed_t sB = getCoord(vB);
+      fixed_t denom = sB - sA;
+      if (denom == 0) return false;
+      fixed_t t = fix_div(cFix - sA, denom);
+      if (t < 0 || t > fix_from_int(1)) return false;
+      outP.x = vA.x + fix_mul(vB.x - vA.x, t);
+      outP.y = vA.y + fix_mul(vB.y - vA.y, t);
+      outP.z = vA.z + fix_mul(vB.z - vA.z, t);
+      return true;
+    };
+
+    auto processTriangle = [cFix, &segColor, &getCoord, &intersectEdge](const Vec3Fix & v0, const Vec3Fix & v1, const Vec3Fix & v2) {
+      fixed_t d0 = getCoord(v0) - cFix;
+      fixed_t d1 = getCoord(v1) - cFix;
+      fixed_t d2 = getCoord(v2) - cFix;
+
+      bool b0 = (d0 >= 0);
+      bool b1 = (d1 >= 0);
+      bool b2 = (d2 >= 0);
+
+      if (b0 == b1 && b1 == b2) return; // 全頂点が同じ側
+
+      Vec3Fix pA, pB;
+      bool hasSeg = false;
+
+      if (b0 != b1 && b0 != b2) {
+        if (intersectEdge(v0, v1, pA) && intersectEdge(v0, v2, pB)) hasSeg = true;
+      } else if (b1 != b0 && b1 != b2) {
+        if (intersectEdge(v1, v0, pA) && intersectEdge(v1, v2, pB)) hasSeg = true;
+      } else if (b2 != b0 && b2 != b1) {
+        if (intersectEdge(v2, v0, pA) && intersectEdge(v2, v1, pB)) hasSeg = true;
+      }
+
+      if (hasSeg && s_sliceSegmentCount < k_maxSliceSegments) {
+        s_sliceSegments[s_sliceSegmentCount].p1 = pA;
+        s_sliceSegments[s_sliceSegmentCount].p2 = pB;
+        s_sliceSegments[s_sliceSegmentCount].color = segColor;
+        s_sliceSegmentCount++;
+      }
+    };
+
+    // 2. 三角形を巡回
+    for (int j = 0; j < Nv; ++j) {
+      for (int i = 0; i < Nu; ++i) {
+        int idx00 = j * (Nu + 1) + i;
+        int idx10 = j * (Nu + 1) + (i + 1);
+        int idx01 = (j + 1) * (Nu + 1) + i;
+        int idx11 = (j + 1) * (Nu + 1) + (i + 1);
+
+        processTriangle(s_worldVerts[idx00], s_worldVerts[idx10], s_worldVerts[idx11]);
+        processTriangle(s_worldVerts[idx00], s_worldVerts[idx11], s_worldVerts[idx01]);
+      }
+    }
+  }
+}
+
+void PlotView::drawSlicePlane(KDContext * ctx, const Mat3Fix & rot, fixed_t scale) const {
+  if (m_sliceAxis == SliceAxis::None) return;
+
+  fixed_t cNorm = fix_mul(fix_from_float(m_slicePos), fix_from_float(0.40f));
+  if (cNorm < fix_from_int(-1)) cNorm = fix_from_int(-1);
+  if (cNorm > fix_from_int(1)) cNorm = fix_from_int(1);
+
+  Vec3Fix quad[4];
+  if (m_sliceAxis == SliceAxis::Z) {
+    quad[0] = Vec3Fix(fix_from_int(-1), fix_from_int(-1), cNorm);
+    quad[1] = Vec3Fix(fix_from_int( 1), fix_from_int(-1), cNorm);
+    quad[2] = Vec3Fix(fix_from_int( 1), fix_from_int( 1), cNorm);
+    quad[3] = Vec3Fix(fix_from_int(-1), fix_from_int( 1), cNorm);
+  } else if (m_sliceAxis == SliceAxis::X) {
+    quad[0] = Vec3Fix(cNorm, fix_from_int(-1), fix_from_int(-1));
+    quad[1] = Vec3Fix(cNorm, fix_from_int( 1), fix_from_int(-1));
+    quad[2] = Vec3Fix(cNorm, fix_from_int( 1), fix_from_int( 1));
+    quad[3] = Vec3Fix(cNorm, fix_from_int(-1), fix_from_int( 1));
+  } else { // SliceAxis::Y
+    quad[0] = Vec3Fix(fix_from_int(-1), cNorm, fix_from_int(-1));
+    quad[1] = Vec3Fix(fix_from_int( 1), cNorm, fix_from_int(-1));
+    quad[2] = Vec3Fix(fix_from_int( 1), cNorm, fix_from_int( 1));
+    quad[3] = Vec3Fix(fix_from_int(-1), cNorm, fix_from_int( 1));
+  }
+
+  int sx[4], sy[4];
+  fixed_t sz;
+  uint16_t depth;
+  for (int i = 0; i < 4; ++i) {
+    projectPoint(quad[i], rot, scale, sx[i], sy[i], sz, depth);
+  }
+
+  KDColor planeBorderCol = KDColor::RGB24(0x0284C7); // 明瞭なシアンブルー
+  for (int i = 0; i < 4; ++i) {
+    int next = (i + 1) % 4;
+    ctx->drawLine(KDPoint(sx[i], sy[i]), KDPoint(sx[next], sy[next]), planeBorderCol);
+  }
+}
+
+void PlotView::drawSliceContours(KDContext * ctx, const Mat3Fix & rot, fixed_t scale) const {
+  if (m_sliceAxis == SliceAxis::None || s_sliceSegmentCount == 0) return;
+
+  fixed_t normFactor = fix_from_float(0.40f);
+  KDColor highlightYellow = KDColor::RGB24(0xFACC15); // ネオンイエロー
+
+  for (int s = 0; s < s_sliceSegmentCount; ++s) {
+    Vec3Fix w1(fix_mul(s_sliceSegments[s].p1.x, normFactor),
+               fix_mul(s_sliceSegments[s].p1.y, normFactor),
+               fix_mul(s_sliceSegments[s].p1.z, normFactor));
+    Vec3Fix w2(fix_mul(s_sliceSegments[s].p2.x, normFactor),
+               fix_mul(s_sliceSegments[s].p2.y, normFactor),
+               fix_mul(s_sliceSegments[s].p2.z, normFactor));
+
+    int sx1, sy1, sx2, sy2;
+    fixed_t sz;
+    uint16_t depth;
+    projectPoint(w1, rot, scale, sx1, sy1, sz, depth);
+    projectPoint(w2, rot, scale, sx2, sy2, sz, depth);
+
+    // 2px 太線ハイライト描画
+    ctx->drawLine(KDPoint(sx1, sy1), KDPoint(sx2, sy2), highlightYellow);
+    ctx->drawLine(KDPoint(sx1 + 1, sy1), KDPoint(sx2 + 1, sy2), highlightYellow);
+    ctx->drawLine(KDPoint(sx1, sy1 + 1), KDPoint(sx2, sy2 + 1), highlightYellow);
+  }
+}
+
+void PlotView::drawSliceBanner(KDContext * ctx) const {
+  int bannerH = 18;
+  int bannerY = (bounds().height() > 160) ? (152 - bannerH) : (bounds().height() - bannerH);
+  if (bannerY < 0) bannerY = 0;
+  KDRect bannerRect(0, bannerY, bounds().width(), bannerH);
+
+  // 背景: スレートネイビー (0x0F172A)
+  ctx->fillRect(bannerRect, KDColor::RGB24(0x0F172A));
+  // 上端 1px シアンアクセント
+  ctx->fillRect(KDRect(0, bannerY, bounds().width(), 1), KDColor::RGB24(0x38BDF8));
+
+  int textY = bannerY + 2;
+
+  // [Slice Z] バッジ
+  const char * axisStr = (m_sliceAxis == SliceAxis::Z) ? "Z" : ((m_sliceAxis == SliceAxis::X) ? "X" : "Y");
+  char badgeBuf[16];
+  snprintf(badgeBuf, sizeof(badgeBuf), "[Slice %s]", axisStr);
+  ctx->drawString(badgeBuf, KDPoint(4, textY), KDFont::SmallFont,
+                  KDColor::RGB24(0x38BDF8), KDColor::RGB24(0x0F172A));
+
+  // 位置 c
+  char posBuf[24];
+  snprintf(posBuf, sizeof(posBuf), "c:%+.2f", m_slicePos);
+  ctx->drawString(posBuf, KDPoint(64, textY), KDFont::SmallFont, KDColorWhite, KDColor::RGB24(0x0F172A));
+
+  // 操作ガイド
+  ctx->drawString("<- ->:Pos  7:Axis  Enter:2D", KDPoint(120, textY), KDFont::SmallFont,
+                  KDColor::RGB24(0x94A3B8), KDColor::RGB24(0x0F172A));
+}
+
+void PlotView::drawSection2DView(KDContext * ctx) const {
+  // 1. 全面クリア
+  ctx->fillRect(bounds(), KDColorWhite);
+
+  int cx = bounds().width() / 2;      // 160
+  int bannerH = 18;
+  int usableH = (bounds().height() > 160) ? 152 : bounds().height();
+  int cy = usableH / 2;               // 約 76
+
+  fixed_t scale2D = fix_from_int(36); // 1.0 あたり 36px
+
+  // 2. 背景グリッドと目盛り (-2, -1, 0, 1, 2)
+  KDColor gridColor = KDColor::RGB24(0xF1F5F9);
+  KDColor axisColor = KDColor::RGB24(0x94A3B8);
+
+  for (int v = -2; v <= 2; ++v) {
+    if (v == 0) continue;
+    int gx = cx + v * 36;
+    if (gx >= 0 && gx < bounds().width()) {
+      ctx->drawLine(KDPoint(gx, 0), KDPoint(gx, usableH - bannerH), gridColor);
+    }
+    int gy = cy - v * 36;
+    if (gy >= 0 && gy < usableH - bannerH) {
+      ctx->drawLine(KDPoint(0, gy), KDPoint(bounds().width(), gy), gridColor);
+    }
+  }
+
+  // 主座標軸
+  ctx->drawLine(KDPoint(0, cy), KDPoint(bounds().width(), cy), axisColor);
+  ctx->drawLine(KDPoint(cx, 0), KDPoint(cx, usableH - bannerH), axisColor);
+
+  // 軸名決定
+  const char * hAxisName = "X";
+  const char * vAxisName = "Y";
+  const char * sliceAxisName = "Z";
+
+  if (m_sliceAxis == SliceAxis::Z) {
+    hAxisName = "X"; vAxisName = "Y"; sliceAxisName = "Z";
+  } else if (m_sliceAxis == SliceAxis::X) {
+    hAxisName = "Y"; vAxisName = "Z"; sliceAxisName = "X";
+  } else { // SliceAxis::Y
+    hAxisName = "X"; vAxisName = "Z"; sliceAxisName = "Y";
+  }
+
+  // 軸ラベル
+  ctx->drawString(hAxisName, KDPoint(bounds().width() - 14, cy - 14), KDFont::SmallFont,
+                  KDColor::RGB24(0x475569), KDColorWhite);
+  ctx->drawString(vAxisName, KDPoint(cx + 4, 2), KDFont::SmallFont,
+                  KDColor::RGB24(0x475569), KDColorWhite);
+
+  // 3. 上部タイトル (例: "Cross Section: Z = +0.50")
+  char titleBuf[40];
+  snprintf(titleBuf, sizeof(titleBuf), "Section: %s = %+.2f", sliceAxisName, m_slicePos);
+  ctx->drawString(titleBuf, KDPoint(6, 4), KDFont::SmallFont,
+                  KDColor::RGB24(0x0F172A), KDColorWhite);
+
+  // 4. 交線セグメントを 2D 平面に描画
+  extractSliceSegments();
+
+  for (int s = 0; s < s_sliceSegmentCount; ++s) {
+    fixed_t h1, v1, h2, v2;
+    if (m_sliceAxis == SliceAxis::Z) {
+      h1 = s_sliceSegments[s].p1.x; v1 = s_sliceSegments[s].p1.y;
+      h2 = s_sliceSegments[s].p2.x; v2 = s_sliceSegments[s].p2.y;
+    } else if (m_sliceAxis == SliceAxis::X) {
+      h1 = s_sliceSegments[s].p1.y; v1 = s_sliceSegments[s].p1.z;
+      h2 = s_sliceSegments[s].p2.y; v2 = s_sliceSegments[s].p2.z;
+    } else { // SliceAxis::Y
+      h1 = s_sliceSegments[s].p1.x; v1 = s_sliceSegments[s].p1.z;
+      h2 = s_sliceSegments[s].p2.x; v2 = s_sliceSegments[s].p2.z;
+    }
+
+    int sx1 = cx + fix_to_int(fix_mul(h1, scale2D));
+    int sy1 = cy - fix_to_int(fix_mul(v1, scale2D));
+    int sx2 = cx + fix_to_int(fix_mul(h2, scale2D));
+    int sy2 = cy - fix_to_int(fix_mul(v2, scale2D));
+
+    KDColor col = s_sliceSegments[s].color;
+
+    // 2px 太線描画
+    ctx->drawLine(KDPoint(sx1, sy1), KDPoint(sx2, sy2), col);
+    ctx->drawLine(KDPoint(sx1 + 1, sy1), KDPoint(sx2 + 1, sy2), col);
+    ctx->drawLine(KDPoint(sx1, sy1 + 1), KDPoint(sx2, sy2 + 1), col);
+  }
+
+  // 5. 下部 2D ガイドバナー
+  int bannerY = (bounds().height() > 160) ? (152 - bannerH) : (bounds().height() - bannerH);
+  if (bannerY < 0) bannerY = 0;
+  KDRect bannerRect(0, bannerY, bounds().width(), bannerH);
+  ctx->fillRect(bannerRect, KDColor::RGB24(0x0F172A));
+  ctx->fillRect(KDRect(0, bannerY, bounds().width(), 1), KDColor::RGB24(0x38BDF8));
+
+  int textY = bannerY + 2;
+  char badge2D[20];
+  snprintf(badge2D, sizeof(badge2D), "[2D %s:%+.2f]", sliceAxisName, m_slicePos);
+  ctx->drawString(badge2D, KDPoint(4, textY), KDFont::SmallFont,
+                  KDColor::RGB24(0x38BDF8), KDColor::RGB24(0x0F172A));
+
+  ctx->drawString("<- ->:Pos  Enter/Back:3D View", KDPoint(94, textY), KDFont::SmallFont,
                   KDColor::RGB24(0x94A3B8), KDColor::RGB24(0x0F172A));
 }
 

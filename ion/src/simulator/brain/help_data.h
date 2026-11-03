@@ -1139,6 +1139,12 @@ static constexpr HelpEntry kHelpEntries[] = {
   { "3D Trace", L"3D座標トレース", L"曲面上の座標値を読み取ります。\n・↑↓←→：曲面上を移動\n・Enter/OK：立体切替\n・6 または Back：トレース終了\n下部バナーに(X, Y, Z)の数学的座標値をリアルタイム表示します。" },
   { "Plot3D_Expressions", L"3D式・立体一覧", L"描画する関数や立体を管理します。\n・+ Add an element：新しい立体を追加\n・Enter：選択または詳細設定\n・Space：表示/非表示切替\n・Back：削除\n・右矢印：3D Plot タブへ移動" },
   { "LLCubic Expressions", L"3D式・立体一覧", L"描画する関数や立体を管理します。\n・+ Add an element：新しい立体を追加\n・Enter：選択または詳細設定\n・Space：表示/非表示切替\n・Back：削除\n・右矢印：3D Plot タブへ移動" },
+  { "Plot3D_Slice", L"3D断面スライサー", L"立体を見えない包丁で輪切りにします。\n・←→：切断位置 c を移動\n・7 または F1：切断軸切替(Z/X/Y)\n・Enter：切り口の2D図形を表示\n・Back または 7：スライサー終了\n断面の交線を太線ハイライト表示します。" },
+  { "LLCubic Slice", L"3D断面スライサー", L"立体を見えない包丁で輪切りにします。\n・←→：切断位置 c を移動\n・7 または F1：切断軸切替(Z/X/Y)\n・Enter：切り口の2D図形を表示\n・Back または 7：スライサー終了\n断面の交線を太線ハイライト表示します。" },
+  { "3D Slice", L"3D断面スライサー", L"立体を見えない包丁で輪切りにします。\n・←→：切断位置 c を移動\n・7 または F1：切断軸切替(Z/X/Y)\n・Enter：切り口の2D図形を表示\n・Back または 7：スライサー終了\n断面の交線を太線ハイライト表示します。" },
+  { "Plot3D_Section2D", L"断面2D図形表示", L"立体の切り口を真上から観察します。\n・←→：切断位置 c を移動\n・Enter または Back：3D空間へ戻る\n・7：切断軸切替(Z/X/Y)\n幾何学的な断面形状を歪みなく確認可能。" },
+  { "LLCubic Section2D", L"断面2D図形表示", L"立体の切り口を真上から観察します。\n・←→：切断位置 c を移動\n・Enter または Back：3D空間へ戻る\n・7：切断軸切替(Z/X/Y)\n幾何学的な断面形状を歪みなく確認可能。" },
+  { "2D Section", L"断面2D図形表示", L"立体の切り口を真上から観察します。\n・←→：切断位置 c を移動\n・Enter または Back：3D空間へ戻る\n・7：切断軸切替(Z/X/Y)\n幾何学的な断面形状を歪みなく確認可能。" },
 };
 
 static constexpr int kHelpEntriesCount = static_cast<int>(sizeof(kHelpEntries) / sizeof(kHelpEntries[0]));
