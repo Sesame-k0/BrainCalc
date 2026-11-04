@@ -110,7 +110,7 @@ ParameterController::ParameterController(Responder * parentResponder, Snapshot *
   ViewController(parentResponder),
   m_snapshot(snapshot),
   m_objectIndex(-1),
-  m_selectableTableView(this, this, this)
+  m_selectableTableView(this, this, this, this)
 {
   m_selectableTableView.setMargins(0, 0, 0, 0);
 }
@@ -129,6 +129,19 @@ void ParameterController::viewWillAppear() {
 void ParameterController::didBecomeFirstResponder() {
   App::app()->setFirstResponder(&m_selectableTableView);
   BrainNotifyHelpText("Plot3D_Param", nullptr);
+}
+
+void ParameterController::tableViewDidChangeSelection(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection) {
+  if (withinTemporarySelection) return;
+  int prevRow = previousSelectedCellY;
+  int curRow = m_selectableTableView.selectedRow();
+  int totalRows = numberOfRows();
+  if (prevRow >= 0 && prevRow < totalRows) {
+    m_selectableTableView.reloadCellAtLocation(0, prevRow);
+  }
+  if (curRow >= 0 && curRow < totalRows) {
+    m_selectableTableView.reloadCellAtLocation(0, curRow);
+  }
 }
 
 int ParameterController::numberOfRows() const {
@@ -286,9 +299,10 @@ void ParameterController::willDisplayCellForIndex(HighlightCell * cell, int inde
     case ObjectType::Parametric:
       if (obj->params.parametric.preset == 0) {
         // Custom 3項目入力 (fx-CG50ライク)
-        if (index == 1) snprintf(buf, sizeof(buf), "X(u,v) = %s_", obj->params.parametric.exprX);
-        else if (index == 2) snprintf(buf, sizeof(buf), "Y(u,v) = %s_", obj->params.parametric.exprY);
-        else if (index == 3) snprintf(buf, sizeof(buf), "Z(u,v) = %s_", obj->params.parametric.exprZ);
+        int curRow = m_selectableTableView.selectedRow();
+        if (index == 1) snprintf(buf, sizeof(buf), "X(u,v) = %s%s", obj->params.parametric.exprX, (curRow == 1) ? "_" : "");
+        else if (index == 2) snprintf(buf, sizeof(buf), "Y(u,v) = %s%s", obj->params.parametric.exprY, (curRow == 2) ? "_" : "");
+        else if (index == 3) snprintf(buf, sizeof(buf), "Z(u,v) = %s%s", obj->params.parametric.exprZ, (curRow == 3) ? "_" : "");
         else if (index == 4) snprintf(buf, sizeof(buf), "Preset: Custom (< >)");
       } else {
         const char * pName = (obj->params.parametric.preset == 1) ? "Torus" :
@@ -311,7 +325,8 @@ void ParameterController::willDisplayCellForIndex(HighlightCell * cell, int inde
         const char * lbl = (p >= 0 && p < k_numFormulaPresets) ? k_formulaPresets[p].label : "Custom";
         snprintf(buf, sizeof(buf), "Preset: %s (< >)", lbl);
       } else if (index == 2) {
-        snprintf(buf, sizeof(buf), "z = %s_", obj->params.explicitFunc.expression);
+        int curRow = m_selectableTableView.selectedRow();
+        snprintf(buf, sizeof(buf), "z = %s%s", obj->params.explicitFunc.expression, (curRow == 2) ? "_" : "");
       }
       break;
 

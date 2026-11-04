@@ -52,18 +52,24 @@ private:
     if (!exprStr || exprStr[0] == '\0') {
       return xVal * xVal + yVal * yVal; // デフォルト
     }
-    // 高速パス: 代表的数式
-    if (strstr(exprStr, "x^2") && strstr(exprStr, "+") && strstr(exprStr, "y^2")) {
+    // 高速パス: 代表的プリセット完全一致（部分一致 strstr は自由数式入力で誤爆するため使用しない）
+    if (strcmp(exprStr, "x^2 + y^2") == 0 || strcmp(exprStr, "x^2+y^2") == 0) {
       return xVal * xVal + yVal * yVal;
     }
-    if (strstr(exprStr, "x^2") && strstr(exprStr, "-") && strstr(exprStr, "y^2")) {
+    if (strcmp(exprStr, "x^2 - y^2") == 0 || strcmp(exprStr, "x^2-y^2") == 0) {
       return xVal * xVal - yVal * yVal;
     }
-    if (strstr(exprStr, "sin") && strstr(exprStr, "cos")) {
+    if (strcmp(exprStr, "sin(x)*cos(y)") == 0 || strcmp(exprStr, "sin(x)cos(y)") == 0) {
       return 1.8f * sinf(xVal) * cosf(yVal);
     }
-    if (strcmp(exprStr, "x*y") == 0 || strcmp(exprStr, "x * y") == 0 || strcmp(exprStr, "xy") == 0) {
+    if (strcmp(exprStr, "-(x^2 + y^2) + 2") == 0 || strcmp(exprStr, "-(x^2+y^2)+2") == 0) {
+      return -(xVal * xVal + yVal * yVal) + 2.0f;
+    }
+    if (strcmp(exprStr, "x * y") == 0 || strcmp(exprStr, "x*y") == 0 || strcmp(exprStr, "xy") == 0) {
       return xVal * yVal;
+    }
+    if (strcmp(exprStr, "cos(x) + sin(y)") == 0 || strcmp(exprStr, "cos(x)+sin(y)") == 0) {
+      return cosf(xVal) + sinf(yVal);
     }
 
     // Poincare 式パース & 評価
@@ -96,16 +102,16 @@ private:
     if (!exprStr || exprStr[0] == '\0') {
       return 0.0f;
     }
-    // 代表的簡易パターンの高速パス
+    // 代表的簡易パターンの高速パス (完全一致)
     if (strcmp(exprStr, "u") == 0) return uVal;
     if (strcmp(exprStr, "v") == 0) return vVal;
     if (strcmp(exprStr, "cos(u)") == 0) return cosf(uVal);
     if (strcmp(exprStr, "sin(u)") == 0) return sinf(uVal);
     if (strcmp(exprStr, "cos(v)") == 0) return cosf(vVal);
     if (strcmp(exprStr, "sin(v)") == 0) return sinf(vVal);
-    if (strstr(exprStr, "cos(u)") && strstr(exprStr, "cos(v)")) return 1.8f * cosf(uVal) * cosf(vVal);
-    if (strstr(exprStr, "sin(u)") && strstr(exprStr, "cos(v)")) return 1.8f * sinf(uVal) * cosf(vVal);
-    if (strstr(exprStr, "sin(v)")) return 1.8f * sinf(vVal);
+    if (strcmp(exprStr, "cos(u)*cos(v)") == 0 || strcmp(exprStr, "cos(u)cos(v)") == 0) return 1.8f * cosf(uVal) * cosf(vVal);
+    if (strcmp(exprStr, "sin(u)*cos(v)") == 0 || strcmp(exprStr, "sin(u)cos(v)") == 0) return 1.8f * sinf(uVal) * cosf(vVal);
+    if (strcmp(exprStr, "1.8*sin(v)") == 0 || strcmp(exprStr, "1.8sin(v)") == 0 || strcmp(exprStr, "sin(v)") == 0) return 1.8f * sinf(vVal);
 
     // Poincare 式パース & 評価
     Poincare::Expression expr = Poincare::Expression::Parse(exprStr, nullptr);

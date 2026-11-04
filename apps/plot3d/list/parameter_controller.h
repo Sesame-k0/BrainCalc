@@ -12,7 +12,9 @@ namespace Plot3D {
 
 class Snapshot;
 
-class ParameterController : public ViewController, public ListViewDataSource, public SelectableTableViewDataSource {
+#include <escher/selectable_table_view_delegate.h>
+
+class ParameterController : public ViewController, public ListViewDataSource, public SelectableTableViewDataSource, public SelectableTableViewDelegate {
 public:
   ParameterController(Responder * parentResponder, Snapshot * snapshot);
 
@@ -36,6 +38,9 @@ public:
   int reusableCellCount(int type) override { return k_maxParamRows; }
   int typeAtLocation(int i, int j) override { return 0; }
   void willDisplayCellForIndex(HighlightCell * cell, int index) override;
+
+  // SelectableTableViewDelegate
+  void tableViewDidChangeSelection(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection = false) override;
 
   static void updateObjectName(Object3D & obj);
 
