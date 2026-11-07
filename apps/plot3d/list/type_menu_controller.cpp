@@ -25,6 +25,9 @@ TypeMenuController::TypeMenuController(Responder * parentResponder, Snapshot * s
   m_selectableTableView(this, this, this, this)
 {
   m_selectableTableView.setMargins(0, 0, 0, 0);
+  for (int i = 0; i < k_numberOfMenuRows; ++i) {
+    m_cells[i].setAlignment(0.0f, 0.5f);
+  }
 }
 
 void TypeMenuController::viewWillAppear() {

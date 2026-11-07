@@ -2,8 +2,12 @@
 #define PLOT3D_APP_H
 
 #include "../shared/shared_app.h"
+#include "../shared/expression_field_delegate_app.h"
 #include <escher.h>
 #include <escher/tab_view_data_source.h>
+#include <escher/input_view_controller.h>
+#include <escher/button_row_controller.h>
+#include <escher/timer.h>
 #include "../shared/poincare_local_pool.h"
 #include "config.h"
 #include "render/fixed_math.h"
@@ -29,6 +33,11 @@ public:
   void setElevation(uint8_t e) { m_elevation = e; }
   void setScale(fixed_t s) { m_scale = s; }
   void resetView();
+
+  // 原点3軸表示フラグ
+  bool showOriginAxes() const { return m_showOriginAxes; }
+  void setShowOriginAxes(bool show) { m_showOriginAxes = show; }
+  void toggleOriginAxes() { m_showOriginAxes = !m_showOriginAxes; }
 
   // 表示範囲
   float xMin() const { return m_xMin; }
@@ -61,6 +70,7 @@ public:
 private:
   uint8_t m_azimuth;
   uint8_t m_elevation;
+  bool m_showOriginAxes;
   fixed_t m_scale;
 
   float m_xMin, m_xMax;
@@ -78,7 +88,7 @@ private:
 
 namespace Plot3D {
 
-class App : public ::App {
+class App : public Shared::ExpressionFieldDelegateApp {
 public:
   typedef Plot3D::Snapshot Snapshot;
 
@@ -98,16 +108,44 @@ public:
   }
 
   TabViewController * tabViewController() { return &m_tabViewController; }
+  InputViewController * inputViewController() { return &m_inputViewController; }
+
+  // XNT キーでの x<->y または u<->v トグル制御
+  void setEditingUV(bool editingUV) {
+    m_editingUV = editingUV;
+    m_xntStep = 0;
+  }
+
+  void layoutFieldDidReceiveNoneXNTEvent() override;
+  void textFieldDidReceiveNoneXNTEvent() override;
+  bool layoutFieldDidReceiveEvent(LayoutField * layoutField, Ion::Events::Event event) override;
+  bool textFieldDidReceiveEvent(TextField * textField, Ion::Events::Event event) override;
+
+  void didBecomeActive(Window * window) override;
+  void willBecomeInactive() override;
 
   App(Snapshot * snapshot);
 
 private:
+  class AutoRotateTimer : public Timer {
+  public:
+    AutoRotateTimer(PlotController * plotController) : Timer(1), m_plotController(plotController) {}
+  private:
+    bool fire() override;
+    PlotController * m_plotController;
+  };
+
   Shared::PoincareLocalPool m_poincarePool;
   ListController m_listController;
   StackViewController m_listStackViewController;
   PlotController m_plotController;
+  ButtonRowController m_plotHeader;
   StackViewController m_plotStackViewController;
   TabViewController m_tabViewController;
+  InputViewController m_inputViewController;
+  AutoRotateTimer m_autoRotateTimer;
+  bool m_editingUV;
+  uint8_t m_xntStep;
 };
 
 } // namespace Plot3D

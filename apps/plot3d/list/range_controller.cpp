@@ -28,24 +28,48 @@ static constexpr int k_numPresets = sizeof(k_presets) / sizeof(k_presets[0]);
 RangeController::RangeController(Responder * parentResponder, Snapshot * snapshot) :
   ViewController(parentResponder),
   m_snapshot(snapshot),
-  m_selectableTableView(this, this, this),
+  m_selectableTableView(this, this, this, this),
   m_presetIndex(0)
 {
+  m_selectableTableView.setMargins(0, 0, 0, 0);
   for (int i = 0; i < k_rowCount; ++i) {
+    m_cells[i].setAlignment(0.0f, 0.5f);
     m_cells[i].setTextColor(KDColorBlack);
+  }
+}
+
+void RangeController::notifyHelpForRow(int row) {
+  if (row == 0) {
+    BrainNotifyHelpText("Plot3D_Range_Preset", nullptr);
+  } else if (row == 1) {
+    BrainNotifyHelpText("Plot3D_OriginAxes", nullptr);
+  } else if (row == 8) {
+    BrainNotifyHelpText("Plot3D_Range_Reset", nullptr);
+  } else {
+    BrainNotifyHelpText("Plot3D_Range", nullptr);
   }
 }
 
 void RangeController::viewWillAppear() {
   ViewController::viewWillAppear();
+  if (m_selectableTableView.selectedRow() < 0) {
+    m_selectableTableView.selectCellAtLocation(0, 0);
+  }
   m_selectableTableView.reloadData();
-  BrainNotifyHelpText("Plot3D_Range", nullptr);
+  notifyHelpForRow(m_selectableTableView.selectedRow());
 }
 
 void RangeController::didBecomeFirstResponder() {
-  m_selectableTableView.selectCellAtLocation(0, 0);
+  if (m_selectableTableView.selectedRow() < 0) {
+    m_selectableTableView.selectCellAtLocation(0, 0);
+  }
   Container::activeApp()->setFirstResponder(&m_selectableTableView);
-  BrainNotifyHelpText("Plot3D_Range", nullptr);
+  notifyHelpForRow(m_selectableTableView.selectedRow());
+}
+
+void RangeController::tableViewDidChangeSelection(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection) {
+  if (withinTemporarySelection) return;
+  notifyHelpForRow(m_selectableTableView.selectedRow());
 }
 
 HighlightCell * RangeController::reusableCell(int index, int type) {
@@ -67,40 +91,45 @@ void RangeController::applyPreset(uint8_t index) {
 
 void RangeController::willDisplayCellForIndex(HighlightCell * cell, int index) {
   EvenOddBufferTextCell * myCell = static_cast<EvenOddBufferTextCell *>(cell);
-  char buf[48];
+  myCell->setEven(index % 2 == 0);
+  char buf[52];
 
   switch (index) {
     case 0:
-      snprintf(buf, sizeof(buf), "Preset: [ %s ]", k_presets[m_presetIndex % k_numPresets].name);
-      myCell->setTextColor(KDColorBlack);
+      snprintf(buf, sizeof(buf), "Preset: %s (< >)", k_presets[m_presetIndex % k_numPresets].name);
+      myCell->setTextColor(KDColor::RGB24(0x0284C7));
       break;
     case 1:
-      snprintf(buf, sizeof(buf), "  X min: %+.1f", m_snapshot->xMin());
-      myCell->setTextColor(KDColorBlack);
+      snprintf(buf, sizeof(buf), "Origin XYZ Axes:  %s  (< >)", m_snapshot->showOriginAxes() ? "ON" : "OFF");
+      myCell->setTextColor(m_snapshot->showOriginAxes() ? KDColor::RGB24(0x059669) : KDColor::RGB24(0x64748B));
       break;
     case 2:
-      snprintf(buf, sizeof(buf), "  X max: %+.1f", m_snapshot->xMax());
+      snprintf(buf, sizeof(buf), "  X min:   %+.1f", m_snapshot->xMin());
       myCell->setTextColor(KDColorBlack);
       break;
     case 3:
-      snprintf(buf, sizeof(buf), "  Y min: %+.1f", m_snapshot->yMin());
+      snprintf(buf, sizeof(buf), "  X max:   %+.1f", m_snapshot->xMax());
       myCell->setTextColor(KDColorBlack);
       break;
     case 4:
-      snprintf(buf, sizeof(buf), "  Y max: %+.1f", m_snapshot->yMax());
+      snprintf(buf, sizeof(buf), "  Y min:   %+.1f", m_snapshot->yMin());
       myCell->setTextColor(KDColorBlack);
       break;
     case 5:
-      snprintf(buf, sizeof(buf), "  Z min: %+.1f", m_snapshot->zMin());
+      snprintf(buf, sizeof(buf), "  Y max:   %+.1f", m_snapshot->yMax());
       myCell->setTextColor(KDColorBlack);
       break;
     case 6:
-      snprintf(buf, sizeof(buf), "  Z max: %+.1f", m_snapshot->zMax());
+      snprintf(buf, sizeof(buf), "  Z min:   %+.1f", m_snapshot->zMin());
       myCell->setTextColor(KDColorBlack);
       break;
     case 7:
-      snprintf(buf, sizeof(buf), "Reset to Default");
+      snprintf(buf, sizeof(buf), "  Z max:   %+.1f", m_snapshot->zMax());
       myCell->setTextColor(KDColorBlack);
+      break;
+    case 8:
+      snprintf(buf, sizeof(buf), "[ Reset Range to Default ]");
+      myCell->setTextColor(KDColor::RGB24(0x475569));
       break;
     default:
       buf[0] = '\0';
@@ -130,27 +159,43 @@ bool RangeController::handleEvent(Ion::Events::Event event) {
         }
         applyPreset(m_presetIndex);
         break;
-      case 1: // X min
-        m_snapshot->setXRange(m_snapshot->xMin() + delta, m_snapshot->xMax());
+      case 1: // Origin XYZ Axes
+        m_snapshot->toggleOriginAxes();
         break;
-      case 2: // X max
-        m_snapshot->setXRange(m_snapshot->xMin(), m_snapshot->xMax() + delta);
+      case 2: // X min
+        if (m_snapshot->xMin() + delta < m_snapshot->xMax() - 0.4f) {
+          m_snapshot->setXRange(m_snapshot->xMin() + delta, m_snapshot->xMax());
+        }
         break;
-      case 3: // Y min
-        m_snapshot->setYRange(m_snapshot->yMin() + delta, m_snapshot->yMax());
+      case 3: // X max
+        if (m_snapshot->xMax() + delta > m_snapshot->xMin() + 0.4f) {
+          m_snapshot->setXRange(m_snapshot->xMin(), m_snapshot->xMax() + delta);
+        }
         break;
-      case 4: // Y max
-        m_snapshot->setYRange(m_snapshot->yMin(), m_snapshot->yMax() + delta);
+      case 4: // Y min
+        if (m_snapshot->yMin() + delta < m_snapshot->yMax() - 0.4f) {
+          m_snapshot->setYRange(m_snapshot->yMin() + delta, m_snapshot->yMax());
+        }
         break;
-      case 5: // Z min
-        m_snapshot->setZRange(m_snapshot->zMin() + delta, m_snapshot->zMax());
+      case 5: // Y max
+        if (m_snapshot->yMax() + delta > m_snapshot->yMin() + 0.4f) {
+          m_snapshot->setYRange(m_snapshot->yMin(), m_snapshot->yMax() + delta);
+        }
         break;
-      case 6: // Z max
-        m_snapshot->setZRange(m_snapshot->zMin(), m_snapshot->zMax() + delta);
+      case 6: // Z min
+        if (m_snapshot->zMin() + delta < m_snapshot->zMax() - 0.4f) {
+          m_snapshot->setZRange(m_snapshot->zMin() + delta, m_snapshot->zMax());
+        }
         break;
-      case 7: // Reset
+      case 7: // Z max
+        if (m_snapshot->zMax() + delta > m_snapshot->zMin() + 0.4f) {
+          m_snapshot->setZRange(m_snapshot->zMin(), m_snapshot->zMax() + delta);
+        }
+        break;
+      case 8: // Reset
         if (event == Ion::Events::OK || event == Ion::Events::EXE) {
           applyPreset(0);
+          m_snapshot->setShowOriginAxes(true);
         }
         break;
       default:

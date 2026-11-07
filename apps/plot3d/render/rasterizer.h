@@ -23,13 +23,6 @@ public:
   // バッファのクリア
   void clear(uint16_t clearColor = 0xFFFF, uint16_t clearDepth = 0xFFFF);
 
-  // 三角形ラスタライズ（バンド制限: yMin <= y <= yMax）
-  void drawTriangle(const ScreenVertex & v0,
-                    const ScreenVertex & v1,
-                    const ScreenVertex & v2,
-                    int yMin = 0,
-                    int yMax = k_screenHeight - 1);
-
   // フラットシェーディング三角形（色固定）
   void drawTriangleFlat(const ScreenVertex & v0,
                         const ScreenVertex & v1,
@@ -38,15 +31,18 @@ public:
                         int yMin = 0,
                         int yMax = k_screenHeight - 1);
 
-  // ワイヤーフレーム線分描画（深度テスト付き）
+  // ワイヤーフレーム・座標軸線分描画（深度テスト付き）
   void drawLineZ(int x0, int y0, uint16_t z0,
                  int x1, int y1, uint16_t z1,
                  uint16_t color,
                  int yMin = 0,
-                 int yMax = k_screenHeight - 1);
+                 int yMax = k_screenHeight - 1,
+                 bool dashed = false,
+                 bool thick = false);
 
   uint16_t * colorBuffer() { return s_colorBuffer; }
   uint16_t * depthBuffer() { return s_depthBuffer; }
+  const uint16_t * depthBuffer() const { return s_depthBuffer; }
 
 private:
   // 静的バッファ（App union を圧迫しない独立 BSS 領域）

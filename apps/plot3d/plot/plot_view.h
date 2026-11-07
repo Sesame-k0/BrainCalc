@@ -5,6 +5,7 @@
 #include "../render/fixed_math.h"
 #include "../render/rasterizer.h"
 #include "../render/colormap.h"
+#include "../model/shapes.h"
 
 namespace Plot3D {
 
@@ -30,12 +31,14 @@ public:
     markDirty();
   }
 
-  // 座標トレースモード (Trace Mode)
+  // 座標トレースモード (Trace Mode + Magnetic Snap)
   bool traceMode() const { return m_traceMode; }
   void setTraceMode(bool mode);
   void toggleTraceMode() { setTraceMode(!m_traceMode); }
   void moveTrace(int du, int dv);
   void nextTraceObject();
+  bool snapTraceToBestContact();
+  bool isTraceSnapped() const { return m_isSnapped; }
 
   int traceObjectIndex() const { return m_traceObjectIndex; }
   void getTraceCoordinates(float & outX, float & outY, float & outZ, const char *& outName, KDColor & outColor) const;
@@ -59,11 +62,23 @@ public:
   void setSection2DMode(bool mode);
   void toggleSection2DMode();
 
+  // 2立体の関係・交線解析モード (Graph Solve Mode)
+  bool solveMode() const { return m_solveMode; }
+  void setSolveMode(bool mode);
+  void runSolve();
+  bool jumpFromSolveToTrace();
+
 private:
   void projectPoint(const Vec3Fix & wPos, const Mat3Fix & rot, fixed_t scale,
                     int & outSx, int & outSy, fixed_t & outSz, uint16_t & outDepth) const;
 
-  void drawTraceCursor(KDContext * ctx, int sx, int sy, KDColor color) const;
+  void drawOriginAxesZBuffer(const Mat3Fix & rot, fixed_t scale) const;
+  void drawOriginAxesOverlay(KDContext * ctx, const Mat3Fix & rot, fixed_t scale, bool wireMode) const;
+
+  void extractIntersectionSegments() const;
+  void drawIntersectionContours(KDContext * ctx, const Mat3Fix & rot, fixed_t scale) const;
+
+  void drawTraceCursor(KDContext * ctx, int sx, int sy, KDColor color, bool snapped) const;
   void drawTraceBanner(KDContext * ctx, const char * name, KDColor color, float x, float y, float z) const;
 
   void extractSliceSegments() const;
@@ -72,20 +87,33 @@ private:
   void drawSliceBanner(KDContext * ctx) const;
   void drawSection2DView(KDContext * ctx) const;
 
+  void drawSolveOverlay(KDContext * ctx, const Mat3Fix & rot, fixed_t scale) const;
+
+  void tryMagneticSnap();
+
   Snapshot * m_snapshot;
   mutable Rasterizer m_rasterizer;
   RenderMode m_renderMode;
 
-  // トレースモード内部状態
+  // トレースモード内部状態 (連続 UV + 交点/接点スナップ)
   bool m_traceMode;
+  bool m_isSnapped;
   int m_traceObjectIndex;
-  int m_traceU;
-  int m_traceV;
+  int m_snapTargetIndex;
+  uint8_t m_snapCooldown;
+  float m_traceU;
+  float m_traceV;
 
   // 断面スライサー内部状態
   SliceAxis m_sliceAxis;
   float m_slicePos;
   bool m_section2DMode;
+
+  // 関係性・交線解析内部状態
+  bool m_solveMode;
+  SolveResult m_solveResult;
+  int m_solveIdxA;
+  int m_solveIdxB;
 };
 
 } // namespace Plot3D

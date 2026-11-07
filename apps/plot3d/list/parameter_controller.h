@@ -5,14 +5,14 @@
 #include <escher/list_view_data_source.h>
 #include <escher/even_odd_buffer_text_cell.h>
 #include <escher/stack_view_controller.h>
+#include <escher/selectable_table_view_delegate.h>
 #include "../model/object3d.h"
 #include "clean_table_view.h"
+#include "formula_cell.h"
 
 namespace Plot3D {
 
 class Snapshot;
-
-#include <escher/selectable_table_view_delegate.h>
 
 class ParameterController : public ViewController, public ListViewDataSource, public SelectableTableViewDataSource, public SelectableTableViewDelegate {
 public:
@@ -33,10 +33,10 @@ public:
 
   // ListViewDataSource
   int numberOfRows() const override;
-  KDCoordinate rowHeight(int j) override { return 30; }
+  KDCoordinate rowHeight(int j) override;
   HighlightCell * reusableCell(int index, int type) override;
-  int reusableCellCount(int type) override { return k_maxParamRows; }
-  int typeAtLocation(int i, int j) override { return 0; }
+  int reusableCellCount(int type) override;
+  int typeAtLocation(int i, int j) override;
   void willDisplayCellForIndex(HighlightCell * cell, int index) override;
 
   // SelectableTableViewDelegate
@@ -45,11 +45,20 @@ public:
   static void updateObjectName(Object3D & obj);
 
 private:
+  bool isFormulaRow(const Object3D * obj, int row, int * outFormulaSlot = nullptr) const;
+  const char * formulaStringForSlot(const Object3D * obj, int slot) const;
+  void startFormulaEdit(Ion::Events::Event event, int formulaSlot, bool useUV);
+  bool applyEditedFormula(const char * newText);
+  void notifyHelpForRow(int row);
+
   static constexpr int k_maxParamRows = 10;
+  static constexpr int k_maxFormulaRows = 3;
   Snapshot * m_snapshot;
   int m_objectIndex;
+  int m_editingFormulaSlot;
   CleanSelectableTableView m_selectableTableView;
   EvenOddBufferTextCell m_cells[k_maxParamRows];
+  FormulaExpressionCell m_formulaCells[k_maxFormulaRows];
 };
 
 } // namespace Plot3D

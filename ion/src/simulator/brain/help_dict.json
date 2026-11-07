@@ -10,17 +10,6 @@
     "ja_title": "タイマーアプリ",
     "ja_desc": "ストップウォッチ、タイマー、ポモドーロ機能。\n他アプリ中も裏で稼働。\n【Enter】開始/一時停止\n【Back】リセット\n【←/→】モード切替\n【キー直打ち】メモ入力"
   },
-  "App_Plot3D": {
-    "en_keys": [
-      "LLCubic",
-      "LLCUBIC",
-      "Plot3D",
-      "3D Graph"
-    ],
-    "en_desc": "3D surface grapher with Z-buffer, box view, rotation, and cross-section analysis.",
-    "ja_title": "3Dグラフ (LLCubic)",
-    "ja_desc": "3次元空間の曲面・立体を描画します。\n・↑↓←→：視点回転\n・PgUp/Dn：拡大縮小\n・Enter：視点リセット\n・Q/W/E/R：X/Y/Z正面/斜め\n・Space/5：面/線切替\n・F9：座標トレース\n・F1：断面モード"
-  },
   "App_Calculation": {
     "en_keys": [
       "Calculation",
@@ -3654,9 +3643,9 @@
       "3D Plot",
       "3D Graph Plot"
     ],
-    "en_desc": "3D plot view with rotation, zoom, axis views, and trace.",
+    "en_desc": "3D plot view with toolbar, origin axes, rotation, zoom, trace, slice, auto-rotate, and solve.",
     "ja_title": "3D立体描画",
-    "ja_desc": "3D空間の立体を表示・操作します。\n・↑↓←→：視点回転\n・PgUp/Dn(+/-)：ズーム\n・5 または A：表示範囲設定(Axes)\n・6 または T：座標トレース開始\n・7：断面スライサー起動\n・Space：面/線切替\n・1〜4：各軸正面視 / Enter：リセット"
+    "ja_desc": "3D空間の関数や立体を描画・解析します。\n・↑↓←→：視点回転\n・PgUp/Dn(+/-)：拡大・縮小\n・Back：上部ツールバーへ移動\n・6：トレース / 7：断面スライス\n・8：自動回転 / 9：交線・接点解析\n・0：原点XYZ軸のON/OFF\n・Space：面/線切替 / Enter：リセット"
   },
   "Plot3D_Trace": {
     "en_keys": [
@@ -3664,9 +3653,9 @@
       "LLCubic Trace",
       "3D Trace"
     ],
-    "en_desc": "3D coordinate trace mode on surface.",
-    "ja_title": "3D座標トレース",
-    "ja_desc": "曲面上の座標値を読み取ります。\n・↑↓←→：曲面上を移動\n・Enter/OK：立体切替\n・6 または Back：トレース終了\n下部バナーに(X, Y, Z)の数学的座標値をリアルタイム表示します。"
+    "en_desc": "3D coordinate trace mode with magnetic snapping to intersection curves and tangent points.",
+    "ja_title": "3D座標・交線トレース",
+    "ja_desc": "曲面上の座標と交線・接点を追跡します。\n・↑↓←→：曲面上を連続移動\n・2物体の交線や接点に近づくと自動で吸い付き【SNAP】表示になります\n・吸着中は←→で交線に沿って追従し、↑↓で吸着から離脱できます\n・9：最近傍の接点・交点へジャンプ\n・Enter：対象立体切替 / Back：終了"
   },
   "Plot3D_Expressions": {
     "en_keys": [
@@ -3806,5 +3795,247 @@
     "en_desc": "Torus surface (donut).",
     "ja_title": "トーラス (Torus)",
     "ja_desc": "ドーナツ型の幾何学曲面。\n・大半径Rと小半径rで形状を決定\n・水平切断で二重円リング\n・交差・貫通描画の美しさを実感"
+  },
+  "App_LLCubic": {
+    "en_keys": [
+      "LLCubic",
+      "LLCUBIC"
+    ],
+    "en_desc": "3D Graphing & Geometry Calculator app (LLCubic).",
+    "ja_title": "3Dグラフ (LLCubic)",
+    "ja_desc": "3次元空間に関数曲面 z=f(x,y) や球・平面・円柱などを描画・解析する3Dグラフ電卓です。\n・2D自然表示での数式入力\n・中央XYZ原点軸と陰影描画\n・交線や接点への吸着トレース\n・断面スライスと2立体の関係解析"
+  },
+  "Set_LLCubicGuide": {
+    "en_keys": [
+      "LLCubic Guide"
+    ],
+    "en_desc": "Interactive Japanese user guide for the LLCubic 3D Graphing app.",
+    "ja_title": "LLCubic 3D操作ガイド",
+    "ja_desc": "3Dグラフ電卓「LLCubic」の数式自然入力、ツールバー、原点XYZ軸、交線・接点への吸着トレース、Solve解析などの使い方を項目別に解説します。"
+  },
+  "Plot3D_Add": {
+    "en_keys": [
+      "Plot3D_Add",
+      "+ Add an element"
+    ],
+    "en_desc": "Add a new 3D surface or geometric solid.",
+    "ja_title": "3D関数・立体の追加",
+    "ja_desc": "新しい3Dグラフや空間図形を追加します。\n・【Enter】で種類選択メニューを開く\n・陽関数 z=f(x,y)（自然表示対応）\n・媒介変数曲面 X,Y,Z(u,v)\n・球・円柱・円錐・平面・回転体・トーラスを最大6個まで同時描画可能"
+  },
+  "Plot3D_Obj_Explicit": {
+    "en_keys": [
+      "Plot3D_Obj_Explicit"
+    ],
+    "en_desc": "Explicit 3D surface expression entry in the list.",
+    "ja_title": "陽関数曲面 z = f(x, y)",
+    "ja_desc": "定義済みの3D関数曲面です（2D自然表示）。\n・【Enter】：数式や色の詳細編集\n・【Space】：描画のON/OFF切替\n・【BackSpace】：この立体を削除\n・上部タブまたは右移動で3D描画へ"
+  },
+  "Plot3D_Param_Formula": {
+    "en_keys": [
+      "Plot3D_Param_Formula"
+    ],
+    "en_desc": "Edit z = f(x, y) formula in real-time 2D natural textbook format.",
+    "ja_title": "数式の自然表示入力",
+    "ja_desc": "z = f(x, y) の数式をリアルタイム2D自然表示で入力・編集します。\n・【Enter】または文字キー直打ちで画面下部に自然表示エディタが開きます\n・分数(/)、累乗(^)、ルート(√)を入力したそばから教科書通りに表示\n・【XNT】キーで x と y を交互切替"
+  },
+  "Plot3D_Param_FormulaUV": {
+    "en_keys": [
+      "Plot3D_Param_FormulaUV"
+    ],
+    "en_desc": "Edit parametric surface X(u,v), Y(u,v), Z(u,v) in 2D natural textbook format.",
+    "ja_title": "媒介変数式の自然入力",
+    "ja_desc": "X(u,v), Y(u,v), Z(u,v) の各式を2D自然表示エディタで入力・編集します。\n・【Enter】または文字キーで編集開始\n・【XNT】キーで u と v を交互切替\n・【F1】Toolboxから三角関数等も挿入可能"
+  },
+  "Plot3D_Param_Color": {
+    "en_keys": [
+      "Plot3D_Param_Color"
+    ],
+    "en_desc": "Change the surface color theme.",
+    "ja_title": "曲面カラーテーマ設定",
+    "ja_desc": "立体の配色テーマを切り替えます。\n・←→ または Enter で色を変更\n・複数の立体を重ねて交線や接点を観察する際、異なる色にすると見分けやすくなります。"
+  },
+  "Plot3D_Param_Delete": {
+    "en_keys": [
+      "Plot3D_Param_Delete"
+    ],
+    "en_desc": "Delete this 3D object from the list.",
+    "ja_title": "この立体を削除",
+    "ja_desc": "現在編集中の3D関数・立体を削除して一覧画面へ戻ります。\n・【Enter】で削除を実行します。"
+  },
+  "Plot3D_Range_Preset": {
+    "en_keys": [
+      "Plot3D_Range_Preset"
+    ],
+    "en_desc": "Quick presets for 3D X, Y, Z bounding box ranges.",
+    "ja_title": "表示範囲プリセット",
+    "ja_desc": "X, Y, Z の描画範囲を一括設定します。\n・←→キーでプリセットを切替\n・Standard[-2,2] / Wide[-5,5] / Paraboloid Z[0,10] など関数のスケールに合わせて即座に最適化できます。"
+  },
+  "Plot3D_Range_Reset": {
+    "en_keys": [
+      "Plot3D_Range_Reset"
+    ],
+    "en_desc": "Reset 3D range and camera angle to default.",
+    "ja_title": "範囲と視点の初期化",
+    "ja_desc": "X, Y, Z軸の表示範囲を標準の [-2, 2] に戻し、カメラ角度・ズーム倍率も初期状態にリセットします。\n・【Enter】でリセットを実行します。"
+  },
+  "Plot3D_Btn_Axes": {
+    "en_keys": [
+      "Plot3D_Btn_Axes"
+    ],
+    "en_desc": "Open 3D Axes & Viewing Box Range settings.",
+    "ja_title": "Axes (表示範囲・軸設定)",
+    "ja_desc": "3D空間のX, Y, Z表示範囲(min〜max)や範囲プリセット、原点XYZ軸の表示設定画面を開きます。\n・【Enter】で設定画面へ（3D画面で 5 または A キーでも開けます）\n・↓キーで3Dグラフ操作へ戻ります。"
+  },
+  "Plot3D_OriginAxes": {
+    "en_keys": [
+      "Plot3D_OriginAxes"
+    ],
+    "en_desc": "Toggle 3D orthogonal X, Y, Z axes passing through the origin (0,0,0).",
+    "ja_title": "原点XYZ軸の表示切替",
+    "ja_desc": "空間中央の原点(0,0,0)から伸びる直交3軸のON/OFFを切り替えます。\n・X軸：赤 / Y軸：緑 / Z軸：青\n・正方向は実線＋軸ラベル、負方向は破線で立体との前後関係も正確に描画します（0キーでも切替可）。"
+  },
+  "Plot3D_Btn_Trace": {
+    "en_keys": [
+      "Plot3D_Btn_Trace"
+    ],
+    "en_desc": "Toggle 3D surface coordinate trace with magnetic snap to intersections/tangents.",
+    "ja_title": "Trace (座標・交線追従)",
+    "ja_desc": "曲面上の座標トレースを開始します。\n・2つの物体の交線や接点に近づくと自動で吸い付き【SNAP】表示！\n・吸着中は←→で交線に沿って追従し、↑↓で離脱します（ショートカット：6キー）。"
+  },
+  "Plot3D_Btn_Slice": {
+    "en_keys": [
+      "Plot3D_Btn_Slice"
+    ],
+    "en_desc": "Slice 3D objects with Z/X/Y cutting planes and inspect 2D cross sections.",
+    "ja_title": "Slice (断面スライサー)",
+    "ja_desc": "Z面・X面・Y面の平面で立体を輪切りにし、切り口の交線をハイライトします。\n・スライス中に←→で切断位置移動、Enterで切り口の真上2D図形を表示します（ショートカット：7キー）。"
+  },
+  "Plot3D_Btn_Rotate": {
+    "en_keys": [
+      "Plot3D_Btn_Rotate"
+    ],
+    "en_desc": "Toggle continuous 360-degree automatic turntable rotation.",
+    "ja_title": "Rotate (3D自動回転)",
+    "ja_desc": "3Dグラフを水平方向に自動でゆっくり回転させ、立体構造や交線を多角的に観察します。\n・【Enter】で自動回転のON/OFF切替（ショートカット：8キー）。"
+  },
+  "Plot3D_Solve": {
+    "en_keys": [
+      "Plot3D_Solve"
+    ],
+    "en_desc": "Analyze geometric relationships, intersections, and tangent points between two 3D objects.",
+    "ja_title": "Solve (交線・接点解析)",
+    "ja_desc": "有効な2つの立体間の幾何学的関係を解析します（fx-CG100互換拡張）。\n・2平面の平行/直交/交差角・交線\n・球と平面、2球の接点座標や交円半径\n・一般曲面の交線ハイライトと接点検出\n・解析中に【6】キーで交点トレースへ直行！（ショートカット：9キー）"
+  },
+  "Plot3D_Guide_0": {
+    "en_keys": [
+      "Plot3D_Guide_0"
+    ],
+    "en_desc": "LLCubic 3D Graph overview.",
+    "ja_title": "1. LLCubic 3D概要",
+    "ja_desc": "LLCubicは関数曲面 z=f(x,y) や媒介変数曲面、球・平面・円柱・円錐・トーラスを最大6個同時にZバッファ陰影描画し、交線追従や空間解析を行える3Dグラフアプリです。"
+  },
+  "Plot3D_Guide_1": {
+    "en_keys": [
+      "Plot3D_Guide_1"
+    ],
+    "en_desc": "2D Natural textbook formula input.",
+    "ja_title": "2. リアルタイム自然表示入力",
+    "ja_desc": "陽関数 z=f(x,y) の式行でEnterを押すと、2Dグラフと同じ自然表示エディタが起動します。\n・分数(/)、指数(^)、根号(√)を入力した瞬間から教科書通りに2D表示\n・【XNT】キーで x ⇄ y を交互切替"
+  },
+  "Plot3D_Guide_2": {
+    "en_keys": [
+      "Plot3D_Guide_2"
+    ],
+    "en_desc": "Parametric surface input.",
+    "ja_title": "3. 媒介変数曲面 X,Y,Z(u,v)",
+    "ja_desc": "ParametricでCustomを選ぶと、X(u,v), Y(u,v), Z(u,v) の3式をそれぞれ2D自然表示で自由に入力できます。\n・【XNT】キーで u ⇄ v を交互切替\n・有限差分法線により美しい陰影を自動計算します。"
+  },
+  "Plot3D_Guide_3": {
+    "en_keys": [
+      "Plot3D_Guide_3"
+    ],
+    "en_desc": "Built-in geometric solid templates.",
+    "ja_title": "4. 空間図形テンプレート",
+    "ja_desc": "球(Sphere)、円柱(Cylinder)、円錐(Cone)、平面(Plane: ax+by+cz=d、垂直平面対応)、回転体(Revolution)、トーラスをワンタッチで追加し、半径や中心座標・係数を自在に調整できます。"
+  },
+  "Plot3D_Guide_4": {
+    "en_keys": [
+      "Plot3D_Guide_4"
+    ],
+    "en_desc": "Top toolbar in 3D Plot view.",
+    "ja_title": "5. 上部ツールバー操作",
+    "ja_desc": "3D Plot上部に【Axes】【3D Ax】【Trace】【Slice】【Rotate】【Solve】の6機能バーを搭載。\n・3D画面で【Back】を押すとツールバーにフォーカスし、←→で選んで日本語解説を確認しながら実行できます。"
+  },
+  "Plot3D_Guide_5": {
+    "en_keys": [
+      "Plot3D_Guide_5"
+    ],
+    "en_desc": "Origin XYZ orthogonal axes.",
+    "ja_title": "6. 中央の原点XYZ軸",
+    "ja_desc": "ワールド原点(0,0,0)を通る直交3軸を描画します。\n・X軸＝赤、Y軸＝緑、Z軸＝青\n・正方向は実線＋軸文字、負方向は破線で原位置が一目で分かります\n・ツールバー【3D Ax】または【0】キーでON/OFF切替可能。"
+  },
+  "Plot3D_Guide_6": {
+    "en_keys": [
+      "Plot3D_Guide_6"
+    ],
+    "en_desc": "Camera rotation and axis view presets.",
+    "ja_title": "7. 視点回転と正面視",
+    "ja_desc": "3D画面でのカメラアングル操作：\n・↑↓←→：上下左右に360°回転\n・1(Q)：X軸正面 / 2(W)：Y軸正面\n・3(E)：Z軸真上 / 4(R)またはEnter：標準の斜め俯瞰アングルにリセット"
+  },
+  "Plot3D_Guide_7": {
+    "en_keys": [
+      "Plot3D_Guide_7"
+    ],
+    "en_desc": "Zoom and shaded/wireframe render toggle.",
+    "ja_title": "8. ズームと描画モード",
+    "ja_desc": "・PgUp / + / ( ：拡大(ズームイン)\n・PgDn / - / ) ：縮小(ズームアウト)\n・【Space】キー：陰影サーフェス＋メッシュ線 ⇄ ワイヤーフレーム(線画)を瞬時に切り替え、内部の交線も透視できます。"
+  },
+  "Plot3D_Guide_8": {
+    "en_keys": [
+      "Plot3D_Guide_8"
+    ],
+    "en_desc": "Axes range card and presets.",
+    "ja_title": "9. 表示範囲設定 [Axes]",
+    "ja_desc": "式一覧最下部の灰色枠【Axes】カード、またはツールバーの【Axes】（5 / Aキー）からX,Y,Zの描画範囲を設定できます。\n・Preset行で←→を押すと[-2,2]や[-5,5]等の範囲プリセットを即適用できます。"
+  },
+  "Plot3D_Guide_9": {
+    "en_keys": [
+      "Plot3D_Guide_9"
+    ],
+    "en_desc": "3D coordinate trace.",
+    "ja_title": "10. 3D座標トレース (6)",
+    "ja_desc": "ツールバー【Trace】または【6】キーで曲面上にクロスヘアカーソルを表示し、下部に正確な(X, Y, Z)座標をリアルタイム表示します。\n・【Enter】でトレース対象の立体を順番に切り替えられます。"
+  },
+  "Plot3D_Guide_10": {
+    "en_keys": [
+      "Plot3D_Guide_10"
+    ],
+    "en_desc": "Magnetic snap to intersection curve and tangent point.",
+    "ja_title": "11. 交線・接点への吸着追従",
+    "ja_desc": "2つ以上の立体を表示してトレースすると、交線がハイライト表示され、カーソルが交線や接点に近づくと磁力のようにピタッと吸い付いて【SNAP】表示になります！\n・吸着中は←→で交線に沿って滑らかに追従し、↑↓で離脱、【9】で接点へ一発ジャンプできます。"
+  },
+  "Plot3D_Guide_11": {
+    "en_keys": [
+      "Plot3D_Guide_11"
+    ],
+    "en_desc": "Cross-section slicer and 2D section view.",
+    "ja_title": "12. 断面スライサー (7)",
+    "ja_desc": "ツールバー【Slice】または【7】キーでZ/X/Y切断平面を起動します。\n・←→で切断位置を動かし、切り口の交線を太線で観察\n・【Enter】を押すと切り口を真上から見た歪みのない2D断面図に切り替わります。"
+  },
+  "Plot3D_Guide_12": {
+    "en_keys": [
+      "Plot3D_Guide_12"
+    ],
+    "en_desc": "3D automatic turntable rotation.",
+    "ja_title": "13. 自動回転アニメ (8)",
+    "ja_desc": "ツールバー【Rotate】または【8】キーで、立体をターンテーブルのように自動水平回転させます。\n・複雑な曲面の凹凸や2立体の交わり方を手放しで立体的に把握できます。"
+  },
+  "Plot3D_Guide_13": {
+    "en_keys": [
+      "Plot3D_Guide_13"
+    ],
+    "en_desc": "3D Graph Solve relationship analysis.",
+    "ja_title": "14. 2立体の関係解析 Solve (9)",
+    "ja_desc": "ツールバー【Solve】または【9】キーで2立体の位置関係を自動判定します。\n・2平面の交線ベクトルと交差角\n・球と平面・2球の接点座標や交円半径\n・解析画面から【6】キーでその交点・接点のトレースへ直行できます。"
   }
 }

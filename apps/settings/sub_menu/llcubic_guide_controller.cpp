@@ -5,33 +5,65 @@ extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText)
 
 namespace Settings {
 
-static const char * const k_guideLines[] = {
-  "【LLCubic 3D立体描画ガイド】",
-  "[概要] 3次元空間に数式や立体を描画・観察",
-  "[視点回転] 矢印キー(↑↓←→)で360°回転",
-  "[ズーム] PgUp/PgDn (+/-) で拡大・縮小",
-  "[正面視] 1:X正面 2:Y正面 3:Z真上 4:斜め",
-  "[表示切替] Space: 面描/線描切替",
-  "[式入力] z=f(x,y) や X,Y,Z(u,v) を入力",
-  "  XNTキーで xとy (またはuとv) を交互入力",
-  "  sin, cos, sqrt, ^2 などの関数も対応",
-  "[3Dトレース] 6 または Tキーで座標値を直読",
-  "[断面スライス] 7キーで立体を輪切り切断",
-  "[範囲設定] 5 または AキーでAxes範囲変更",
-  "[視点リセット] Enterキーで初期位置に戻る",
-  "[立体追加] Expressionsタブで「+」を選択"
+static const char * const k_guideLines[14] = {
+  "01. Overview: LLCubic 3D Graph",
+  "02. 2D Natural Formula Input",
+  "03. Parametric Surface X,Y,Z(u,v)",
+  "04. Shapes & Solid Templates",
+  "05. Top Toolbar & Quick Keys",
+  "06. Origin XYZ Axes (Red/Grn/Blu)",
+  "07. 3D Rotation & View Presets",
+  "08. Zoom & Render Mode (Space)",
+  "09. Axes Range & Presets [Axes]",
+  "10. 3D Surface Trace (6 / Trace)",
+  "11. Magnetic Snap & Contact Line",
+  "12. Cross-Section Slicer (7)",
+  "13. Auto Rotate Animation (8)",
+  "14. 3D Graph Solve Analysis (9)"
+};
+
+static const char * const k_guideHelpKeys[14] = {
+  "Plot3D_Guide_0",
+  "Plot3D_Guide_1",
+  "Plot3D_Guide_2",
+  "Plot3D_Guide_3",
+  "Plot3D_Guide_4",
+  "Plot3D_Guide_5",
+  "Plot3D_Guide_6",
+  "Plot3D_Guide_7",
+  "Plot3D_Guide_8",
+  "Plot3D_Guide_9",
+  "Plot3D_Guide_10",
+  "Plot3D_Guide_11",
+  "Plot3D_Guide_12",
+  "Plot3D_Guide_13"
 };
 
 LLCubicGuideController::LLCubicGuideController(Responder * parentResponder) :
   GenericSubController(parentResponder)
 {
+  m_selectableTableView.setDelegate(this);
+  for (int i = 0; i < k_numberOfGuideRows; i++) {
+    m_cells[i].setAlignment(0.0f, 0.5f);
+  }
+}
+
+void LLCubicGuideController::notifyHelpForRow(int row) {
+  if (row >= 0 && row < k_numberOfGuideRows) {
+    BrainNotifyHelpText(k_guideHelpKeys[row], nullptr);
+  }
+}
+
+void LLCubicGuideController::tableViewDidChangeSelection(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection) {
+  if (withinTemporarySelection) return;
+  notifyHelpForRow(m_selectableTableView.selectedRow());
 }
 
 void LLCubicGuideController::viewWillAppear() {
   GenericSubController::viewWillAppear();
   m_selectableTableView.selectCellAtLocation(0, 0);
   m_selectableTableView.reloadData();
-  BrainNotifyHelpText("Plot3D_View", nullptr);
+  notifyHelpForRow(0);
 }
 
 HighlightCell * LLCubicGuideController::reusableCell(int index, int type) {
@@ -46,11 +78,12 @@ int LLCubicGuideController::reusableCellCount(int type) {
 void LLCubicGuideController::willDisplayCellForIndex(HighlightCell * cell, int index) {
   EvenOddBufferTextCell * myCell = static_cast<EvenOddBufferTextCell *>(cell);
   myCell->setEven(index % 2 == 0);
+  myCell->setAlignment(0.0f, 0.5f);
   if (index >= 0 && index < k_numberOfGuideRows) {
     myCell->setText(k_guideLines[index]);
     if (index == 0) {
-      myCell->setTextColor(Palette::YellowDark);
-    } else if (index == 6 || index == 7 || index == 8) {
+      myCell->setTextColor(KDColor::RGB24(0x0D9488));
+    } else if (index == 1 || index == 2 || index == 10 || index == 13) {
       myCell->setTextColor(Palette::PrimaryText);
     } else {
       myCell->setTextColor(KDColorBlack);

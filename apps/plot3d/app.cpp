@@ -14,11 +14,13 @@ static int s_objectCount = 0;
 static bool s_objectsInitialized = false;
 
 struct Plot3DConfigRecord {
-  uint32_t magic; // 'P3DC' = 0x50334443
+  uint32_t magic; // 'P3DD' = 0x50334444
   uint8_t azimuth;
   uint8_t elevation;
   uint8_t selectedTab;
   uint8_t objectCount;
+  uint8_t showOriginAxes;
+  uint8_t reserved[3];
   int32_t scale;
   float xMin, xMax;
   float yMin, yMax;
@@ -27,7 +29,7 @@ struct Plot3DConfigRecord {
 };
 
 static constexpr const char * k_storageRecordName = "llcubic.cfg";
-static constexpr uint32_t k_magicNumber = 0x50334443;
+static constexpr uint32_t k_magicNumber = 0x50334444;
 
 I18n::Message App::Descriptor::name() {
   return I18n::Message::Plot3DApp;
@@ -48,8 +50,9 @@ static void ensureDefaultObjects() {
 }
 
 Snapshot::Snapshot() :
-  m_azimuth(32),              // 45°
+  m_azimuth(25),              // ~35° (対角重なりを防ぐ立体的な俯瞰角)
   m_elevation(21),            // 30°
+  m_showOriginAxes(true),     // 中央 X,Y,Z 原点軸を既定で ON
   m_scale(fix_from_int(55)),  // 55px スケール
   m_xMin(-2.0f), m_xMax(2.0f),
   m_yMin(-2.0f), m_yMax(2.0f),
@@ -60,16 +63,17 @@ Snapshot::Snapshot() :
   ensureDefaultObjects();
   m_objectCount = s_objectCount;
   setActiveTab(0);
-  setSelectedTab(0); // 初期表示は Expressions (Functions) タブ
+  setSelectedTab(0); // 初期表示は Expressions タブ
   loadFromStorage();
 }
 
 void Snapshot::reset() {
   resetView();
+  m_showOriginAxes = true;
 }
 
 void Snapshot::resetView() {
-  m_azimuth = 32;             // 45°
+  m_azimuth = 25;             // ~35°
   m_elevation = 21;           // 30°
   m_scale = fix_from_int(55); // 55px スケール
 }
@@ -133,6 +137,7 @@ void Snapshot::saveToStorage() {
   record.elevation = m_elevation;
   record.selectedTab = static_cast<uint8_t>(selectedTab());
   record.objectCount = static_cast<uint8_t>(s_objectCount);
+  record.showOriginAxes = m_showOriginAxes ? 1 : 0;
   record.scale = m_scale;
   record.xMin = m_xMin;
   record.xMax = m_xMax;
@@ -168,6 +173,7 @@ void Snapshot::loadFromStorage() {
 
   m_azimuth = record->azimuth;
   m_elevation = record->elevation;
+  m_showOriginAxes = (record->showOriginAxes != 0);
   if (record->scale > fix_from_int(10) && record->scale < fix_from_int(500)) {
     m_scale = record->scale;
   }
@@ -201,13 +207,76 @@ void Snapshot::loadFromStorage() {
   }
 }
 
+bool App::AutoRotateTimer::fire() {
+  if (m_plotController && m_plotController->isAutoRotating()) {
+    return m_plotController->stepAutoRotate();
+  }
+  return false;
+}
+
+void App::layoutFieldDidReceiveNoneXNTEvent() {
+  m_xntStep = 0;
+  Shared::ExpressionFieldDelegateApp::layoutFieldDidReceiveNoneXNTEvent();
+}
+
+void App::textFieldDidReceiveNoneXNTEvent() {
+  m_xntStep = 0;
+  Shared::ExpressionFieldDelegateApp::textFieldDidReceiveNoneXNTEvent();
+}
+
+bool App::layoutFieldDidReceiveEvent(LayoutField * layoutField, Ion::Events::Event event) {
+  if (event == Ion::Events::XNT) {
+    if (!layoutField->isEditing()) {
+      layoutField->setEditing(true);
+    }
+    const char * varStr = m_editingUV ? ((m_xntStep % 2 == 0) ? "u" : "v")
+                                      : ((m_xntStep % 2 == 0) ? "x" : "y");
+    bool shouldRemoveLast = (m_xntStep > 0);
+    m_xntStep++;
+    return layoutField->handleEventWithText(varStr, false, false, shouldRemoveLast);
+  }
+  return Shared::ExpressionFieldDelegateApp::layoutFieldDidReceiveEvent(layoutField, event);
+}
+
+bool App::textFieldDidReceiveEvent(TextField * textField, Ion::Events::Event event) {
+  if (event == Ion::Events::XNT) {
+    if (!textField->isEditing()) {
+      textField->setEditing(true);
+    }
+    const char * varStr = m_editingUV ? ((m_xntStep % 2 == 0) ? "u" : "v")
+                                      : ((m_xntStep % 2 == 0) ? "x" : "y");
+    bool shouldRemoveLast = (m_xntStep > 0);
+    m_xntStep++;
+    return textField->handleEventWithText(varStr, false, false, shouldRemoveLast);
+  }
+  return Shared::ExpressionFieldDelegateApp::textFieldDidReceiveEvent(textField, event);
+}
+
+void App::didBecomeActive(Window * window) {
+  Shared::ExpressionFieldDelegateApp::didBecomeActive(window);
+  m_autoRotateTimer.setNext(nullptr);
+  AppsContainer::sharedAppsContainer()->addTimer(&m_autoRotateTimer);
+}
+
+void App::willBecomeInactive() {
+  m_plotController.setAutoRotating(false);
+  AppsContainer::sharedAppsContainer()->removeTimer(&m_autoRotateTimer);
+  m_autoRotateTimer.setNext(nullptr);
+  Shared::ExpressionFieldDelegateApp::willBecomeInactive();
+}
+
 App::App(Snapshot * snapshot) :
-  ::App(snapshot, &m_tabViewController, I18n::Message::Warning),
+  Shared::ExpressionFieldDelegateApp(snapshot, &m_inputViewController),
   m_listController(&m_listStackViewController, snapshot),
   m_listStackViewController(&m_tabViewController, &m_listController),
-  m_plotController(&m_plotStackViewController, snapshot),
-  m_plotStackViewController(&m_tabViewController, &m_plotController),
-  m_tabViewController(&m_modalViewController, snapshot, &m_listStackViewController, &m_plotStackViewController, nullptr)
+  m_plotController(&m_plotHeader, &m_plotStackViewController, snapshot, &m_plotHeader),
+  m_plotHeader(&m_plotStackViewController, &m_plotController, &m_plotController),
+  m_plotStackViewController(&m_tabViewController, &m_plotHeader),
+  m_tabViewController(&m_inputViewController, snapshot, &m_listStackViewController, &m_plotStackViewController, nullptr),
+  m_inputViewController(&m_modalViewController, &m_tabViewController, this, this, this),
+  m_autoRotateTimer(&m_plotController),
+  m_editingUV(false),
+  m_xntStep(0)
 {
 }
 

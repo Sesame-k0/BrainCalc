@@ -3,10 +3,11 @@
 
 #include "generic_sub_controller.h"
 #include <escher/even_odd_buffer_text_cell.h>
+#include <escher/selectable_table_view_delegate.h>
 
 namespace Settings {
 
-class LLCubicGuideController : public GenericSubController {
+class LLCubicGuideController : public GenericSubController, public SelectableTableViewDelegate {
 public:
   LLCubicGuideController(Responder * parentResponder);
   const char * title() override { return "LLCubic Guide"; }
@@ -19,8 +20,10 @@ public:
   int typeAtLocation(int i, int j) override { return 0; }
   int numberOfRows() const override { return k_numberOfGuideRows; }
   KDCoordinate rowHeight(int j) override { return 28; }
+  void tableViewDidChangeSelection(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection = false) override;
 
 private:
+  void notifyHelpForRow(int row);
   static constexpr int k_numberOfGuideRows = 14;
   EvenOddBufferTextCell m_cells[k_numberOfGuideRows];
 };

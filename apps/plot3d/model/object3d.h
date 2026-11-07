@@ -2,6 +2,7 @@
 #define PLOT3D_OBJECT3D_H
 
 #include <stdint.h>
+#include <string.h>
 #include <kandinsky/color.h>
 #include "../render/fixed_math.h"
 
@@ -15,7 +16,7 @@ enum class ObjectType : uint8_t {
   Plane,                // 平面: ax + by + cz = d
   RevolutionX,          // X軸回転体
   RevolutionY,          // Y軸回転体
-  Parametric,           // 媒介変数 (s, t)
+  Parametric,           // 媒介変数 (u, v)
   None = 255
 };
 
@@ -56,21 +57,21 @@ struct ParametricParams {
   fixed_t majorR;       // 大半径 R
   fixed_t minorR;       // 小半径 r
   fixed_t pitch;        // 螺旋ピッチ c
-  char exprX[32];       // X(u, v) 式 (例: "cos(u)*cos(v)")
-  char exprY[32];       // Y(u, v) 式 (例: "sin(u)*cos(v)")
-  char exprZ[32];       // Z(u, v) 式 (例: "sin(v)")
+  char exprX[64];       // X(u, v) 式 (例: "cos(u)*cos(v)")
+  char exprY[64];       // Y(u, v) 式 (例: "sin(u)*cos(v)")
+  char exprZ[64];       // Z(u, v) 式 (例: "sin(v)")
 };
 
 struct ExplicitParams {
-  uint8_t funcPreset;   // 0: Custom, 1: x^2 + y^2, 2: x^2 - y^2, 3: sin(x)*cos(y), 4: -(x^2+y^2)+2, 5: x*y, 6: cos(x)+sin(y), 7: exp(-(x^2+y^2))
-  char expression[64];  // ユーザー入力・プリセット数式 (例: "x^2 + y^2")
+  uint8_t funcPreset;   // 0: Custom, 1..: Presets
+  char expression[96];  // ユーザー入力・プリセット数式 (例: "sin(x*y)/(x^2+y^2+1)")
 };
 
 struct Object3D {
   ObjectType type;
   bool enabled;
   uint8_t colorTheme;   // 0: Blue, 1: Red/Amber, 2: Green, 3: Purple, 4: Cyan ...
-  char name[36];        // 表示用タイトル (例: "z = x^2 + y^2", "Sphere(r=1.8)")
+  char name[48];        // 表示用タイトル (例: "z = x^2 + y^2", "Sphere(r=1.8)")
 
   union {
     SphereParams sphere;
@@ -160,13 +161,13 @@ struct Object3D {
     params.parametric.majorR = rMajor;
     params.parametric.minorR = rMinor;
     params.parametric.pitch = pitch;
-    strlcpy(params.parametric.exprX, "cos(u)*cos(v)", sizeof(params.parametric.exprX));
-    strlcpy(params.parametric.exprY, "sin(u)*cos(v)", sizeof(params.parametric.exprY));
-    strlcpy(params.parametric.exprZ, "sin(v)", sizeof(params.parametric.exprZ));
+    strlcpy(params.parametric.exprX, "1.8*cos(u)*cos(v)", sizeof(params.parametric.exprX));
+    strlcpy(params.parametric.exprY, "1.8*sin(u)*cos(v)", sizeof(params.parametric.exprY));
+    strlcpy(params.parametric.exprZ, "1.8*sin(v)", sizeof(params.parametric.exprZ));
     strlcpy(name, (preset == 1) ? "Torus" : (preset == 2) ? "Helicoid" : (preset == 3) ? "Mobius" : "Parametric", sizeof(name));
   }
 
-  void initParametricSurface(const char * title, const char * xExpr = "cos(u)*cos(v)", const char * yExpr = "sin(u)*cos(v)", const char * zExpr = "sin(v)", uint8_t color = 5) {
+  void initParametricSurface(const char * title, const char * xExpr = "1.8*cos(u)*cos(v)", const char * yExpr = "1.8*sin(u)*cos(v)", const char * zExpr = "1.8*sin(v)", uint8_t color = 5) {
     type = ObjectType::Parametric;
     enabled = true;
     colorTheme = color;
