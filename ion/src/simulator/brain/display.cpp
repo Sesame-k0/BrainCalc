@@ -21,6 +21,8 @@
 #include <stdint.h>
 #include <wchar.h>
 
+#include "misaki_font_data.h"
+
 namespace Ion {
 namespace Simulator {
 namespace Display {
@@ -45,9 +47,39 @@ static bool sBackdropValid = false;
 static uint32_t sCleanDarkBuf[kBrainScreenWidth * kBrainScreenHeight];
 static bool sCleanDarkValid = false;
 
-static HFONT sUiFontBold = NULL;
-static HFONT sUiFontSmall = NULL;
-static HFONT sUiFontTiny = NULL;
+// Bitmap Font System (100% GDI-free, instant rendering with Misaki Gothic)
+enum class UiFont {
+  Bold,  // 16x16 (scale = 2)
+  Small, // 16x16 (scale = 2)
+  Tiny   // 8x8   (scale = 1)
+};
+static UiFont sCurrentUiFont = UiFont::Small;
+
+struct UiFontHandle {
+  UiFont type;
+};
+static constexpr UiFontHandle kFontBoldObj{ UiFont::Bold };
+static constexpr UiFontHandle kFontSmallObj{ UiFont::Small };
+static constexpr UiFontHandle kFontTinyObj{ UiFont::Tiny };
+static const UiFontHandle * const sUiFontBold = &kFontBoldObj;
+static const UiFontHandle * const sUiFontSmall = &kFontSmallObj;
+static const UiFontHandle * const sUiFontTiny = &kFontTinyObj;
+
+static inline const UiFontHandle * SelectObject(HDC /*hdc*/, const UiFontHandle * f) {
+  if (f) {
+    sCurrentUiFont = f->type;
+  }
+  return f;
+}
+
+static inline BOOL getTextExtentBitmap(HDC /*hdc*/, const wchar_t * str, int len, SIZE * sz) {
+  if (!sz) return FALSE;
+  int scale = (sCurrentUiFont == UiFont::Tiny) ? 1 : 2;
+  sz->cx = ::MisakiFont::measureTextWidth(str, len, scale);
+  sz->cy = 8 * scale;
+  return TRUE;
+}
+#define GetTextExtentPoint32W getTextExtentBitmap
 
 // Dirty region tracking for differential updates (pushRect)
 static bool sCalcDirty = true;
@@ -126,10 +158,34 @@ static void drawBox(HDC hdc, int x, int y, int w, int h, COLORREF bgColor, COLOR
 }
 
 static void drawTextLine(HDC hdc, int x, int y, int w, int h, COLORREF color, const wchar_t * text, UINT alignFlags = DT_LEFT | DT_VCENTER | DT_SINGLELINE) {
-  RECT rc = { x, y, x + w, y + h };
-  SetBkMode(hdc, TRANSPARENT);
-  SetTextColor(hdc, color);
-  DrawTextW(hdc, text, -1, &rc, alignFlags);
+  if (!text || !text[0]) return;
+  uint32_t * dst = (hdc == sBackdropDC) ? sBackdropPixels : sDibPixels;
+  if (!dst) return;
+
+  // COLORREF (0x00bbggrr) -> 32bpp DIB RGB (0x00rrggbb)
+  uint32_t dibColor = ((color & 0xFF) << 16) | (color & 0x00FF00) | ((color >> 16) & 0xFF);
+
+  int scale = (sCurrentUiFont == UiFont::Tiny) ? 1 : 2;
+  int textLen = static_cast<int>(wcslen(text));
+  int textW = ::MisakiFont::measureTextWidth(text, textLen, scale);
+  int textH = 8 * scale;
+
+  int startX = x;
+  if (alignFlags & DT_CENTER) {
+    startX = x + (w - textW) / 2;
+  } else if (alignFlags & DT_RIGHT) {
+    startX = x + w - textW;
+  }
+
+  int startY = y;
+  if (alignFlags & DT_VCENTER) {
+    startY = y + (h - textH) / 2;
+  } else if (alignFlags & DT_BOTTOM) {
+    startY = y + h - textH;
+  }
+
+  ::MisakiFont::drawString(dst, kBrainScreenWidth, kBrainScreenHeight,
+                           startX, startY, text, textLen, dibColor, scale);
 }
 
 struct KeyCapSpec {
@@ -447,7 +503,7 @@ static void renderRightSidebar(HDC hdc) {
   }
 
   SetBkMode(hdc, TRANSPARENT);
-  HGDIOBJ oldFont = SelectObject(hdc, sUiFontBold);
+  const UiFontHandle * oldFont = SelectObject(hdc, sUiFontBold);
 
   const int sx = kSidebarX + 6;      // 646
   const int sw = kSidebarWidth - 12; // 148
@@ -2469,54 +2525,7 @@ static LRESULT CALLBACK BrainWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
   }
 }
 
-static int CALLBACK fontEnumProc(const LOGFONTW * /*lpelfe*/, const TEXTMETRICW * /*lpntme*/, DWORD /*FontType*/, LPARAM lParam) {
-  *reinterpret_cast<bool *>(lParam) = true;
-  return 0; // 1つでも一致したら列挙を終了
-}
 
-static bool isFontFamilyAvailable(HDC hdc, const wchar_t * faceName) {
-  bool found = false;
-  EnumFontFamiliesW(hdc, faceName, reinterpret_cast<FONTENUMPROCW>(fontEnumProc), reinterpret_cast<LPARAM>(&found));
-  return found;
-}
-
-static const wchar_t * resolvePreferredFontFace(HDC hdc) {
-  // 多重フォールバック優先順位:
-  //   1. 同梱フォント (MisakiGothic / 美咲ゴシック)
-  //   2. 代替同梱フォント (DotGothic16 / DotGothic16 Regular)
-  //   3. Brain実機ROM内蔵フォント (DFGHSGothic-W5-SH)
-  //   4. PC環境フォールバック (MS Gothic または Meiryo)
-  static constexpr const wchar_t * kFontCandidates[] = {
-    L"MisakiGothic",
-    L"美咲ゴシック",
-    L"DotGothic16",
-    L"DotGothic16 Regular",
-    L"DFGHSGothic-W5-SH",
-    L"MS Gothic",
-    L"Meiryo"
-  };
-
-  for (const wchar_t * candidate : kFontCandidates) {
-    if (isFontFamilyAvailable(hdc, candidate)) {
-      return candidate;
-    }
-  }
-  return kFontCandidates[0];
-}
-
-static HFONT createFontWithFallback(const wchar_t * faceName, int height, LONG weight, DWORD quality = ANTIALIASED_QUALITY) {
-  LOGFONTW lf = {};
-  lf.lfHeight = height;
-  lf.lfWeight = weight;
-  lf.lfCharSet = DEFAULT_CHARSET;
-  lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
-  lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
-  lf.lfQuality = quality; // ドットフォントは NONANTIALIASED_QUALITY (3) で超高速かつ鮮明に描画
-  lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-  wcsncpy(lf.lfFaceName, faceName, LF_FACESIZE - 1);
-  lf.lfFaceName[LF_FACESIZE - 1] = L'\0';
-  return CreateFontIndirectW(&lf);
-}
 
 #define ENABLE_BRAIN_BENCHMARK 0
 
@@ -2566,43 +2575,43 @@ static void runStartupBenchmark(HDC hdcScreen) {
   // 4-a: ASCII "A"
   t0 = GetTickCount();
   for (int i = 0; i < 20; i++) {
-    DrawTextW(sMemDC, L"A", 1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    drawTextLine(sMemDC, bx, by, 250, 30, RGB(0, 0, 0), L"A", DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   }
   t1 = GetTickCount();
-  BrainLogInt("Bench: DrawText 'A' (20 times, ms)", (int)(t1 - t0));
+  BrainLogInt("Bench: BitmapFont 'A' (20 times, ms)", (int)(t1 - t0));
 
   // 4-b: 漢字 "設"
   t0 = GetTickCount();
   for (int i = 0; i < 20; i++) {
-    DrawTextW(sMemDC, L"設", 1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    drawTextLine(sMemDC, bx, by, 250, 30, RGB(0, 0, 0), L"設", DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   }
   t1 = GetTickCount();
-  BrainLogInt("Bench: DrawText '設' (20 times, ms)", (int)(t1 - t0));
+  BrainLogInt("Bench: BitmapFont '設' (20 times, ms)", (int)(t1 - t0));
 
-  // 4-c: 記号 "▶" (U+25B6, 非JIS)
+  // 4-c: 記号 "▶" (U+25B6)
   t0 = GetTickCount();
   for (int i = 0; i < 20; i++) {
-    DrawTextW(sMemDC, L"▶", 1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    drawTextLine(sMemDC, bx, by, 250, 30, RGB(0, 0, 0), L"▶", DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   }
   t1 = GetTickCount();
-  BrainLogInt("Bench: DrawText '▶' (U+25B6, 20 times, ms)", (int)(t1 - t0));
+  BrainLogInt("Bench: BitmapFont '▶' (20 times, ms)", (int)(t1 - t0));
 
-  // 4-d: 全角記号 "＞" (U+FF1E, JIS)
+  // 4-d: 全角記号 "＞" (U+FF1E)
   t0 = GetTickCount();
   for (int i = 0; i < 20; i++) {
-    DrawTextW(sMemDC, L"＞", 1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    drawTextLine(sMemDC, bx, by, 250, 30, RGB(0, 0, 0), L"＞", DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   }
   t1 = GetTickCount();
-  BrainLogInt("Bench: DrawText '＞' (U+FF1E, 20 times, ms)", (int)(t1 - t0));
+  BrainLogInt("Bench: BitmapFont '＞' (20 times, ms)", (int)(t1 - t0));
 
   // 4-e: 長文 (18文字)
   const wchar_t * testLine = L"■ キー配置の変更 (キーリマップ)";
   t0 = GetTickCount();
   for (int i = 0; i < 10; i++) {
-    DrawTextW(sMemDC, testLine, -1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    drawTextLine(sMemDC, bx, by, 250, 30, RGB(0, 0, 0), testLine, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   }
   t1 = GetTickCount();
-  BrainLogInt("Bench: DrawText line 18chars (10 times, ms)", (int)(t1 - t0));
+  BrainLogInt("Bench: BitmapFont line 18chars (10 times, ms)", (int)(t1 - t0));
 
   // 5. drawBox ベンチマーク (10回)
   t0 = GetTickCount();
@@ -2695,16 +2704,7 @@ void init() {
   SetBkMode(sMemDC, TRANSPARENT);
   SetBkMode(sBackdropDC, TRANSPARENT);
 
-  // Resolve preferred font face with multi-stage fallback and ANTIALIASED_QUALITY (4)
-  // ドットフォント (DotGothic16 / 美咲) 使用時は整数倍サイズ (-16 = 原寸/2倍, -8 = 1倍) かつ FW_NORMAL で
-  // ドット潰れ・端数滲みのない完全なピクセル描画にする
-  const wchar_t * faceName = resolvePreferredFontFace(sMemDC);
-  bool isDotGothic = (wcsstr(faceName, L"DotGothic") != nullptr);
-  bool isMisaki = (wcscmp(faceName, L"MisakiGothic") == 0 || wcscmp(faceName, L"美咲ゴシック") == 0);
-  DWORD fontQuality = (isDotGothic || isMisaki) ? NONANTIALIASED_QUALITY : ANTIALIASED_QUALITY;
-  sUiFontBold  = createFontWithFallback(faceName, (isDotGothic || isMisaki) ? -16 : -14, (isDotGothic || isMisaki) ? FW_NORMAL : FW_BOLD, fontQuality);
-  sUiFontSmall = createFontWithFallback(faceName, (isDotGothic || isMisaki) ? -16 : -12, FW_NORMAL, fontQuality);
-  sUiFontTiny  = createFontWithFallback(faceName, (isDotGothic || isMisaki) ? -8  : -10, FW_NORMAL, fontQuality);
+
 
   sCalcDirty = true;
   sDirtyMinX = 0;
@@ -2908,18 +2908,7 @@ void quit() {
   sCleanDarkValid = false;
   sHelpReady = false;
   sCurrentHelpIndex = -1;
-  if (sUiFontBold) {
-    DeleteObject(sUiFontBold);
-    sUiFontBold = NULL;
-  }
-  if (sUiFontSmall) {
-    DeleteObject(sUiFontSmall);
-    sUiFontSmall = NULL;
-  }
-  if (sUiFontTiny) {
-    DeleteObject(sUiFontTiny);
-    sUiFontTiny = NULL;
-  }
+
   if (sMemDC) {
     if (sOldBitmap) {
       SelectObject(sMemDC, sOldBitmap);

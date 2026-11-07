@@ -5,6 +5,7 @@ ion_src += $(addprefix ion/src/simulator/brain/, \
   config.cpp \
   logger.cpp \
   display.cpp \
+  misaki_font_data.cpp \
   framebuffer.cpp \
   keyboard.cpp \
   events.cpp \
