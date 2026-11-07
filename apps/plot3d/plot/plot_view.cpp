@@ -18,6 +18,138 @@ static float s_worldZ[(32 + 1) * (32 + 1)];
 static Vec3Fix s_worldVerts[(32 + 1) * (32 + 1)];
 static float s_distField[(32 + 1) * (32 + 1)];
 
+// オブジェクト毎の世界座標メッシュ＆正規化ボックス座標キャッシュ（回転・ズーム時の数式再評価をゼロ化）
+static constexpr fixed_t k_boxClipLimit = 65664; // 1.00195 in 16.16 fixed-point
+
+struct CachedObjectMesh {
+  bool valid;
+  Object3D objCopy;
+  int nu;
+  int nv;
+  float xMin, xMax;
+  float yMin, yMax;
+  float zMin, zMax;
+  float wx[25 * 25];
+  float wy[25 * 25];
+  float wz[25 * 25];
+  Vec3Fix boxPos[25 * 25];
+  Vec3Fix worldNorm[25 * 25];
+  uint8_t outcode[25 * 25];
+};
+static CachedObjectMesh s_meshCache[k_maxObjects];
+
+static inline uint8_t computeBoxOutcode(const Vec3Fix & p) {
+  uint8_t code = 0;
+  if (p.x < -k_boxClipLimit) code |= 1;
+  else if (p.x > k_boxClipLimit) code |= 2;
+  if (p.y < -k_boxClipLimit) code |= 4;
+  else if (p.y > k_boxClipLimit) code |= 8;
+  if (p.z < -k_boxClipLimit) code |= 16;
+  else if (p.z > k_boxClipLimit) code |= 32;
+  return code;
+}
+
+static inline fixed_t planeInsideDist(const Vec3Fix & p, int plane) {
+  switch (plane) {
+    case 0: return p.x + k_boxClipLimit;
+    case 1: return k_boxClipLimit - p.x;
+    case 2: return p.y + k_boxClipLimit;
+    case 3: return k_boxClipLimit - p.y;
+    case 4: return p.z + k_boxClipLimit;
+    default: return k_boxClipLimit - p.z;
+  }
+}
+
+static inline Vec3Fix intersectPlaneEdge(const Vec3Fix & a, fixed_t da, const Vec3Fix & b, fixed_t db) {
+  int64_t denom = static_cast<int64_t>(da) - static_cast<int64_t>(db);
+  if (denom == 0) return a;
+  int64_t t = (static_cast<int64_t>(da) << 16) / denom;
+  if (t < 0) t = 0;
+  if (t > 65536) t = 65536;
+  return Vec3Fix(
+    a.x + static_cast<fixed_t>(((static_cast<int64_t>(b.x) - static_cast<int64_t>(a.x)) * t) >> 16),
+    a.y + static_cast<fixed_t>(((static_cast<int64_t>(b.y) - static_cast<int64_t>(a.y)) * t) >> 16),
+    a.z + static_cast<fixed_t>(((static_cast<int64_t>(b.z) - static_cast<int64_t>(a.z)) * t) >> 16)
+  );
+}
+
+// Sutherland-Hodgman 3D ボックスクリッピング: [-1, 1]^3 の6平面で三角形を正確に切り取る
+static int clipTriangleToBox(const Vec3Fix & v0, const Vec3Fix & v1, const Vec3Fix & v2,
+                             uint8_t orCode, Vec3Fix outPoly[12]) {
+  Vec3Fix bufA[12] = { v0, v1, v2 };
+  Vec3Fix bufB[12];
+  Vec3Fix * src = bufA;
+  Vec3Fix * dst = bufB;
+  int count = 3;
+
+  for (int plane = 0; plane < 6 && count >= 3; ++plane) {
+    if (!(orCode & (1 << plane))) continue;
+    int nextCount = 0;
+    Vec3Fix prev = src[count - 1];
+    fixed_t dPrev = planeInsideDist(prev, plane);
+    for (int k = 0; k < count; ++k) {
+      Vec3Fix curr = src[k];
+      fixed_t dCurr = planeInsideDist(curr, plane);
+      if (dCurr >= 0) {
+        if (dPrev < 0 && nextCount < 11) {
+          dst[nextCount++] = intersectPlaneEdge(prev, dPrev, curr, dCurr);
+        }
+        if (nextCount < 11) {
+          dst[nextCount++] = curr;
+        }
+      } else if (dPrev >= 0) {
+        if (nextCount < 11) {
+          dst[nextCount++] = intersectPlaneEdge(prev, dPrev, curr, dCurr);
+        }
+      }
+      prev = curr;
+      dPrev = dCurr;
+    }
+    count = nextCount;
+    std::swap(src, dst);
+  }
+  for (int k = 0; k < count; ++k) {
+    outPoly[k] = src[k];
+  }
+  return count;
+}
+
+// Cohen-Sutherland 3D 線分クリッピング: [-1, 1]^3 内に線分を収める
+static bool clipSegmentToBox(Vec3Fix & p0, Vec3Fix & p1) {
+  uint8_t c0 = computeBoxOutcode(p0);
+  uint8_t c1 = computeBoxOutcode(p1);
+  for (int iter = 0; iter < 8; ++iter) {
+    if ((c0 | c1) == 0) return true;
+    if ((c0 & c1) != 0) return false;
+    uint8_t cOut = c0 ? c0 : c1;
+    int plane = 0;
+    while (plane < 5 && !(cOut & (1 << plane))) ++plane;
+    fixed_t d0 = planeInsideDist(p0, plane);
+    fixed_t d1 = planeInsideDist(p1, plane);
+    Vec3Fix pt = intersectPlaneEdge(p0, d0, p1, d1);
+    if (plane == 0) pt.x = -k_boxClipLimit;
+    else if (plane == 1) pt.x = k_boxClipLimit;
+    else if (plane == 2) pt.y = -k_boxClipLimit;
+    else if (plane == 3) pt.y = k_boxClipLimit;
+    else if (plane == 4) pt.z = -k_boxClipLimit;
+    else pt.z = k_boxClipLimit;
+    if (cOut == c0) {
+      p0 = pt;
+      c0 = computeBoxOutcode(p0);
+    } else {
+      p1 = pt;
+      c1 = computeBoxOutcode(p1);
+    }
+  }
+  return ((c0 | c1) == 0);
+}
+
+static inline float clampBoxCoordFloat(float val) {
+  if (val < -16.0f) return -16.0f;
+  if (val > 16.0f) return 16.0f;
+  return val;
+}
+
 // 断面スライサーおよび2立体交線用セグメント配列
 struct LineSegment3D {
   Vec3Fix p1;
@@ -74,7 +206,75 @@ static inline Vec3Fix worldToBox(fixed_t wx, fixed_t wy, fixed_t wz, const Snaps
 }
 
 static inline Vec3Fix worldFloatToBox(float wx, float wy, float wz, const Snapshot * snapshot) {
-  return worldToBox(fix_from_float(wx), fix_from_float(wy), fix_from_float(wz), snapshot);
+  float xHalf = (snapshot->xMax() - snapshot->xMin()) * 0.5f;
+  float yHalf = (snapshot->yMax() - snapshot->yMin()) * 0.5f;
+  float zHalf = (snapshot->zMax() - snapshot->zMin()) * 0.5f;
+  if (xHalf < 0.05f) xHalf = 0.05f;
+  if (yHalf < 0.05f) yHalf = 0.05f;
+  if (zHalf < 0.05f) zHalf = 0.05f;
+
+  float xMid = (snapshot->xMax() + snapshot->xMin()) * 0.5f;
+  float yMid = (snapshot->yMax() + snapshot->yMin()) * 0.5f;
+  float zMid = (snapshot->zMax() + snapshot->zMin()) * 0.5f;
+
+  float bx = clampBoxCoordFloat((wx - xMid) / xHalf);
+  float by = clampBoxCoordFloat((wy - yMid) / yHalf);
+  float bz = clampBoxCoordFloat((wz - zMid) / zHalf);
+  return Vec3Fix(fix_from_float(bx), fix_from_float(by), fix_from_float(bz));
+}
+
+static const CachedObjectMesh & ensureObjectMeshCached(int oIdx, const Object3D & obj, const Snapshot * snapshot) {
+  int Nu = 24, Nv = 24;
+  if (obj.type == ObjectType::Sphere || obj.type == ObjectType::Cylinder || obj.type == ObjectType::Cone ||
+      obj.type == ObjectType::RevolutionX || obj.type == ObjectType::RevolutionY || obj.type == ObjectType::Parametric) {
+    Nu = 24; Nv = 16;
+  }
+
+  CachedObjectMesh & slot = s_meshCache[oIdx];
+  float xMin = snapshot->xMin(), xMax = snapshot->xMax();
+  float yMin = snapshot->yMin(), yMax = snapshot->yMax();
+  float zMin = snapshot->zMin(), zMax = snapshot->zMax();
+
+  if (slot.valid &&
+      slot.nu == Nu && slot.nv == Nv &&
+      slot.xMin == xMin && slot.xMax == xMax &&
+      slot.yMin == yMin && slot.yMax == yMax &&
+      slot.zMin == zMin && slot.zMax == zMax &&
+      memcmp(&slot.objCopy, &obj, sizeof(Object3D)) == 0) {
+    return slot;
+  }
+
+  slot.valid = true;
+  slot.objCopy = obj;
+  slot.nu = Nu;
+  slot.nv = Nv;
+  slot.xMin = xMin; slot.xMax = xMax;
+  slot.yMin = yMin; slot.yMax = yMax;
+  slot.zMin = zMin; slot.zMax = zMax;
+
+  Shapes::evaluateObjectGrid(obj, Nu, Nv, xMin, xMax, yMin, yMax, zMin, zMax,
+                             slot.wx, slot.wy, slot.wz, slot.worldNorm);
+
+  float xHalf = (xMax - xMin) * 0.5f; if (xHalf < 0.05f) xHalf = 0.05f;
+  float yHalf = (yMax - yMin) * 0.5f; if (yHalf < 0.05f) yHalf = 0.05f;
+  float zHalf = (zMax - zMin) * 0.5f; if (zHalf < 0.05f) zHalf = 0.05f;
+  float xMid = (xMax + xMin) * 0.5f;
+  float yMid = (yMax + yMin) * 0.5f;
+  float zMid = (zMax + zMin) * 0.5f;
+  float invXHalf = 1.0f / xHalf;
+  float invYHalf = 1.0f / yHalf;
+  float invZHalf = 1.0f / zHalf;
+
+  int totalVerts = (Nu + 1) * (Nv + 1);
+  for (int idx = 0; idx < totalVerts; ++idx) {
+    float bx = clampBoxCoordFloat((slot.wx[idx] - xMid) * invXHalf);
+    float by = clampBoxCoordFloat((slot.wy[idx] - yMid) * invYHalf);
+    float bz = clampBoxCoordFloat((slot.wz[idx] - zMid) * invZHalf);
+    Vec3Fix bp(fix_from_float(bx), fix_from_float(by), fix_from_float(bz));
+    slot.boxPos[idx] = bp;
+    slot.outcode[idx] = computeBoxOutcode(bp);
+  }
+  return slot;
 }
 
 void PlotView::projectPoint(const Vec3Fix & wPos, const Mat3Fix & rot, fixed_t scale,
@@ -264,7 +464,7 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
   float zHalf = (m_snapshot->zMax() - m_snapshot->zMin()) * 0.5f;
   if (zHalf < 0.1f) zHalf = 0.1f;
 
-  // 2. モードに応じた描画
+  // 2. モードに応じた描画（世界座標メッシュキャッシュ + [-1, 1]^3 ボックス3Dクリッピング）
   if (m_renderMode == RenderMode::Filled) {
     m_rasterizer.clear(0xFFFF, 0xFFFF);
 
@@ -273,56 +473,125 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
       Object3D * obj = m_snapshot->objectAtIndex(oIdx);
       if (!obj || !obj->enabled) continue;
 
-      int Nu = 24, Nv = 24;
-      if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone ||
-          obj->type == ObjectType::RevolutionX || obj->type == ObjectType::RevolutionY || obj->type == ObjectType::Parametric) {
-        Nu = 24; Nv = 16;
-      }
-
-      // Poincare 1フレーム1回事前パース高速化
-      Poincare::Expression pre1, pre2, pre3;
-      if (obj->type == ObjectType::ExplicitFunction) {
-        pre1 = Shapes::prepareExpression(obj->params.explicitFunc.expression);
-      } else if (obj->type == ObjectType::Parametric && obj->params.parametric.preset == 0) {
-        pre1 = Shapes::prepareExpression(obj->params.parametric.exprX);
-        pre2 = Shapes::prepareExpression(obj->params.parametric.exprY);
-        pre3 = Shapes::prepareExpression(obj->params.parametric.exprZ);
-      }
+      const CachedObjectMesh & mesh = ensureObjectMeshCached(oIdx, *obj, m_snapshot);
+      const int Nu = mesh.nu;
+      const int Nv = mesh.nv;
 
       SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % k_numberOfThemes);
       uint16_t wireColor565 = ColorMap::getThemeWireColor565(theme);
 
-      // A. 頂点の計算と投影
-      for (int j = 0; j <= Nv; ++j) {
-        for (int i = 0; i <= Nu; ++i) {
-          fixed_t wx, wy, wz, wnx, wny, wnz;
-          Shapes::evaluateObjectVertex(*obj, i, Nu, j, Nv, wx, wy, wz, wnx, wny, wnz,
-                                       m_snapshot->xMin(), m_snapshot->xMax(),
-                                       m_snapshot->yMin(), m_snapshot->yMax(),
-                                       &pre1, &pre2, &pre3);
-
-          Vec3Fix wPos = worldToBox(wx, wy, wz, m_snapshot);
-
-          int idx = j * (Nu + 1) + i;
-          s_worldZ[idx] = fix_to_float(wz);
-
+      // A. キャッシュ済みボックス頂点・法線の高速固定小数点投影（Poincare 評価ゼロ！）
+      int totalVerts = (Nu + 1) * (Nv + 1);
+      for (int idx = 0; idx < totalVerts; ++idx) {
+        if (mesh.outcode[idx] == 0) {
           int sx, sy;
           fixed_t sz;
           uint16_t depth;
-          projectPoint(wPos, rot, scale, sx, sy, sz, depth);
-
+          projectPoint(mesh.boxPos[idx], rot, scale, sx, sy, sz, depth);
           s_projVerts[idx].x = static_cast<int16_t>(sx);
           s_projVerts[idx].y = static_cast<int16_t>(sy);
           s_projVerts[idx].z = depth;
           s_projVerts[idx].color = 0;
-
-          Vec3Fix wNorm(wnx, wny, wnz);
-          s_camVerts[idx] = rot.transform(wNorm);
         }
+        s_camVerts[idx] = rot.transform(mesh.worldNorm[idx]);
       }
 
-      // B. ポリゴン（三角形）のラスタライズ
+      // B. ポリゴン（三角形）の3Dクリッピング＆ラスタライズ
       Vec3Fix lightDir(fix_from_float(-0.35f), fix_from_float(0.45f), fix_from_float(-0.82f));
+
+      auto renderClippedOrFastTri = [&](int i0, int i1, int i2, const Vec3Fix & nCam) {
+        uint8_t c0 = mesh.outcode[i0];
+        uint8_t c1 = mesh.outcode[i1];
+        uint8_t c2 = mesh.outcode[i2];
+        if ((c0 & c1 & c2) != 0) {
+          return; // 完全に表示枠外の三角形は即座にカリング
+        }
+
+        fixed_t dot = -(fix_mul(nCam.x, lightDir.x) + fix_mul(nCam.y, lightDir.y) + fix_mul(nCam.z, lightDir.z));
+        float diffuse = std::max(0.0f, fix_to_float(dot));
+        bool isBackFace = (nCam.z < 0);
+
+        uint8_t orCode = (c0 | c1 | c2);
+        if (orCode == 0) {
+          // 全3頂点が枠内: クリッピング不要の超高速パス
+          const ScreenVertex & v0 = s_projVerts[i0];
+          const ScreenVertex & v1 = s_projVerts[i1];
+          const ScreenVertex & v2 = s_projVerts[i2];
+          if ((v0.x < 0 && v1.x < 0 && v2.x < 0) || (v0.x >= 320 && v1.x >= 320 && v2.x >= 320) ||
+              (v0.y < 0 && v1.y < 0 && v2.y < 0) || (v0.y >= 240 && v1.y >= 240 && v2.y >= 240)) {
+            return;
+          }
+          float normZ = fix_to_float(mesh.boxPos[i0].z + mesh.boxPos[i1].z + mesh.boxPos[i2].z) * 0.3333f;
+          uint16_t c565 = static_cast<uint16_t>(ColorMap::getColor(normZ, diffuse, isBackFace, theme));
+          m_rasterizer.drawTriangleFlat(v0, v1, v2, c565);
+        } else {
+          // 枠境界を跨ぐ三角形: [-1, 1]^3 平面で正確にクリッピングして凸多角形ファン描画
+          Vec3Fix poly[12];
+          int pCount = clipTriangleToBox(mesh.boxPos[i0], mesh.boxPos[i1], mesh.boxPos[i2], orCode, poly);
+          if (pCount < 3) return;
+
+          ScreenVertex sv[12];
+          fixed_t sumBz = 0;
+          for (int k = 0; k < pCount; ++k) {
+            int sx, sy;
+            fixed_t sz;
+            uint16_t depth;
+            projectPoint(poly[k], rot, scale, sx, sy, sz, depth);
+            sv[k].x = static_cast<int16_t>(sx);
+            sv[k].y = static_cast<int16_t>(sy);
+            sv[k].z = depth;
+            sv[k].color = 0;
+            sumBz += poly[k].z;
+          }
+          float normZ = fix_to_float(sumBz) / static_cast<float>(pCount);
+          uint16_t c565 = static_cast<uint16_t>(ColorMap::getColor(normZ, diffuse, isBackFace, theme));
+          for (int k = 1; k + 1 < pCount; ++k) {
+            m_rasterizer.drawTriangleFlat(sv[0], sv[k], sv[k + 1], c565);
+          }
+          // 枠断面で切り取られた境界エッジにクリーンな輪郭線を付与
+          for (int k = 0; k < pCount; ++k) {
+            int kn = (k + 1) % pCount;
+            bool onCutFace =
+              (fix_abs(poly[k].z + k_boxClipLimit) <= 32 && fix_abs(poly[kn].z + k_boxClipLimit) <= 32) ||
+              (fix_abs(poly[k].z - k_boxClipLimit) <= 32 && fix_abs(poly[kn].z - k_boxClipLimit) <= 32) ||
+              (fix_abs(poly[k].x + k_boxClipLimit) <= 32 && fix_abs(poly[kn].x + k_boxClipLimit) <= 32) ||
+              (fix_abs(poly[k].x - k_boxClipLimit) <= 32 && fix_abs(poly[kn].x - k_boxClipLimit) <= 32) ||
+              (fix_abs(poly[k].y + k_boxClipLimit) <= 32 && fix_abs(poly[kn].y + k_boxClipLimit) <= 32) ||
+              (fix_abs(poly[k].y - k_boxClipLimit) <= 32 && fix_abs(poly[kn].y - k_boxClipLimit) <= 32);
+            if (onCutFace) {
+              uint16_t z0 = (sv[k].z > 16) ? (sv[k].z - 16) : 0;
+              uint16_t z1 = (sv[kn].z > 16) ? (sv[kn].z - 16) : 0;
+              m_rasterizer.drawLineZ(sv[k].x, sv[k].y, z0, sv[kn].x, sv[kn].y, z1, wireColor565);
+            }
+          }
+        }
+      };
+
+      auto drawClippedMeshEdgeZ = [&](int iA, int iB) {
+        uint8_t cA = mesh.outcode[iA];
+        uint8_t cB = mesh.outcode[iB];
+        if ((cA & cB) != 0) return;
+        if ((cA | cB) == 0) {
+          const ScreenVertex & vA = s_projVerts[iA];
+          const ScreenVertex & vB = s_projVerts[iB];
+          uint16_t zA = (vA.z > 16) ? (vA.z - 16) : 0;
+          uint16_t zB = (vB.z > 16) ? (vB.z - 16) : 0;
+          m_rasterizer.drawLineZ(vA.x, vA.y, zA, vB.x, vB.y, zB, wireColor565);
+        } else {
+          Vec3Fix pA = mesh.boxPos[iA];
+          Vec3Fix pB = mesh.boxPos[iB];
+          if (clipSegmentToBox(pA, pB)) {
+            int sxA, syA, sxB, syB;
+            fixed_t szA, szB;
+            uint16_t dA, dB;
+            projectPoint(pA, rot, scale, sxA, syA, szA, dA);
+            projectPoint(pB, rot, scale, sxB, syB, szB, dB);
+            uint16_t zA = (dA > 16) ? (dA - 16) : 0;
+            uint16_t zB = (dB > 16) ? (dB - 16) : 0;
+            m_rasterizer.drawLineZ(sxA, syA, zA, sxB, syB, zB, wireColor565);
+          }
+        }
+      };
 
       for (int j = 0; j < Nv; ++j) {
         for (int i = 0; i < Nu; ++i) {
@@ -331,45 +600,23 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
           int idx01 = (j + 1) * (Nu + 1) + i;
           int idx11 = (j + 1) * (Nu + 1) + (i + 1);
 
-          ScreenVertex v00 = s_projVerts[idx00];
-          ScreenVertex v10 = s_projVerts[idx10];
-          ScreenVertex v01 = s_projVerts[idx01];
-          ScreenVertex v11 = s_projVerts[idx11];
-
-          if ((v00.x < 0 && v10.x < 0 && v01.x < 0 && v11.x < 0) ||
-              (v00.x >= 320 && v10.x >= 320 && v01.x >= 320 && v11.x >= 320) ||
-              (v00.y < 0 && v10.y < 0 && v01.y < 0 && v11.y < 0) ||
-              (v00.y >= 240 && v10.y >= 240 && v01.y >= 240 && v11.y >= 240)) {
+          if ((mesh.outcode[idx00] & mesh.outcode[idx10] & mesh.outcode[idx01] & mesh.outcode[idx11]) != 0) {
             continue;
           }
 
-          Vec3Fix nCam = s_camVerts[idx00];
-          fixed_t dot = -(fix_mul(nCam.x, lightDir.x) + fix_mul(nCam.y, lightDir.y) + fix_mul(nCam.z, lightDir.z));
-          float diffuse = std::max(0.0f, fix_to_float(dot));
-          bool isBackFace = (nCam.z < 0);
+          renderClippedOrFastTri(idx00, idx10, idx11, s_camVerts[idx00]);
+          renderClippedOrFastTri(idx00, idx11, idx01, s_camVerts[idx11]);
 
-          float avgZ = (s_worldZ[idx00] + s_worldZ[idx10] + s_worldZ[idx11]) * 0.333f;
-          float normZ = (avgZ - zMid) / zHalf;
-          KDColor col = ColorMap::getColor(normZ, diffuse, isBackFace, theme);
-          uint16_t c565 = static_cast<uint16_t>(col);
-
-          m_rasterizer.drawTriangleFlat(v00, v10, v11, c565);
-
-          nCam = s_camVerts[idx11];
-          dot = -(fix_mul(nCam.x, lightDir.x) + fix_mul(nCam.y, lightDir.y) + fix_mul(nCam.z, lightDir.z));
-          diffuse = std::max(0.0f, fix_to_float(dot));
-          isBackFace = (nCam.z < 0);
-
-          avgZ = (s_worldZ[idx00] + s_worldZ[idx11] + s_worldZ[idx01]) * 0.333f;
-          normZ = (avgZ - zMid) / zHalf;
-          col = ColorMap::getColor(normZ, diffuse, isBackFace, theme);
-          c565 = static_cast<uint16_t>(col);
-
-          m_rasterizer.drawTriangleFlat(v00, v11, v01, c565);
-
-          m_rasterizer.drawLineZ(v00.x, v00.y, v00.z - 16, v10.x, v10.y, v10.z - 16, wireColor565);
-          m_rasterizer.drawLineZ(v00.x, v00.y, v00.z - 16, v01.x, v01.y, v01.z - 16, wireColor565);
+          drawClippedMeshEdgeZ(idx00, idx10);
+          drawClippedMeshEdgeZ(idx00, idx01);
         }
+      }
+      // 右端・上端の境界メッシュ線も補完
+      for (int j = 0; j < Nv; ++j) {
+        drawClippedMeshEdgeZ(j * (Nu + 1) + Nu, (j + 1) * (Nu + 1) + Nu);
+      }
+      for (int i = 0; i < Nu; ++i) {
+        drawClippedMeshEdgeZ(Nv * (Nu + 1) + i, Nv * (Nu + 1) + (i + 1));
       }
     }
 
@@ -397,7 +644,7 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
     drawOriginAxesOverlay(ctx, rot, scale, false);
 
   } else {
-    // === 高速ワイヤーフレームモード ===
+    // === 高速ワイヤーフレームモード（キャッシュ再利用 + 3Dボックスクリッピング） ===
     ctx->fillRect(bounds(), KDColorWhite);
 
     for (int e = 0; e < 12; ++e) {
@@ -413,60 +660,54 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
       Object3D * obj = m_snapshot->objectAtIndex(oIdx);
       if (!obj || !obj->enabled) continue;
 
-      int Nu = 16, Nv = 16;
-      Poincare::Expression pre1, pre2, pre3;
-      if (obj->type == ObjectType::ExplicitFunction) {
-        pre1 = Shapes::prepareExpression(obj->params.explicitFunc.expression);
-      } else if (obj->type == ObjectType::Parametric && obj->params.parametric.preset == 0) {
-        pre1 = Shapes::prepareExpression(obj->params.parametric.exprX);
-        pre2 = Shapes::prepareExpression(obj->params.parametric.exprY);
-        pre3 = Shapes::prepareExpression(obj->params.parametric.exprZ);
-      }
+      const CachedObjectMesh & mesh = ensureObjectMeshCached(oIdx, *obj, m_snapshot);
+      const int Nu = mesh.nu;
+      const int Nv = mesh.nv;
 
       SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % k_numberOfThemes);
       KDColor wireCol = ColorMap::getThemeBaseColor(theme);
 
-      for (int j = 0; j <= Nv; ++j) {
-        for (int i = 0; i <= Nu; ++i) {
-          fixed_t wx, wy, wz, wnx, wny, wnz;
-          Shapes::evaluateObjectVertex(*obj, i, Nu, j, Nv, wx, wy, wz, wnx, wny, wnz,
-                                       m_snapshot->xMin(), m_snapshot->xMax(),
-                                       m_snapshot->yMin(), m_snapshot->yMax(),
-                                       &pre1, &pre2, &pre3);
-
-          Vec3Fix wPos = worldToBox(wx, wy, wz, m_snapshot);
-
-          int idx = j * (Nu + 1) + i;
+      int totalVerts = (Nu + 1) * (Nv + 1);
+      for (int idx = 0; idx < totalVerts; ++idx) {
+        if (mesh.outcode[idx] == 0) {
           int sx, sy;
           fixed_t sz;
           uint16_t depth;
-          projectPoint(wPos, rot, scale, sx, sy, sz, depth);
-
+          projectPoint(mesh.boxPos[idx], rot, scale, sx, sy, sz, depth);
           s_projVerts[idx].x = static_cast<int16_t>(sx);
           s_projVerts[idx].y = static_cast<int16_t>(sy);
         }
       }
 
+      auto drawWireSeg = [&](int iA, int iB) {
+        uint8_t cA = mesh.outcode[iA];
+        uint8_t cB = mesh.outcode[iB];
+        if ((cA & cB) != 0) return;
+        if ((cA | cB) == 0) {
+          ctx->drawLine(KDPoint(s_projVerts[iA].x, s_projVerts[iA].y),
+                        KDPoint(s_projVerts[iB].x, s_projVerts[iB].y), wireCol);
+        } else {
+          Vec3Fix pA = mesh.boxPos[iA];
+          Vec3Fix pB = mesh.boxPos[iB];
+          if (clipSegmentToBox(pA, pB)) {
+            int sxA, syA, sxB, syB;
+            fixed_t sz;
+            uint16_t d;
+            projectPoint(pA, rot, scale, sxA, syA, sz, d);
+            projectPoint(pB, rot, scale, sxB, syB, sz, d);
+            ctx->drawLine(KDPoint(sxA, syA), KDPoint(sxB, syB), wireCol);
+          }
+        }
+      };
+
       for (int j = 0; j <= Nv; ++j) {
         for (int i = 0; i < Nu; ++i) {
-          int idx0 = j * (Nu + 1) + i;
-          int idx1 = j * (Nu + 1) + (i + 1);
-          ctx->drawLine(
-            KDPoint(s_projVerts[idx0].x, s_projVerts[idx0].y),
-            KDPoint(s_projVerts[idx1].x, s_projVerts[idx1].y),
-            wireCol
-          );
+          drawWireSeg(j * (Nu + 1) + i, j * (Nu + 1) + (i + 1));
         }
       }
       for (int i = 0; i <= Nu; ++i) {
         for (int j = 0; j < Nv; ++j) {
-          int idx0 = j * (Nu + 1) + i;
-          int idx1 = (j + 1) * (Nu + 1) + i;
-          ctx->drawLine(
-            KDPoint(s_projVerts[idx0].x, s_projVerts[idx0].y),
-            KDPoint(s_projVerts[idx1].x, s_projVerts[idx1].y),
-            wireCol
-          );
+          drawWireSeg(j * (Nu + 1) + i, (j + 1) * (Nu + 1) + i);
         }
       }
     }
@@ -569,25 +810,14 @@ void PlotView::extractIntersectionSegments() const {
   Object3D * objA = m_snapshot->objectAtIndex(idxA);
   if (!objA) return;
 
-  const int Nu = 22, Nv = 22;
-  Poincare::Expression preA1, preA2, preA3;
-  if (objA->type == ObjectType::ExplicitFunction) {
-    preA1 = Shapes::prepareExpression(objA->params.explicitFunc.expression);
-  } else if (objA->type == ObjectType::Parametric && objA->params.parametric.preset == 0) {
-    preA1 = Shapes::prepareExpression(objA->params.parametric.exprX);
-    preA2 = Shapes::prepareExpression(objA->params.parametric.exprY);
-    preA3 = Shapes::prepareExpression(objA->params.parametric.exprZ);
-  }
-
-  for (int j = 0; j <= Nv; ++j) {
-    for (int i = 0; i <= Nu; ++i) {
-      fixed_t wx, wy, wz, wnx, wny, wnz;
-      Shapes::evaluateObjectVertex(*objA, i, Nu, j, Nv, wx, wy, wz, wnx, wny, wnz,
-                                   m_snapshot->xMin(), m_snapshot->xMax(),
-                                   m_snapshot->yMin(), m_snapshot->yMax(),
-                                   &preA1, &preA2, &preA3);
-      s_worldVerts[j * (Nu + 1) + i] = Vec3Fix(wx, wy, wz);
-    }
+  const CachedObjectMesh & meshA = ensureObjectMeshCached(idxA, *objA, m_snapshot);
+  const int Nu = meshA.nu;
+  const int Nv = meshA.nv;
+  const int totalVerts = (Nu + 1) * (Nv + 1);
+  for (int vIdx = 0; vIdx < totalVerts; ++vIdx) {
+    s_worldVerts[vIdx] = Vec3Fix(fix_from_float(meshA.wx[vIdx]),
+                                 fix_from_float(meshA.wy[vIdx]),
+                                 fix_from_float(meshA.wz[vIdx]));
   }
 
   for (int k = 0; k < activeCount; ++k) {
@@ -601,15 +831,11 @@ void PlotView::extractIntersectionSegments() const {
       preB = Shapes::prepareExpression(objB->params.explicitFunc.expression);
     }
 
-    for (int j = 0; j <= Nv; ++j) {
-      for (int i = 0; i <= Nu; ++i) {
-        int vIdx = j * (Nu + 1) + i;
-        const Vec3Fix & p = s_worldVerts[vIdx];
-        s_distField[vIdx] = Shapes::signedDistanceToObject(
-          *objB, fix_to_float(p.x), fix_to_float(p.y), fix_to_float(p.z),
-          nullptr, nullptr, nullptr, &preB
-        );
-      }
+    for (int vIdx = 0; vIdx < totalVerts; ++vIdx) {
+      s_distField[vIdx] = Shapes::signedDistanceToObject(
+        *objB, meshA.wx[vIdx], meshA.wy[vIdx], meshA.wz[vIdx],
+        nullptr, nullptr, nullptr, &preB
+      );
     }
 
     auto interpEdge = [](const Vec3Fix & a, float da, const Vec3Fix & b, float db, Vec3Fix & out) -> bool {
@@ -671,6 +897,7 @@ void PlotView::drawIntersectionContours(KDContext * ctx, const Mat3Fix & rot, fi
   for (int s = 0; s < s_intersectSegmentCount; ++s) {
     Vec3Fix w1 = worldToBox(s_intersectSegments[s].p1.x, s_intersectSegments[s].p1.y, s_intersectSegments[s].p1.z, m_snapshot);
     Vec3Fix w2 = worldToBox(s_intersectSegments[s].p2.x, s_intersectSegments[s].p2.y, s_intersectSegments[s].p2.z, m_snapshot);
+    if (!clipSegmentToBox(w1, w2)) continue;
 
     int sx1, sy1, sx2, sy2;
     fixed_t sz;
@@ -1005,7 +1232,7 @@ void PlotView::drawTraceBanner(KDContext * ctx, const char * name, KDColor color
                   KDColor::RGB24(0x0F172A));
 }
 
-// === 2立体の関係・交線解析 (CASIO fx-CG100 Graph Solve / Relationship 再現) ===
+// === 2立体の関係・交線解析 (Graph Solve / Relationship) ===
 void PlotView::setSolveMode(bool mode) {
   m_solveMode = mode;
   markDirty();
@@ -1156,34 +1383,18 @@ void PlotView::extractSliceSegments() const {
     Object3D * obj = m_snapshot->objectAtIndex(oIdx);
     if (!obj || !obj->enabled) continue;
 
-    int Nu = 24, Nv = 24;
-    if (obj->type == ObjectType::Sphere || obj->type == ObjectType::Cylinder || obj->type == ObjectType::Cone ||
-        obj->type == ObjectType::RevolutionX || obj->type == ObjectType::RevolutionY || obj->type == ObjectType::Parametric) {
-      Nu = 24; Nv = 16;
-    }
-
-    Poincare::Expression pre1, pre2, pre3;
-    if (obj->type == ObjectType::ExplicitFunction) {
-      pre1 = Shapes::prepareExpression(obj->params.explicitFunc.expression);
-    } else if (obj->type == ObjectType::Parametric && obj->params.parametric.preset == 0) {
-      pre1 = Shapes::prepareExpression(obj->params.parametric.exprX);
-      pre2 = Shapes::prepareExpression(obj->params.parametric.exprY);
-      pre3 = Shapes::prepareExpression(obj->params.parametric.exprZ);
-    }
+    const CachedObjectMesh & mesh = ensureObjectMeshCached(oIdx, *obj, m_snapshot);
+    const int Nu = mesh.nu;
+    const int Nv = mesh.nv;
 
     SurfaceTheme theme = static_cast<SurfaceTheme>(obj->colorTheme % k_numberOfThemes);
     KDColor segColor = ColorMap::getThemeBaseColor(theme);
 
-    for (int j = 0; j <= Nv; ++j) {
-      for (int i = 0; i <= Nu; ++i) {
-        fixed_t wx, wy, wz, wnx, wny, wnz;
-        Shapes::evaluateObjectVertex(*obj, i, Nu, j, Nv, wx, wy, wz, wnx, wny, wnz,
-                                     m_snapshot->xMin(), m_snapshot->xMax(),
-                                     m_snapshot->yMin(), m_snapshot->yMax(),
-                                     &pre1, &pre2, &pre3);
-        int idx = j * (Nu + 1) + i;
-        s_worldVerts[idx] = Vec3Fix(wx, wy, wz);
-      }
+    int totalVerts = (Nu + 1) * (Nv + 1);
+    for (int idx = 0; idx < totalVerts; ++idx) {
+      s_worldVerts[idx] = Vec3Fix(fix_from_float(mesh.wx[idx]),
+                                  fix_from_float(mesh.wy[idx]),
+                                  fix_from_float(mesh.wz[idx]));
     }
 
     auto getCoord = [this](const Vec3Fix & v) -> fixed_t {
@@ -1297,6 +1508,7 @@ void PlotView::drawSliceContours(KDContext * ctx, const Mat3Fix & rot, fixed_t s
   for (int s = 0; s < s_sliceSegmentCount; ++s) {
     Vec3Fix w1 = worldToBox(s_sliceSegments[s].p1.x, s_sliceSegments[s].p1.y, s_sliceSegments[s].p1.z, m_snapshot);
     Vec3Fix w2 = worldToBox(s_sliceSegments[s].p2.x, s_sliceSegments[s].p2.y, s_sliceSegments[s].p2.z, m_snapshot);
+    if (!clipSegmentToBox(w1, w2)) continue;
 
     int sx1, sy1, sx2, sy2;
     fixed_t sz;

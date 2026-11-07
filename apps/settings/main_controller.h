@@ -14,7 +14,6 @@
 #include "sub_menu/preferences_controller.h"
 #include "sub_menu/external_controller.h"
 #include "sub_menu/brightness_controller.h"
-#include "sub_menu/llcubic_guide_controller.h"
 
 namespace Settings {
 
@@ -70,7 +69,7 @@ private:
   StackViewController * stackController() const;
   I18n::Message promptMessage() const;
   bool hasPrompt() const { return promptMessage() != I18n::Message::Default; }
-  constexpr static int k_numberOfSimpleChevronCells = 11;
+  constexpr static int k_numberOfSimpleChevronCells = 10;
   MessageTableCellWithChevronAndMessage m_cells[k_numberOfSimpleChevronCells];
   MessageTableCellWithSwitch m_popUpCell;
   SelectableTableView m_selectableTableView;
@@ -84,7 +83,6 @@ private:
   AboutController m_aboutController;
   PreferencesController m_preferencesController;
   ExternalController m_externalController;
-  LLCubicGuideController m_llcubicGuideController;
 };
 
 }

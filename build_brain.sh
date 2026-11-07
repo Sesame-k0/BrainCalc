@@ -53,7 +53,7 @@ fi
 # Ensure i18n files are consistent and avoid I/O race conditions during parallel build on cloud storage
 if [[ "${OUT_DIR}" != "output/release/simulator/brain-host" ]] && [[ -f "output/release/simulator/brain-host/apps/i18n.cpp" ]]; then
   mkdir -p "${OUT_DIR}/apps"
-  if [[ ! -f "${OUT_DIR}/apps/i18n.cpp" || $(wc -c < "${OUT_DIR}/apps/i18n.cpp") -ne 777338 ]]; then
+  if [[ ! -f "${OUT_DIR}/apps/i18n.cpp" ]] || ! cmp -s "output/release/simulator/brain-host/apps/i18n.cpp" "${OUT_DIR}/apps/i18n.cpp"; then
     echo "[INFO] Syncing complete i18n files to ${OUT_DIR}/apps..."
     cp -f "output/release/simulator/brain-host/apps/i18n.cpp" "${OUT_DIR}/apps/i18n.cpp"
     cp -f "output/release/simulator/brain-host/apps/i18n.h" "${OUT_DIR}/apps/i18n.h"

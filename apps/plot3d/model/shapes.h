@@ -77,6 +77,142 @@ public:
     }
   }
 
+  // メッシュ格子全体を一括評価（陽関数・媒介変数曲面の法線を格子差分で算出し Poincare 評価回数を 1/5 に削減）
+  static void evaluateObjectGrid(
+      const Object3D & obj,
+      int nu, int nv,
+      float xMin, float xMax,
+      float yMin, float yMax,
+      float zMin, float zMax,
+      float * outWx, float * outWy, float * outWz,
+      Vec3Fix * outNorm)
+  {
+    const int stride = nu + 1;
+    if (obj.type == ObjectType::ExplicitFunction) {
+      Poincare::Expression pre = prepareExpression(obj.params.explicitFunc.expression);
+      float xSpan = xMax - xMin;
+      float ySpan = yMax - yMin;
+      for (int j = 0; j <= nv; ++j) {
+        float yf = yMin + (static_cast<float>(j) / static_cast<float>(nv)) * ySpan;
+        for (int i = 0; i <= nu; ++i) {
+          float xf = xMin + (static_cast<float>(i) / static_cast<float>(nu)) * xSpan;
+          int idx = j * stride + i;
+          outWx[idx] = xf;
+          outWy[idx] = yf;
+          outWz[idx] = evalFormula(obj.params.explicitFunc.expression, xf, yf, &pre);
+        }
+      }
+      float dxStep = (nu > 0) ? (xSpan / static_cast<float>(nu)) : 0.1f;
+      float dyStep = (nv > 0) ? (ySpan / static_cast<float>(nv)) : 0.1f;
+      if (fabsf(dxStep) < 1e-5f) dxStep = 0.1f;
+      if (fabsf(dyStep) < 1e-5f) dyStep = 0.1f;
+      for (int j = 0; j <= nv; ++j) {
+        int j0 = (j > 0) ? (j - 1) : 0;
+        int j1 = (j < nv) ? (j + 1) : nv;
+        float invDy = 1.0f / (static_cast<float>(j1 - j0) * dyStep);
+        for (int i = 0; i <= nu; ++i) {
+          int i0 = (i > 0) ? (i - 1) : 0;
+          int i1 = (i < nu) ? (i + 1) : nu;
+          float invDx = 1.0f / (static_cast<float>(i1 - i0) * dxStep);
+          int idx = j * stride + i;
+          float dzdx = (outWz[j * stride + i1] - outWz[j * stride + i0]) * invDx;
+          float dzdy = (outWz[j1 * stride + i] - outWz[j0 * stride + i]) * invDy;
+          float fnx = -dzdx, fny = -dzdy, fnz = 1.0f;
+          normalizeFloat(fnx, fny, fnz);
+          outNorm[idx] = Vec3Fix(fix_from_float(fnx), fix_from_float(fny), fix_from_float(fnz));
+        }
+      }
+      return;
+    }
+
+    if (obj.type == ObjectType::Parametric && obj.params.parametric.preset == 0) {
+      const ParametricParams & p = obj.params.parametric;
+      Poincare::Expression preX = prepareExpression(p.exprX);
+      Poincare::Expression preY = prepareExpression(p.exprY);
+      Poincare::Expression preZ = prepareExpression(p.exprZ);
+      const float pi = 3.14159265f;
+      for (int j = 0; j <= nv; ++j) {
+        float vVal = -pi + (static_cast<float>(j) / static_cast<float>(nv)) * (2.0f * pi);
+        for (int i = 0; i <= nu; ++i) {
+          float uVal = -pi + (static_cast<float>(i) / static_cast<float>(nu)) * (2.0f * pi);
+          int idx = j * stride + i;
+          outWx[idx] = evalFormulaUV(p.exprX, uVal, vVal, &preX);
+          outWy[idx] = evalFormulaUV(p.exprY, uVal, vVal, &preY);
+          outWz[idx] = evalFormulaUV(p.exprZ, uVal, vVal, &preZ);
+        }
+      }
+      for (int j = 0; j <= nv; ++j) {
+        int j0 = (j > 0) ? (j - 1) : 0;
+        int j1 = (j < nv) ? (j + 1) : nv;
+        for (int i = 0; i <= nu; ++i) {
+          int i0 = (i > 0) ? (i - 1) : 0;
+          int i1 = (i < nu) ? (i + 1) : nu;
+          int idx = j * stride + i;
+          float duX = outWx[j * stride + i1] - outWx[j * stride + i0];
+          float duY = outWy[j * stride + i1] - outWy[j * stride + i0];
+          float duZ = outWz[j * stride + i1] - outWz[j * stride + i0];
+          float dvX = outWx[j1 * stride + i] - outWx[j0 * stride + i];
+          float dvY = outWy[j1 * stride + i] - outWy[j0 * stride + i];
+          float dvZ = outWz[j1 * stride + i] - outWz[j0 * stride + i];
+          float cx = duY * dvZ - duZ * dvY;
+          float cy = duZ * dvX - duX * dvZ;
+          float cz = duX * dvY - duY * dvX;
+          normalizeFloat(cx, cy, cz);
+          outNorm[idx] = Vec3Fix(fix_from_float(cx), fix_from_float(cy), fix_from_float(cz));
+        }
+      }
+      return;
+    }
+
+    if (obj.type == ObjectType::Plane) {
+      float a = fix_to_float(obj.params.plane.a);
+      float b = fix_to_float(obj.params.plane.b);
+      float c = fix_to_float(obj.params.plane.c);
+      float d = fix_to_float(obj.params.plane.d);
+      float fnx = a, fny = b, fnz = c;
+      normalizeFloat(fnx, fny, fnz);
+      Vec3Fix nFix(fix_from_float(fnx), fix_from_float(fny), fix_from_float(fnz));
+      for (int j = 0; j <= nv; ++j) {
+        float vNorm = static_cast<float>(j) / static_cast<float>(nv);
+        for (int i = 0; i <= nu; ++i) {
+          float uNorm = static_cast<float>(i) / static_cast<float>(nu);
+          int idx = j * stride + i;
+          float xf = 0.0f, yf = 0.0f, zf = 0.0f;
+          if (fabsf(c) >= fabsf(a) && fabsf(c) >= fabsf(b) && fabsf(c) > 1e-4f) {
+            xf = xMin + uNorm * (xMax - xMin);
+            yf = yMin + vNorm * (yMax - yMin);
+            zf = (d - a * xf - b * yf) / c;
+          } else if (fabsf(b) >= fabsf(a) && fabsf(b) > 1e-4f) {
+            xf = xMin + uNorm * (xMax - xMin);
+            zf = zMin + vNorm * (zMax - zMin);
+            yf = (d - a * xf - c * zf) / b;
+          } else if (fabsf(a) > 1e-4f) {
+            yf = yMin + uNorm * (yMax - yMin);
+            zf = zMin + vNorm * (zMax - zMin);
+            xf = (d - b * yf - c * zf) / a;
+          }
+          outWx[idx] = xf;
+          outWy[idx] = yf;
+          outWz[idx] = zf;
+          outNorm[idx] = nFix;
+        }
+      }
+      return;
+    }
+
+    for (int j = 0; j <= nv; ++j) {
+      for (int i = 0; i <= nu; ++i) {
+        fixed_t fx, fy, fz, fnx, fny, fnz;
+        evaluateObjectVertex(obj, i, nu, j, nv, fx, fy, fz, fnx, fny, fnz, xMin, xMax, yMin, yMax);
+        int idx = j * stride + i;
+        outWx[idx] = fix_to_float(fx);
+        outWy[idx] = fix_to_float(fy);
+        outWz[idx] = fix_to_float(fz);
+        outNorm[idx] = Vec3Fix(fnx, fny, fnz);
+      }
+    }
+  }
+
   // 連続浮動小数点パラメータ uNorm, vNorm in [0, 1] から高精度 3D 座標と単位法線を計算 (Trace & Snap 用)
   static bool evaluateObjectContinuous(
       const Object3D & obj,
@@ -367,7 +503,7 @@ public:
     return dist;
   }
 
-  // 2つの立体の関係性・交線・接点を解析 (CASIO fx-CG100 Graph Solve / Relationship 相当 + 汎用拡張)
+  // 2つの立体の関係性・交線・接点を解析
   static SolveResult analyzeRelationship(
       const Object3D & objA, const Object3D & objB,
       float xMin, float xMax, float yMin, float yMax, float zMin, float zMax)
@@ -376,7 +512,7 @@ public:
     memset(&res, 0, sizeof(res));
     res.valid = true;
 
-    // Case 1: 平面 × 平面 (Plane vs Plane) -> CASIO fx-CG100 p.111-112 完全再現！
+    // Case 1: 平面 × 平面 (Plane vs Plane)
     if (objA.type == ObjectType::Plane && objB.type == ObjectType::Plane) {
       float a1 = fix_to_float(objA.params.plane.a), b1 = fix_to_float(objA.params.plane.b), c1 = fix_to_float(objA.params.plane.c), d1 = fix_to_float(objA.params.plane.d);
       float a2 = fix_to_float(objB.params.plane.a), b2 = fix_to_float(objB.params.plane.b), c2 = fix_to_float(objB.params.plane.c), d2 = fix_to_float(objB.params.plane.d);

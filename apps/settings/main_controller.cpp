@@ -43,8 +43,7 @@ MainController::MainController(Responder * parentResponder, InputEventHandlerDel
   m_examModeController(this),
   m_aboutController(this),
   m_preferencesController(this),
-  m_externalController(this),
-  m_llcubicGuideController(this)
+  m_externalController(this)
 {
   for (int i = 0; i < k_numberOfSimpleChevronCells; i++) {
     m_cells[i].setMessageFont(KDFont::LargeFont);
@@ -93,8 +92,6 @@ bool MainController::handleEvent(Ion::Events::Event event) {
       subController = &m_aboutController;
     } else if (title == I18n::Message::BrightnessSettings) {
       subController = &m_brightnessController;
-    } else if (title == I18n::Message::LLCubicGuide) {
-      subController = &m_llcubicGuideController;
     } else if (title == I18n::Message::Accessibility) {
       subController = &m_accessibilityController;
     } else if (title == I18n::Message::DateTime) {
@@ -195,11 +192,6 @@ void MainController::willDisplayCellForIndex(HighlightCell * cell, int index) {
     return;
   }
   MessageTableCellWithChevronAndMessage * myTextCell = (MessageTableCellWithChevronAndMessage *)cell;
-  if (title == I18n::Message::LLCubicGuide) {
-    myTextCell->setMessage(title);
-    myTextCell->setSubtitle(I18n::Message::Default);
-    return;
-  }
   int childIndex = -1;
   switch (model()->childAtIndex(index)->label()) {
     default:

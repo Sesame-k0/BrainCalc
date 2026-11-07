@@ -3728,7 +3728,7 @@
     ],
     "en_desc": "Parametric surface with X(u,v), Y(u,v), Z(u,v).",
     "ja_title": "媒介変数曲面",
-    "ja_desc": "X, Y, Zの3項目に式を入力。\n・例：X=cos(u)*cos(v)\n・Y=sin(u)*cos(v), Z=sin(v)\n・球やトーラス等を自在に定義\n・fx-CG50互換の3項目入力"
+    "ja_desc": "X, Y, Zの3項目に式を入力。\n・例：X=cos(u)*cos(v)\n・Y=sin(u)*cos(v), Z=sin(v)\n・球やトーラス等を自在に定義\n・媒介変数 u, v の3項目自然入力"
   },
   "Plot3D_Menu_Sphere": {
     "en_keys": [
@@ -3924,7 +3924,7 @@
     ],
     "en_desc": "Analyze geometric relationships, intersections, and tangent points between two 3D objects.",
     "ja_title": "Solve (交線・接点解析)",
-    "ja_desc": "有効な2つの立体間の幾何学的関係を解析します（fx-CG100互換拡張）。\n・2平面の平行/直交/交差角・交線\n・球と平面、2球の接点座標や交円半径\n・一般曲面の交線ハイライトと接点検出\n・解析中に【6】キーで交点トレースへ直行！（ショートカット：9キー）"
+    "ja_desc": "有効な2つの立体間の幾何学的関係を解析します。\n・2平面の平行/直交/交差角・交線\n・球と平面、2球の接点座標や交円半径\n・一般曲面の交線ハイライトと接点検出\n・解析中に【6】キーで交点トレースへ直行！（ショートカット：9キー）"
   },
   "Plot3D_Guide_0": {
     "en_keys": [

@@ -41,6 +41,10 @@ static HGDIOBJ sOldBackdropBitmap = NULL;
 static uint32_t * sBackdropPixels = nullptr;
 static bool sBackdropValid = false;
 
+// Clean darkened screen cache (prevents re-darkening & ghost silhouettes across modal transitions)
+static uint32_t sCleanDarkBuf[kBrainScreenWidth * kBrainScreenHeight];
+static bool sCleanDarkValid = false;
+
 static HFONT sUiFontBold = NULL;
 static HFONT sUiFontSmall = NULL;
 static HFONT sUiFontTiny = NULL;
@@ -214,7 +218,10 @@ static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec g
       if (mode == Keyboard::InputMode::Number) {
         if (spec.keyName) {
           uint16_t vk = (wcscmp(spec.keyName, L"ー") == 0) ? 0xBD : static_cast<uint16_t>(spec.keyName[0]);
-          activeLabel = Config::getShortLabelForVk(vk, spec.numLabel);
+          activeLabel = Config::getShortLabelForVk(vk, L"-");
+          if (Config::findActionByVk(vk) == Config::KeyAction::ActionCount) {
+            activeLabel = L"";
+          }
           isDigit = Config::isDigitActionForVk(vk);
         }
       } else if (mode == Keyboard::InputMode::AlphaLower) {
@@ -558,6 +565,7 @@ enum class ModalMode {
   None = 0,
   ExitConfirm,
   SettingsMain,
+  LLCubicGuide,
   KeyConfig,
   WaitingForKey,
   KeyChangeConfirm,
@@ -583,25 +591,47 @@ static constexpr int kBtnExitH = 42;
 static int sExitConfirmFocus = 0; // 0: 終了する, 1: 設定, 2: キャンセル
 static int sLastExitConfirmFocus = -1;
 
-// B. 設定メインダイアログ (640x420)
+// B. 設定メインダイアログ (640x444, 5項目 + 下部ボタン)
 static constexpr int kSettingsDialogW = 640;
-static constexpr int kSettingsDialogH = 420;
+static constexpr int kSettingsDialogH = 444;
 static constexpr int kSettingsDialogX = (kBrainScreenWidth - kSettingsDialogW) / 2;  // 80
-static constexpr int kSettingsDialogY = (kBrainScreenHeight - kSettingsDialogH) / 2; // 30
+static constexpr int kSettingsDialogY = (kBrainScreenHeight - kSettingsDialogH) / 2; // 18
+static constexpr int kSettingsRowCount = 5;
+static constexpr int kSettingsRowH = 48;
 
-static int sSettingsFocus = 0;    // 0: ヘルプ, 1: ログ, 2: キー変更, 3: リセット, 4: 下部ボタン
+static int sSettingsFocus = 0;    // 0: ヘルプ, 1: ログ, 2: キー変更, 3: リセット, 4: LLCubicガイド, 5: 下部ボタン
 static int sSettingsSubFocus = 0; // 0: 完了して保存, 1: キャンセル
 static int sLastSettingsFocus = -1;
 static int sLastSettingsSubFocus = -1;
 
-// C. キー配置変更ダイアログ (700x440)
-static constexpr int kKeyDialogW = 700;
-static constexpr int kKeyDialogH = 440;
-static constexpr int kKeyDialogX = (kBrainScreenWidth - kKeyDialogW) / 2;  // 50
-static constexpr int kKeyDialogY = (kBrainScreenHeight - kKeyDialogH) / 2; // 20
+// B2. LLCubic 操作ガイド特設ダイアログ (720x444, 左目次 + 右解説2ペイン)
+static constexpr int kGuideDialogW = 720;
+static constexpr int kGuideDialogH = 444;
+static constexpr int kGuideDialogX = (kBrainScreenWidth - kGuideDialogW) / 2;  // 40
+static constexpr int kGuideDialogY = (kBrainScreenHeight - kGuideDialogH) / 2; // 18
+static constexpr int kGuideTopicCount = 14;
+static constexpr int kVisibleGuideRows = 9;
+static int sGuideSelectedIndex = 0;
+static int sGuideScrollOffset = 0;
+static int sLastGuideScrollOffset = -1;
 
-static int sKeySelectedIndex = 0;
+// C. キー配置変更ダイアログ (720x448, カテゴリタブ + 8行高速リスト)
+static constexpr int kKeyDialogW = 720;
+static constexpr int kKeyDialogH = 448;
+static constexpr int kKeyDialogX = (kBrainScreenWidth - kKeyDialogW) / 2;  // 40
+static constexpr int kKeyDialogY = (kBrainScreenHeight - kKeyDialogH) / 2; // 16
+
+static constexpr int kKeyTabCount = 5; // 0:すべて, 1:数字・演算, 2:関数・定数, 3:括弧・記号, 4:編集・他
+static int sKeyCategoryTab = 0;
+static int sLastKeyCategoryTab = -1;
+static int sFilteredActions[64];
+static int sFilteredCount = 0;
+
+static int sKeySelectedIndex = 0; // sFilteredActions 内の選択位置
 static int sKeyScrollOffset = 0;
+static int sLastKeyScrollOffset = -1;
+static int sLastKeyRowOnScreen = -1;
+static bool sKeyListPageDirty = false;
 static constexpr int kVisibleKeyRows = 8;
 
 // D. キー入力待ち / キー変更確認
@@ -613,6 +643,38 @@ static int sKeyChangeConfirmFocus = 0; // 0: 変更する, 1: キャンセル
 
 // E. 初期化確認
 static int sResetConfirmFocus = 0; // 0: 初期化する, 1: キャンセル
+
+static void rebuildFilteredKeyActions() {
+  sFilteredCount = 0;
+  int total = Config::getActionCount();
+  for (int i = 0; i < total && sFilteredCount < 64; i++) {
+    const Config::ActionInfo & info = Config::getActionInfo(i);
+    bool match = (sKeyCategoryTab == 0) ||
+                 (static_cast<int>(info.category) == (sKeyCategoryTab - 1));
+    if (match) {
+      sFilteredActions[sFilteredCount++] = i;
+    }
+  }
+  if (sKeySelectedIndex >= sFilteredCount) {
+    sKeySelectedIndex = (sFilteredCount > 0) ? (sFilteredCount - 1) : 0;
+  }
+  if (sKeySelectedIndex < 0) {
+    sKeySelectedIndex = 0;
+  }
+  if (sKeyScrollOffset > sKeySelectedIndex) {
+    sKeyScrollOffset = sKeySelectedIndex;
+  }
+  if (sKeySelectedIndex >= sKeyScrollOffset + kVisibleKeyRows) {
+    sKeyScrollOffset = sKeySelectedIndex - (kVisibleKeyRows - 1);
+  }
+  int maxScroll = (sFilteredCount > kVisibleKeyRows) ? (sFilteredCount - kVisibleKeyRows) : 0;
+  if (sKeyScrollOffset > maxScroll) {
+    sKeyScrollOffset = maxScroll;
+  }
+  if (sKeyScrollOffset < 0) {
+    sKeyScrollOffset = 0;
+  }
+}
 
 static void refreshModal() {
   draw();
@@ -693,67 +755,79 @@ static void renderExitConfirmDialog(HDC hdc) {
   renderExitConfirmOverlay(hdc);
 }
 
-static constexpr int kSettingsRowY[4] = {
-  kSettingsDialogY + 52,
-  kSettingsDialogY + 114,
-  kSettingsDialogY + 176,
-  kSettingsDialogY + 238
+static constexpr int kSettingsRowY[kSettingsRowCount] = {
+  kSettingsDialogY + 48,
+  kSettingsDialogY + 102,
+  kSettingsDialogY + 156,
+  kSettingsDialogY + 210,
+  kSettingsDialogY + 264
 };
+static constexpr int kSettingsBtnY = kSettingsDialogY + 332;
 
 static void renderSettingsRowContent(HDC hdc, int r) {
   int ry = kSettingsRowY[r];
   if (r == 0) {
     SelectObject(hdc, sUiFontBold);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 6, 300, 20, RGB(30, 40, 50), L"■ 日本語ヘルプ表示");
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 5, 320, 20, RGB(30, 40, 50), L"■ 日本語ヘルプ表示");
     SelectObject(hdc, sUiFontTiny);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 30, 420, 16, RGB(90, 100, 110),
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 28, 420, 15, RGB(90, 100, 110),
                  L"右側サイドバーに現在選択中の項目の日本語解説を表示します");
     SelectObject(hdc, sUiFontBold);
     if (Config::isHelpEnabled()) {
-      drawBox(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(226, 245, 242), RGB(79, 191, 175));
-      drawTextLine(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(22, 116, 104),
+      drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(226, 245, 242), RGB(79, 191, 175));
+      drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(22, 116, 104),
                    L"【 有効 (ON) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     } else {
-      drawBox(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(242, 244, 247), RGB(200, 208, 216));
-      drawTextLine(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(110, 120, 130),
+      drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(242, 244, 247), RGB(200, 208, 216));
+      drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(110, 120, 130),
                    L"【 無効 (OFF) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
   } else if (r == 1) {
     SelectObject(hdc, sUiFontBold);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 6, 300, 20, RGB(30, 40, 50), L"■ デバッグログ出力");
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 5, 320, 20, RGB(30, 40, 50), L"■ デバッグログ出力");
     SelectObject(hdc, sUiFontTiny);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 30, 420, 16, RGB(90, 100, 110),
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 28, 420, 15, RGB(90, 100, 110),
                  L"lilium_debug.log を出力します（通常はOFF推奨）");
     SelectObject(hdc, sUiFontBold);
     if (Config::isLogEnabled()) {
-      drawBox(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(255, 236, 234), RGB(220, 70, 55));
-      drawTextLine(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(190, 50, 40),
+      drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(255, 236, 234), RGB(220, 70, 55));
+      drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(190, 50, 40),
                    L"【 ON (記録中) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     } else {
-      drawBox(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(226, 245, 242), RGB(79, 191, 175));
-      drawTextLine(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(22, 116, 104),
+      drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(226, 245, 242), RGB(79, 191, 175));
+      drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(22, 116, 104),
                    L"【 OFF (高速) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
   } else if (r == 2) {
     SelectObject(hdc, sUiFontBold);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 6, 300, 20, RGB(30, 40, 50), L"■ キー配置の変更 (キーリマップ)");
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 5, 340, 20, RGB(30, 40, 50), L"■ キー配置の変更 (キーリマップ)");
     SelectObject(hdc, sUiFontTiny);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 30, 420, 16, RGB(90, 100, 110),
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 28, 420, 15, RGB(90, 100, 110),
                  L"数字入力モード(12x)時の各物理キーへの電卓機能の割り当てを変更します");
     SelectObject(hdc, sUiFontBold);
-    drawBox(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(242, 248, 247), RGB(160, 205, 198));
-    drawTextLine(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(25, 95, 88),
-                 L"設定を開く ▶", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(242, 248, 247), RGB(160, 205, 198));
+    drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(25, 95, 88),
+                 L"設定を開く ＞", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   } else if (r == 3) {
     SelectObject(hdc, sUiFontBold);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 6, 300, 20, RGB(30, 40, 50), L"■ キー設定のリセット");
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 5, 320, 20, RGB(30, 40, 50), L"■ キー設定のリセット");
     SelectObject(hdc, sUiFontTiny);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 30, 420, 16, RGB(90, 100, 110),
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 28, 420, 15, RGB(90, 100, 110),
                  L"キー配置の割り当てをすべて初期設定（デフォルト）に戻します");
     SelectObject(hdc, sUiFontBold);
-    drawBox(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(255, 245, 244), RGB(220, 180, 175));
-    drawTextLine(hdc, kSettingsDialogX + 460, ry + 10, 145, 34, RGB(180, 60, 50),
+    drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(255, 245, 244), RGB(220, 180, 175));
+    drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(180, 60, 50),
                  L"デフォルトに戻す", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  } else if (r == 4) {
+    SelectObject(hdc, sUiFontBold);
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 5, 360, 20, RGB(30, 40, 50), L"■ LLCubic (3Dグラフ) 操作ガイド");
+    SelectObject(hdc, sUiFontTiny);
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 28, 420, 15, RGB(90, 100, 110),
+                 L"3Dグラフの数式自然入力・回転・断面・交線吸着などの使い方を表示します");
+    SelectObject(hdc, sUiFontBold);
+    drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(232, 246, 244), RGB(79, 191, 175));
+    drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(20, 108, 96),
+                 L"ガイドを開く ＞", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   }
 }
 
@@ -773,15 +847,15 @@ static void renderSettingsMainBase(HDC hdc) {
   drawTextLine(hdc, kSettingsDialogX, kSettingsDialogY + 9, kSettingsDialogW, 20,
                RGB(255, 255, 255), L"【 Lilium 設定 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-  // 4. 設定項目 4行 (全て非選択ベース状態: 背景 白, 枠線 薄グレー)
-  for (int r = 0; r < 4; r++) {
+  // 4. 設定項目 5行 (全て非選択ベース状態: 背景 白, 枠線 薄グレー)
+  for (int r = 0; r < kSettingsRowCount; r++) {
     int ry = kSettingsRowY[r];
-    drawBox(hdc, kSettingsDialogX + 16, ry, kSettingsDialogW - 32, 54, RGB(255, 255, 255), RGB(216, 224, 232));
+    drawBox(hdc, kSettingsDialogX + 16, ry, kSettingsDialogW - 32, kSettingsRowH, RGB(255, 255, 255), RGB(216, 224, 232));
     renderSettingsRowContent(hdc, r);
   }
 
-  // 5. 下部ボタン群 (Y = 312, 非選択ベース状態)
-  const int btnY = kSettingsDialogY + 312;
+  // 5. 下部ボタン群 (非選択ベース状態)
+  const int btnY = kSettingsBtnY;
   const int btnW = 160;
   const int btnH = 42;
   const int btn0X = kSettingsDialogX + 135;
@@ -796,21 +870,21 @@ static void renderSettingsMainBase(HDC hdc) {
 
   // 6. ガイド
   SelectObject(hdc, sUiFontTiny);
-  drawTextLine(hdc, kSettingsDialogX, kSettingsDialogY + 380, kSettingsDialogW, 18,
-               RGB(125, 135, 148), L"[↑/↓]:項目選択   [←/→/Enter]:変更・実行   [Esc]:閉じる",
+  drawTextLine(hdc, kSettingsDialogX, kSettingsDialogY + 394, kSettingsDialogW, 18,
+               RGB(125, 135, 148), L"[↑/↓]:項目選択   [←/→/Enter]:変更・実行   [Esc/戻る]:閉じる",
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
 static void renderSettingsMainOverlay(HDC hdc) {
-  if (sSettingsFocus >= 0 && sSettingsFocus < 4) {
+  if (sSettingsFocus >= 0 && sSettingsFocus < kSettingsRowCount) {
     int r = sSettingsFocus;
     int ry = kSettingsRowY[r];
     // 選択行のハイライト枠 + 左端緑バー
-    drawBox(hdc, kSettingsDialogX + 16, ry, kSettingsDialogW - 32, 54, RGB(232, 246, 244), RGB(79, 191, 175));
-    drawBox(hdc, kSettingsDialogX + 16, ry, 6, 54, RGB(79, 191, 175), RGB(79, 191, 175));
+    drawBox(hdc, kSettingsDialogX + 16, ry, kSettingsDialogW - 32, kSettingsRowH, RGB(232, 246, 244), RGB(79, 191, 175));
+    drawBox(hdc, kSettingsDialogX + 16, ry, 6, kSettingsRowH, RGB(79, 191, 175), RGB(79, 191, 175));
     renderSettingsRowContent(hdc, r);
-  } else if (sSettingsFocus == 4) {
-    const int btnY = kSettingsDialogY + 312;
+  } else if (sSettingsFocus == kSettingsRowCount) {
+    const int btnY = kSettingsBtnY;
     const int btnW = 160;
     const int btnH = 42;
     const int btn0X = kSettingsDialogX + 135;
@@ -832,115 +906,431 @@ static void renderSettingsMainDialog(HDC hdc) {
   renderSettingsMainOverlay(hdc);
 }
 
-static void renderKeyConfigDialog(HDC hdc) {
-  // 1. ドロップシャドウ
-  drawBox(hdc, kKeyDialogX + 5, kKeyDialogY + 5, kKeyDialogW, kKeyDialogH,
-          RGB(136, 153, 166), RGB(136, 153, 166));
+// =============================================================================
+// B2. LLCubic (3D立体グラフ) 操作ガイド (特設2ペイン高速ダイアログ)
+// =============================================================================
+struct GuideTopic {
+  const wchar_t * shortTitle;
+  const wchar_t * fullTitle;
+  const wchar_t * body;
+};
 
-  // 2. 本体
-  drawBox(hdc, kKeyDialogX, kKeyDialogY, kKeyDialogW, kKeyDialogH,
+static constexpr GuideTopic kGuideTopics[kGuideTopicCount] = {
+  {
+    L"1. LLCubic の概要",
+    L"1. LLCubic (3D立体グラフ) とは",
+    L"【2つのタブ構成】\n"
+    L"・Expressions : 立体・曲面の追加と自然表示での数式編集、表示範囲(Axes)の設定を行います。\n"
+    L"・3D Plot : 定義した3Dグラフの立体描画、回転、トレース、断面解析、交線解析を行います。\n\n"
+    L"【特徴】\n"
+    L"最大5つまでの曲面・平面・二次曲面を重ねて描画でき、表示枠で美しくクリッピング表示されます。"
+  },
+  {
+    L"2. リアルタイム自然入力",
+    L"2. 数式のリアルタイム自然表示入力",
+    L"【2D自然表示エディタ】\n"
+    L"Expressions タブで項目を選び [OK / Enter] を押すと、その場で2D自然表示の数式エディタが開きます。\n\n"
+    L"・分数 ( / )、累乗 ( ^ )、平方根 ( √ ) などを入力した瞬間から教科書通りの自然表示で編集できます。\n"
+    L"・[F1] (Toolbox) から三角関数・指数対数・絶対値などの関数一覧を呼び出せます。\n"
+    L"・[F2] キーで数字モード(12x)と英字モード(abc)を切り替え、x, y や u, v を素早く入力できます。"
+  },
+  {
+    L"3. 陽関数 z = f(x, y)",
+    L"3. 陽関数曲面 z = f(x, y) の描画",
+    L"【基本の2変数関数】\n"
+    L"Add Object から z = f(x,y) を選ぶと、x と y の式から高さを計算する曲面を描画します。\n\n"
+    L"【入力例】\n"
+    L"sin(x) * cos(y)\n"
+    L"(x^2 - y^2) / 2\n"
+    L"x^2 + y^2 - 5\n\n"
+    L"※ 枠外にはみ出す部分も指定した表示枠で自動的に切断されるため、極端な関数でも軽快に動作します。"
+  },
+  {
+    L"4. 媒介変数曲面 (u, v)",
+    L"4. 媒介変数曲面 X, Y, Z(u, v)",
+    L"【自由な3D曲面表現】\n"
+    L"Parametric [X,Y,Z] を選ぶと、パラメータ u, v を用いて X(u,v), Y(u,v), Z(u,v) の3つの自然表示式と u, v の範囲を自由に定義できます。\n\n"
+    L"【入力例 (トーラス)】\n"
+    L"(1.4 + 0.5*cos(v)) * cos(u)\n"
+    L"(1.4 + 0.5*cos(v)) * sin(u)\n"
+    L"0.5 * sin(v)"
+  },
+  {
+    L"5. 平面・球・円柱・円錐",
+    L"5. 基本立体 (平面・球・円柱・円錐)",
+    L"【係数入力だけで即座に描画】\n"
+    L"・Plane : 平面 a*x + b*y + c*z + d = 0 の係数 a, b, c, d を指定します。\n"
+    L"・Sphere : 球面の半径 r と中心座標を指定します。\n"
+    L"・Cylinder : 円柱の半径 r、高さ範囲、中心を指定します。\n"
+    L"・Cone : 円錐の傾き k、高さ範囲、中心を指定します。\n\n"
+    L"曲面と平面・球を組み合わせて交線や位置関係を調べる問題に最適です。"
+  },
+  {
+    L"6. 3D視点回転とズーム",
+    L"6. 3D視点回転・正面視・ズーム",
+    L"【3D Plot 画面での基本キー】\n"
+    L"・[← / →] : Z軸まわりに水平回転 (Azimuth)\n"
+    L"・[↑ / ↓] : 上下仰角の回転 (Elevation)\n"
+    L"・[PgUp / PgDn] (または +/-) : 拡大 / 縮小\n\n"
+    L"【中央 XYZ 原点軸】\n"
+    L"原点 O(0,0,0) から伸びる赤(X)・緑(Y)・青(Z)の直交軸で向きを一目で把握できます（[0] キーまたは上部バーの 3D Ax で ON/OFF 切替）。"
+  },
+  {
+    L"7. 上部設定バーの使い方",
+    L"7. 3D Plot 上部設定バーの操作",
+    L"【上部ツールバーへの移動】\n"
+    L"3D Plot 描画中に [Back] キーを押すと上部バーへ移動し、左右キーで6つの機能を選んで実行できます。\n\n"
+    L"・Axes : X, Y, Z の描画範囲設定を開く\n"
+    L"・3D Ax : 中央の原点 XYZ 軸表示の ON/OFF\n"
+    L"・Trace : 曲面上の座標トレースを開始/終了\n"
+    L"・Slice : 平面での断面スライス表示を切替\n"
+    L"・Rotate : 自動回転の ON/OFF\n"
+    L"・Solve : 2立体の交線・接点・位置関係解析"
+  },
+  {
+    L"8. 面・ワイヤー表示切替",
+    L"8. 描画スタイル切替 ([Space] キー)",
+    L"【描画モードの切り替え】\n"
+    L"3D Plot 画面で [Space] キーを押すごとに描画スタイルが切り替わります。\n\n"
+    L"1. 陰影付きサーフェス : 光源計算とZバッファ隠面消去で前後の重なりと立体感を鮮明に表示します。\n"
+    L"2. ワイヤーフレーム : 内部や裏側の構造が透けて見える高速な格子線表示です。\n"
+    L"3. 等高線・交線強調 : 高さや複数立体の交わりを分かりやすく表示します。"
+  },
+  {
+    L"9. トレースと交線吸着",
+    L"9. 3Dトレースと交線・接点への磁気吸着",
+    L"【曲面上の点移動と自動スナップ】\n"
+    L"上部バーの [Trace]（または [6] キー）でトレースモードに入ると、矢印キーで曲面上の点 (x, y, z) を移動できます。\n\n"
+    L"【交線・接点への磁気吸着】\n"
+    L"2つ以上の立体を表示しているとき、カーソルが他の立体との交線や接点に近づくと自動的に吸い付き、下部に [SNAP] と正確な交点座標が表示されます。"
+  },
+  {
+    L"10. 断面スライス解析",
+    L"10. 断面スライス表示 (X / Y / Z 切断)",
+    L"【平面による立体の切り口観察】\n"
+    L"上部バーの [Slice]（または [7] キー）を選ぶと、座標軸に垂直な平面で立体を切断した切り口をリアルタイムに観察できます。\n\n"
+    L"・[Slice] を押すごとに切断軸 (Z / X / Y / OFF) が切り替わります。\n"
+    L"・切断位置は矢印キーで移動でき、円錐曲線（楕円・放物線・双曲線）の観察にも便利です。"
+  },
+  {
+    L"11. 2立体の位置関係判定",
+    L"11. 2立体の位置関係解析 (Solve)",
+    L"【直線・平面・球などの幾何解析】\n"
+    L"複数の立体を登録した状態で上部バーの [Solve]（または [9] キー）を実行すると、2つの立体間の幾何学的関係を自動計算します。\n\n"
+    L"・2平面のなす角・平行・一致・交線の方程式\n"
+    L"・球面と平面の距離・接点座標・交円の中心と半径\n"
+    L"・2球面の中心間距離・外接・内接・交わり判定"
+  },
+  {
+    L"12. 表示範囲 (Axes) 設定",
+    L"12. 描画範囲 (Axes) とクリッピング",
+    L"【X, Y, Z 範囲のカスタマイズ】\n"
+    L"Expressions タブ下部の [Axes] カード、または 3D Plot 上部バーの [Axes] から X, Y, Z それぞれの最小値・最大値を設定できます。\n\n"
+    L"・初期値は X, Y, Z すべて [-2, 2] です。\n"
+    L"・範囲外の曲面は3Dボックス境界で正確に切り取られるため、見たい領域だけを拡大して観察できます。"
+  },
+  {
+    L"13. ショートカット一覧",
+    L"13. 3D Plot 便利ショートカットキー",
+    L"【12xモード時のワンタッチ操作】\n"
+    L"上部バーを開かなくても、以下の数字キーで各機能を即座に呼び出せます。\n\n"
+    L"・[Space] : 陰影面 / ワイヤー表示切替\n"
+    L"・[ 0 ] (Pキー) : 中央 XYZ 原点軸の ON/OFF\n"
+    L"・[ 6 ] (Yキー) : 3Dトレース開始 / 終了\n"
+    L"・[ 7 ] (Uキー) : 断面スライス切替\n"
+    L"・[ 8 ] (Iキー) : 自動回転 (Rotate) ON/OFF\n"
+    L"・[ 9 ] (Oキー) : 2立体の位置関係解析 (Solve)"
+  },
+  {
+    L"14. 快適に使うコツ",
+    L"14. Brain 実機で快適に使うコツ",
+    L"【高速レンダリング機構】\n"
+    L"Lilium の 3D エンジンは、数式の計算結果をメッシュキャッシュに保持し、視点回転やズーム時には固定小数点演算のみで高速に再投影します。\n\n"
+    L"・細かく回転させたい時は1回ずつ矢印キーを押し、素早く回したい時は長押ししてください。\n"
+    L"・複数の曲面が重なって見づらい時は、[Space] でワイヤー表示に切り替えると内部まで見通せます。"
+  }
+};
+
+static bool sGuidePageDirty = false;
+static constexpr int kGuideTocX = kGuideDialogX + 14;
+static constexpr int kGuideTocY = kGuideDialogY + 50;
+static constexpr int kGuideTocW = 246;
+static constexpr int kGuideRowH = 36;
+static constexpr int kGuidePaneX = kGuideDialogX + 280;
+static constexpr int kGuidePaneY = kGuideDialogY + 50;
+static constexpr int kGuidePaneW = 426;
+static constexpr int kGuidePaneH = kVisibleGuideRows * kGuideRowH; // 324
+
+static void renderLLCubicGuideTocBase(HDC hdc) {
+  // 左目次領域のクリア
+  drawBox(hdc, kGuideTocX - 2, kGuideTocY - 2, kGuideTocW + 18, kGuidePaneH + 4,
+          RGB(246, 248, 252), RGB(246, 248, 252));
+
+  SelectObject(hdc, sUiFontBold);
+  for (int r = 0; r < kVisibleGuideRows; r++) {
+    int idx = sGuideScrollOffset + r;
+    if (idx >= kGuideTopicCount) break;
+    int ry = kGuideTocY + r * kGuideRowH;
+    drawBox(hdc, kGuideTocX, ry, kGuideTocW, 32, RGB(255, 255, 255), RGB(216, 224, 232));
+    drawTextLine(hdc, kGuideTocX + 12, ry + 6, kGuideTocW - 18, 20,
+                 RGB(42, 52, 64), kGuideTopics[idx].shortTitle);
+  }
+
+  // 左目次スクロールバー
+  const int trackX = kGuideTocX + kGuideTocW + 4;
+  const int trackH = kGuidePaneH - 4;
+  drawBox(hdc, trackX, kGuideTocY, 8, trackH, RGB(232, 236, 242), RGB(212, 218, 226));
+  if (kGuideTopicCount > kVisibleGuideRows) {
+    int maxOffset = kGuideTopicCount - kVisibleGuideRows;
+    int thumbH = (kVisibleGuideRows * trackH) / kGuideTopicCount;
+    if (thumbH < 24) thumbH = 24;
+    int thumbY = kGuideTocY + (sGuideScrollOffset * (trackH - thumbH)) / maxOffset;
+    drawBox(hdc, trackX + 1, thumbY, 6, thumbH, RGB(140, 155, 170), RGB(115, 130, 145));
+  }
+}
+
+static void renderLLCubicGuideBase(HDC hdc) {
+  // 1. ドロップシャドウ & 本体
+  drawBox(hdc, kGuideDialogX + 5, kGuideDialogY + 5, kGuideDialogW, kGuideDialogH,
+          RGB(136, 153, 166), RGB(136, 153, 166));
+  drawBox(hdc, kGuideDialogX, kGuideDialogY, kGuideDialogW, kGuideDialogH,
           RGB(246, 248, 252), RGB(165, 178, 194));
 
-  // 3. ヘッダー
-  drawBox(hdc, kKeyDialogX, kKeyDialogY, kKeyDialogW, 36,
+  // 2. ヘッダー
+  drawBox(hdc, kGuideDialogX, kGuideDialogY, kGuideDialogW, 38,
           RGB(79, 191, 175), RGB(50, 160, 145));
   SelectObject(hdc, sUiFontBold);
-  drawTextLine(hdc, kKeyDialogX, kKeyDialogY + 8, kKeyDialogW, 20,
-               RGB(255, 255, 255), L"【 キー配置変更（数字入力モード: 12x） 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  drawTextLine(hdc, kGuideDialogX, kGuideDialogY + 9, kGuideDialogW, 20,
+               RGB(255, 255, 255), L"【 LLCubic (3D立体グラフ) 操作ガイド 】",
+               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-  // 4. サブガイド
+  // 3. 左ペイン目次ベース
+  renderLLCubicGuideTocBase(hdc);
+
+  // 4. 下部フッター
+  const int footY = kGuideDialogY + 382;
+  drawBox(hdc, kGuideDialogX + 14, footY, kGuideDialogW - 28, 48,
+          RGB(242, 246, 248), RGB(216, 224, 232));
   SelectObject(hdc, sUiFontTiny);
-  drawTextLine(hdc, kKeyDialogX + 16, kKeyDialogY + 44, kKeyDialogW - 32, 16,
-               RGB(80, 90, 100), L"各機能を選択して [Enter] を押すと割り当てキーを変更できます（Escで戻る）");
+  drawTextLine(hdc, kGuideDialogX + 24, footY + 15, 530, 18, RGB(70, 82, 96),
+               L"[↑/↓]: トピック選択   [PgUp/PgDn]: ページ移動   [Enter / Esc / 戻る]: 設定へ戻る");
 
-  // 5. リスト描画 (8行)
-  const int totalActions = Config::getActionCount();
-  const int startY = kKeyDialogY + 68;
-  const int rowH = 36;
+  SelectObject(hdc, sUiFontBold);
+  drawBox(hdc, kGuideDialogX + 576, footY + 7, 130, 34, RGB(79, 191, 175), RGB(40, 150, 135));
+  drawTextLine(hdc, kGuideDialogX + 576, footY + 7, 130, 34, RGB(255, 255, 255),
+               L"設定に戻る", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+}
 
-  for (int r = 0; r < kVisibleKeyRows; r++) {
-    int actIdx = sKeyScrollOffset + r;
-    if (actIdx >= totalActions) break;
-
-    const Config::ActionInfo & act = Config::getActionInfo(actIdx);
-    int ry = startY + r * rowH;
-    bool isSel = (actIdx == sKeySelectedIndex);
-
-    COLORREF rowBg = isSel ? RGB(232, 246, 244) : RGB(255, 255, 255);
-    COLORREF rowBorder = isSel ? RGB(79, 191, 175) : RGB(218, 226, 234);
-    drawBox(hdc, kKeyDialogX + 16, ry, 640, 32, rowBg, rowBorder);
-
-    // インジケーター
+static void renderLLCubicGuideOverlay(HDC hdc) {
+  int visRow = sGuideSelectedIndex - sGuideScrollOffset;
+  if (visRow >= 0 && visRow < kVisibleGuideRows) {
+    int ry = kGuideTocY + visRow * kGuideRowH;
+    drawBox(hdc, kGuideTocX, ry, kGuideTocW, 32, RGB(232, 246, 244), RGB(79, 191, 175));
+    drawBox(hdc, kGuideTocX, ry, 6, 32, RGB(79, 191, 175), RGB(79, 191, 175));
     SelectObject(hdc, sUiFontBold);
-    if (isSel) {
-      drawTextLine(hdc, kKeyDialogX + 22, ry + 6, 20, 20, RGB(22, 122, 110), L"▶");
-    }
+    drawTextLine(hdc, kGuideTocX + 12, ry + 6, kGuideTocW - 18, 20,
+                 RGB(16, 96, 86), kGuideTopics[sGuideSelectedIndex].shortTitle);
+  }
 
-    // 機能名
-    drawTextLine(hdc, kKeyDialogX + 46, ry + 6, 220, 20,
-                 isSel ? RGB(16, 96, 86) : RGB(35, 45, 55),
-                 act.nameJa);
+  // 右ペイン詳細カード描画
+  drawBox(hdc, kGuidePaneX, kGuidePaneY, kGuidePaneW, kGuidePaneH - 4,
+          RGB(255, 255, 255), RGB(192, 210, 216));
+  drawBox(hdc, kGuidePaneX, kGuidePaneY, kGuidePaneW, 34,
+          RGB(232, 246, 244), RGB(180, 218, 212));
+  SelectObject(hdc, sUiFontBold);
+  drawTextLine(hdc, kGuidePaneX + 12, kGuidePaneY + 7, kGuidePaneW - 24, 20,
+               RGB(18, 96, 86), kGuideTopics[sGuideSelectedIndex].fullTitle);
 
-    // チートシート表示プレビュー
-    SelectObject(hdc, sUiFontTiny);
-    wchar_t shortBuf[32];
-    swprintf(shortBuf, L"(表示: %s)", act.shortLabel);
-    drawTextLine(hdc, kKeyDialogX + 270, ry + 8, 140, 18, RGB(110, 125, 138), shortBuf);
+  drawWrappedHelpDesc(hdc,
+                      kGuidePaneX + 14,
+                      kGuidePaneY + 44,
+                      kGuidePaneW - 28,
+                      kGuidePaneY + kGuidePaneH - 12,
+                      kGuideTopics[sGuideSelectedIndex].body);
+}
 
-    // 割り当て物理キーボタン
-    SelectObject(hdc, sUiFontBold);
+static void renderLLCubicGuideDialog(HDC hdc) {
+  renderLLCubicGuideBase(hdc);
+  renderLLCubicGuideOverlay(hdc);
+}
+
+// =============================================================================
+// C. キー配置変更ダイアログ (カテゴリタブ + Base/Overlay 超高速リスト)
+// =============================================================================
+static constexpr const wchar_t * kKeyTabNames[kKeyTabCount] = {
+  L"すべて",
+  L"数字・演算",
+  L"関数・定数",
+  L"括弧・記号",
+  L"編集・他"
+};
+
+static constexpr int kKeyTabY = kKeyDialogY + 42;
+static constexpr int kKeyTabH = 26;
+static constexpr int kKeyTabW = 134;
+static constexpr int kKeyTabGap = 4;
+static constexpr int kKeyListStartY = kKeyDialogY + 74;
+static constexpr int kKeyRowH = 35;
+static constexpr int kKeyRowCardW = 656;
+static constexpr int kKeyFootY = kKeyDialogY + 380;
+
+static void renderKeyConfigRowCard(HDC hdc, int r, bool isSel) {
+  int filtIdx = sKeyScrollOffset + r;
+  if (filtIdx < 0 || filtIdx >= sFilteredCount) {
+    return;
+  }
+  int actIdx = sFilteredActions[filtIdx];
+  const Config::ActionInfo & act = Config::getActionInfo(actIdx);
+  int ry = kKeyListStartY + r * kKeyRowH;
+
+  COLORREF rowBg = isSel ? RGB(232, 246, 244) : RGB(255, 255, 255);
+  COLORREF rowBorder = isSel ? RGB(79, 191, 175) : RGB(218, 226, 234);
+  drawBox(hdc, kKeyDialogX + 16, ry, kKeyRowCardW, 31, rowBg, rowBorder);
+  if (isSel) {
+    // 非JIS文字 '▶' を使わず FillRect 緑バーで超高速描画
+    drawBox(hdc, kKeyDialogX + 16, ry, 6, 31, RGB(79, 191, 175), RGB(79, 191, 175));
+  }
+
+  // 機能名
+  SelectObject(hdc, sUiFontBold);
+  drawTextLine(hdc, kKeyDialogX + 30, ry + 5, 250, 20,
+               isSel ? RGB(16, 96, 86) : RGB(35, 45, 55),
+               act.nameJa);
+
+  // チートシート表示プレビュー
+  SelectObject(hdc, sUiFontTiny);
+  wchar_t shortBuf[32];
+  swprintf(shortBuf, L"(表示: %s)", act.shortLabel);
+  drawTextLine(hdc, kKeyDialogX + 286, ry + 7, 160, 17, RGB(110, 125, 138), shortBuf);
+
+  // 割り当て物理キーバッジ
+  SelectObject(hdc, sUiFontBold);
+  const int badgeX = kKeyDialogX + 468;
+  const int badgeW = 192;
+  if (act.currentVk == 0) {
+    COLORREF badgeBg = isSel ? RGB(246, 248, 251) : RGB(244, 246, 249);
+    drawBox(hdc, badgeX, ry + 3, badgeW, 25, badgeBg, RGB(206, 214, 222));
+    drawTextLine(hdc, badgeX, ry + 3, badgeW, 25,
+                 RGB(132, 142, 155), L"未割り当て", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  } else {
     const wchar_t * keyName = Config::getKeyName(act.currentVk);
     wchar_t keyBtnText[32];
     swprintf(keyBtnText, L"[ %s ] キー", keyName);
+    COLORREF badgeBg = isSel ? RGB(255, 255, 255) : RGB(238, 247, 245);
+    COLORREF badgeBorder = isSel ? RGB(79, 191, 175) : RGB(175, 210, 205);
+    drawBox(hdc, badgeX, ry + 3, badgeW, 25, badgeBg, badgeBorder);
+    drawTextLine(hdc, badgeX, ry + 3, badgeW, 25,
+                 RGB(20, 96, 86), keyBtnText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  }
+}
 
-    COLORREF keyBtnBg = isSel ? RGB(255, 255, 255) : RGB(242, 245, 248);
-    COLORREF keyBtnBorder = isSel ? RGB(79, 191, 175) : RGB(195, 204, 214);
-    drawBox(hdc, kKeyDialogX + 460, ry + 3, 180, 26, keyBtnBg, keyBtnBorder);
-    drawTextLine(hdc, kKeyDialogX + 460, ry + 3, 180, 26,
-                 RGB(24, 76, 70), keyBtnText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+static void renderKeyConfigListAndTabsBase(HDC hdc) {
+  if (sFilteredCount <= 0) {
+    rebuildFilteredKeyActions();
+  }
+  // タブ＋リスト領域をダイアログ背景色で一括クリア
+  drawBox(hdc, kKeyDialogX + 12, kKeyTabY - 2, kKeyDialogW - 24,
+          (kKeyFootY - 4) - (kKeyTabY - 2),
+          RGB(246, 248, 252), RGB(246, 248, 252));
+
+  // 1. カテゴリ絞り込みタブ (5個)
+  SelectObject(hdc, sUiFontBold);
+  for (int t = 0; t < kKeyTabCount; t++) {
+    int tx = kKeyDialogX + 16 + t * (kKeyTabW + kKeyTabGap);
+    bool active = (t == sKeyCategoryTab);
+    COLORREF tabBg = active ? RGB(79, 191, 175) : RGB(234, 240, 246);
+    COLORREF tabBorder = active ? RGB(40, 150, 135) : RGB(198, 208, 218);
+    COLORREF tabText = active ? RGB(255, 255, 255) : RGB(58, 70, 84);
+    drawBox(hdc, tx, kKeyTabY, kKeyTabW, kKeyTabH, tabBg, tabBorder);
+    drawTextLine(hdc, tx, kKeyTabY, kKeyTabW, kKeyTabH, tabText,
+                 kKeyTabNames[t], DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   }
 
-  // 6. スクロールバー
-  const int trackX = kKeyDialogX + 664;
-  const int trackY = startY;
-  const int trackH = kVisibleKeyRows * rowH;
+  // 2. 非選択ベース状態で8行カードを描画
+  for (int r = 0; r < kVisibleKeyRows; r++) {
+    if (sKeyScrollOffset + r >= sFilteredCount) break;
+    renderKeyConfigRowCard(hdc, r, false);
+  }
+
+  // 3. スクロールバー
+  const int trackX = kKeyDialogX + 680;
+  const int trackY = kKeyListStartY;
+  const int trackH = kVisibleKeyRows * kKeyRowH - 4;
   drawBox(hdc, trackX, trackY, 10, trackH, RGB(232, 236, 242), RGB(212, 218, 226));
 
-  if (totalActions > kVisibleKeyRows) {
-    int maxOffset = totalActions - kVisibleKeyRows;
-    int thumbH = (kVisibleKeyRows * trackH) / totalActions;
+  if (sFilteredCount > kVisibleKeyRows) {
+    int maxOffset = sFilteredCount - kVisibleKeyRows;
+    int thumbH = (kVisibleKeyRows * trackH) / sFilteredCount;
     if (thumbH < 24) thumbH = 24;
     int thumbY = trackY + (sKeyScrollOffset * (trackH - thumbH)) / maxOffset;
     drawBox(hdc, trackX + 1, thumbY, 8, thumbH, RGB(140, 155, 170), RGB(115, 130, 145));
   }
+}
 
-  // 7. 最下部操作バー
-  const int footY = kKeyDialogY + 368;
-  drawBox(hdc, kKeyDialogX + 16, footY, 668, 56, RGB(242, 246, 248), RGB(216, 224, 232));
+static void renderKeyConfigBase(HDC hdc) {
+  rebuildFilteredKeyActions();
+
+  // 1. ドロップシャドウ & 本体
+  drawBox(hdc, kKeyDialogX + 5, kKeyDialogY + 5, kKeyDialogW, kKeyDialogH,
+          RGB(136, 153, 166), RGB(136, 153, 166));
+  drawBox(hdc, kKeyDialogX, kKeyDialogY, kKeyDialogW, kKeyDialogH,
+          RGB(246, 248, 252), RGB(165, 178, 194));
+
+  // 2. ヘッダー
+  drawBox(hdc, kKeyDialogX, kKeyDialogY, kKeyDialogW, 34,
+          RGB(79, 191, 175), RGB(50, 160, 145));
+  SelectObject(hdc, sUiFontBold);
+  drawTextLine(hdc, kKeyDialogX, kKeyDialogY + 7, kKeyDialogW, 20,
+               RGB(255, 255, 255), L"【 キー配置変更（数字入力モード: 12x / 全物理キー対応） 】",
+               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+  // 3. タブ + リスト本体
+  renderKeyConfigListAndTabsBase(hdc);
+
+  // 4. 最下部操作バー
+  drawBox(hdc, kKeyDialogX + 16, kKeyFootY, kKeyDialogW - 32, 54,
+          RGB(242, 246, 248), RGB(216, 224, 232));
+
+  SelectObject(hdc, sUiFontTiny);
+  drawTextLine(hdc, kKeyDialogX + 24, kKeyFootY + 10, 290, 16, RGB(55, 68, 80),
+               L"[←/→]:タブ切替  [↑/↓]:選択  [Enter]:キー変更");
+  drawTextLine(hdc, kKeyDialogX + 24, kKeyFootY + 29, 290, 16, RGB(95, 108, 120),
+               L"[PgUp/PgDn]:ページ  [Esc/戻る]:設定画面へ");
 
   SelectObject(hdc, sUiFontBold);
+  // [ 未割当にする ] ボタン
+  drawBox(hdc, kKeyDialogX + 318, kKeyFootY + 10, 118, 34, RGB(244, 246, 249), RGB(192, 202, 214));
+  drawTextLine(hdc, kKeyDialogX + 318, kKeyFootY + 10, 118, 34, RGB(70, 82, 96),
+               L"未割当にする", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
   // [ デフォルトに戻す ] ボタン
-  drawBox(hdc, kKeyDialogX + 400, footY + 11, 150, 34, RGB(255, 245, 244), RGB(220, 180, 175));
-  drawTextLine(hdc, kKeyDialogX + 400, footY + 11, 150, 34, RGB(180, 60, 50),
+  drawBox(hdc, kKeyDialogX + 444, kKeyFootY + 10, 142, 34, RGB(255, 245, 244), RGB(220, 180, 175));
+  drawTextLine(hdc, kKeyDialogX + 444, kKeyFootY + 10, 142, 34, RGB(180, 60, 50),
                L"デフォルトに戻す", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
   // [ 戻　る ] ボタン
-  drawBox(hdc, kKeyDialogX + 565, footY + 11, 105, 34, RGB(79, 191, 175), RGB(40, 150, 135));
-  drawTextLine(hdc, kKeyDialogX + 565, footY + 11, 105, 34, RGB(255, 255, 255),
+  drawBox(hdc, kKeyDialogX + 594, kKeyFootY + 10, 102, 34, RGB(79, 191, 175), RGB(40, 150, 135));
+  drawTextLine(hdc, kKeyDialogX + 594, kKeyFootY + 10, 102, 34, RGB(255, 255, 255),
                L"戻　る", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+}
 
-  SelectObject(hdc, sUiFontTiny);
-  drawTextLine(hdc, kKeyDialogX + 26, footY + 12, 360, 16, RGB(60, 72, 84),
-               L"[Enter]: 選択項目のキーを変更する");
-  drawTextLine(hdc, kKeyDialogX + 26, footY + 30, 360, 16, RGB(100, 112, 124),
-               L"[↑/↓]: 選択   [PgUp/PgDn]: スクロール   [Esc]: 戻る");
+static void renderKeyConfigOverlay(HDC hdc) {
+  int visRow = sKeySelectedIndex - sKeyScrollOffset;
+  if (visRow >= 0 && visRow < kVisibleKeyRows && sKeySelectedIndex < sFilteredCount) {
+    renderKeyConfigRowCard(hdc, visRow, true);
+  }
+}
+
+static void renderKeyConfigDialog(HDC hdc) {
+  renderKeyConfigBase(hdc);
+  renderKeyConfigOverlay(hdc);
 }
 
 static void renderWaitingForKeyOverlay(HDC hdc) {
   const int boxW = 540;
-  const int boxH = 170;
+  const int boxH = 180;
   const int boxX = (kBrainScreenWidth - boxW) / 2;  // 130
-  const int boxY = (kBrainScreenHeight - boxH) / 2; // 155
+  const int boxY = (kBrainScreenHeight - boxH) / 2; // 150
 
   // ドロップシャドウ
   drawBox(hdc, boxX + 6, boxY + 6, boxW, boxH, RGB(80, 90, 100), RGB(80, 90, 100));
@@ -974,11 +1364,15 @@ static void renderWaitingForKeyOverlay(HDC hdc) {
                  DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   }
 
-  // キャンセル案内
+  // 下部2ボタン ([BackSpace: 未割り当てにする] / [Esc: キャンセル])
   SelectObject(hdc, sUiFontTiny);
-  drawBox(hdc, boxX + 180, boxY + 118, 180, 32, RGB(240, 244, 248), RGB(190, 200, 212));
-  drawTextLine(hdc, boxX + 180, boxY + 118, 180, 32, RGB(70, 80, 95),
-               L"[Esc]: キャンセルして戻る", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  drawBox(hdc, boxX + 64, boxY + 124, 196, 34, RGB(244, 246, 249), RGB(192, 202, 214));
+  drawTextLine(hdc, boxX + 64, boxY + 124, 196, 34, RGB(65, 78, 92),
+               L"[BackSpace]: 未割り当てに解除", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+  drawBox(hdc, boxX + 280, boxY + 124, 196, 34, RGB(240, 244, 248), RGB(190, 200, 212));
+  drawTextLine(hdc, boxX + 280, boxY + 124, 196, 34, RGB(70, 80, 95),
+               L"[Esc / F10]: キャンセル", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
 static void renderKeyChangeConfirmDialog(HDC hdc) {
@@ -1015,7 +1409,9 @@ static void renderKeyChangeConfirmDialog(HDC hdc) {
 
   SelectObject(hdc, sUiFontTiny);
   drawTextLine(hdc, boxX + 16, boxY + 98, boxW - 32, 16, RGB(100, 110, 120),
-               L"よろしいですか？（※重複したキーは自動で入れ替わります）",
+               (sPendingNewVk == 0)
+                 ? L"よろしいですか？（※この機能へのキー割り当てを解除します）"
+                 : L"よろしいですか？（※重複したキーは自動で入れ替わります）",
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
   // 2ボタン
@@ -1119,6 +1515,12 @@ static void getModalBoundingRect(ModalMode mode, int & x, int & y, int & w, int 
       w = kSettingsDialogW + 8;
       h = kSettingsDialogH + 8;
       break;
+    case ModalMode::LLCubicGuide:
+      x = kGuideDialogX;
+      y = kGuideDialogY;
+      w = kGuideDialogW + 8;
+      h = kGuideDialogH + 8;
+      break;
     case ModalMode::KeyConfig:
     case ModalMode::WaitingForKey:
     case ModalMode::KeyChangeConfirm:
@@ -1138,7 +1540,10 @@ static void getModalBoundingRect(ModalMode mode, int & x, int & y, int & w, int 
 }
 
 static bool isModalOverlaySupported(ModalMode mode) {
-  return mode == ModalMode::ExitConfirm || mode == ModalMode::SettingsMain;
+  return mode == ModalMode::ExitConfirm ||
+         mode == ModalMode::SettingsMain ||
+         mode == ModalMode::LLCubicGuide ||
+         mode == ModalMode::KeyConfig;
 }
 
 static void getModalDirtyRect(ModalMode mode, int & dx, int & dy, int & dw, int & dh) {
@@ -1156,11 +1561,11 @@ static void getModalDirtyRect(ModalMode mode, int & dx, int & dy, int & dw, int 
       rA = rB;
     }
 
-    int y0_A = (rA >= 0 && rA < 4) ? kSettingsRowY[rA] : (kSettingsDialogY + 312);
-    int y1_A = y0_A + ((rA >= 0 && rA < 4) ? 54 : 44);
+    int y0_A = (rA >= 0 && rA < kSettingsRowCount) ? kSettingsRowY[rA] : kSettingsBtnY;
+    int y1_A = y0_A + ((rA >= 0 && rA < kSettingsRowCount) ? kSettingsRowH : 44);
 
-    int y0_B = (rB >= 0 && rB < 4) ? kSettingsRowY[rB] : (kSettingsDialogY + 312);
-    int y1_B = y0_B + ((rB >= 0 && rB < 4) ? 54 : 44);
+    int y0_B = (rB >= 0 && rB < kSettingsRowCount) ? kSettingsRowY[rB] : kSettingsBtnY;
+    int y1_B = y0_B + ((rB >= 0 && rB < kSettingsRowCount) ? kSettingsRowH : 44);
 
     int minY = (y0_A < y0_B) ? y0_A : y0_B;
     int maxY = (y1_A > y1_B) ? y1_A : y1_B;
@@ -1169,6 +1574,37 @@ static void getModalDirtyRect(ModalMode mode, int & dx, int & dy, int & dw, int 
     dy = minY - 4;
     dw = kSettingsDialogW - 24;
     dh = (maxY - minY) + 8;
+    return;
+  }
+  if (mode == ModalMode::LLCubicGuide) {
+    dx = kGuideTocX - 4;
+    dy = kGuideTocY - 4;
+    dw = (kGuidePaneX + kGuidePaneW + 4) - dx;
+    dh = kGuidePaneH + 8;
+    return;
+  }
+  if (mode == ModalMode::KeyConfig) {
+    int curRow = sKeySelectedIndex - sKeyScrollOffset;
+    if (curRow < 0) curRow = 0;
+    if (curRow >= kVisibleKeyRows) curRow = kVisibleKeyRows - 1;
+
+    if (sKeyListPageDirty || sLastKeyRowOnScreen < 0 ||
+        sLastKeyScrollOffset != sKeyScrollOffset ||
+        sLastKeyCategoryTab != sKeyCategoryTab) {
+      dx = kKeyDialogX + 12;
+      dy = kKeyTabY - 4;
+      dw = kKeyDialogW - 24;
+      dh = (kKeyFootY - 2) - dy;
+      return;
+    }
+
+    int prevRow = sLastKeyRowOnScreen;
+    int minR = (prevRow < curRow) ? prevRow : curRow;
+    int maxR = (prevRow > curRow) ? prevRow : curRow;
+    dx = kKeyDialogX + 14;
+    dy = kKeyListStartY + minR * kKeyRowH - 2;
+    dw = kKeyRowCardW + 4;
+    dh = (maxR - minR + 1) * kKeyRowH + 4;
     return;
   }
   getModalBoundingRect(mode, dx, dy, dw, dh);
@@ -1181,6 +1617,12 @@ static void renderActiveModalBase(HDC hdc) {
       break;
     case ModalMode::SettingsMain:
       renderSettingsMainBase(hdc);
+      break;
+    case ModalMode::LLCubicGuide:
+      renderLLCubicGuideBase(hdc);
+      break;
+    case ModalMode::KeyConfig:
+      renderKeyConfigBase(hdc);
       break;
     default:
       break;
@@ -1195,6 +1637,12 @@ static void renderActiveModalOverlay(HDC hdc) {
     case ModalMode::SettingsMain:
       renderSettingsMainOverlay(hdc);
       break;
+    case ModalMode::LLCubicGuide:
+      renderLLCubicGuideOverlay(hdc);
+      break;
+    case ModalMode::KeyConfig:
+      renderKeyConfigOverlay(hdc);
+      break;
     default:
       break;
   }
@@ -1207,6 +1655,9 @@ static void renderActiveModal(HDC hdc) {
       break;
     case ModalMode::SettingsMain:
       renderSettingsMainDialog(hdc);
+      break;
+    case ModalMode::LLCubicGuide:
+      renderLLCubicGuideDialog(hdc);
       break;
     case ModalMode::KeyConfig:
       renderKeyConfigDialog(hdc);
@@ -1239,6 +1690,7 @@ bool isModalOpen() {
 void closeModal() {
   sModalMode = ModalMode::None;
   sBackdropValid = false;
+  sCleanDarkValid = false;
   sCalcDirty = true;
   sDirtyMinX = 0;
   sDirtyMinY = 0;
@@ -1248,6 +1700,12 @@ void closeModal() {
   sLastExitConfirmFocus = -1;
   sLastSettingsFocus = -1;
   sLastSettingsSubFocus = -1;
+  sLastKeyRowOnScreen = -1;
+  sLastKeyScrollOffset = -1;
+  sLastKeyCategoryTab = -1;
+  sLastGuideScrollOffset = -1;
+  sKeyListPageDirty = false;
+  sGuidePageDirty = false;
   draw();
 }
 
@@ -1269,6 +1727,30 @@ void showSettingsDialog() {
   sSettingsSubFocus = 0;
   sLastSettingsFocus = -1;
   sLastSettingsSubFocus = -1;
+  sBackdropValid = false;
+  refreshModal();
+}
+
+static void openKeyConfigModal() {
+  sModalMode = ModalMode::KeyConfig;
+  sKeyCategoryTab = 0;
+  sKeySelectedIndex = 0;
+  sKeyScrollOffset = 0;
+  rebuildFilteredKeyActions();
+  sLastKeyRowOnScreen = -1;
+  sLastKeyScrollOffset = -1;
+  sLastKeyCategoryTab = -1;
+  sKeyListPageDirty = false;
+  sBackdropValid = false;
+  refreshModal();
+}
+
+static void openLLCubicGuideModal() {
+  sModalMode = ModalMode::LLCubicGuide;
+  sGuideSelectedIndex = 0;
+  sGuideScrollOffset = 0;
+  sLastGuideScrollOffset = -1;
+  sGuidePageDirty = false;
   sBackdropValid = false;
   refreshModal();
 }
@@ -1327,7 +1809,7 @@ bool handleModalKey(WPARAM vkCode) {
           }
           return true;
         case VK_DOWN:
-          if (sSettingsFocus < 4) {
+          if (sSettingsFocus < kSettingsRowCount) {
             sSettingsFocus++;
             refreshModal();
           }
@@ -1342,7 +1824,7 @@ bool handleModalKey(WPARAM vkCode) {
             Config::setLogEnabled(!Config::isLogEnabled());
             sBackdropValid = false;
             refreshModal();
-          } else if (sSettingsFocus == 4) {
+          } else if (sSettingsFocus == kSettingsRowCount) {
             sSettingsSubFocus = 1 - sSettingsSubFocus;
             refreshModal();
           }
@@ -1357,11 +1839,7 @@ bool handleModalKey(WPARAM vkCode) {
             sBackdropValid = false;
             refreshModal();
           } else if (sSettingsFocus == 2) {
-            sModalMode = ModalMode::KeyConfig;
-            sKeySelectedIndex = 0;
-            sKeyScrollOffset = 0;
-            sBackdropValid = false;
-            refreshModal();
+            openKeyConfigModal();
           } else if (sSettingsFocus == 3) {
             sPreviousModalMode = ModalMode::SettingsMain;
             sModalMode = ModalMode::ResetKeyConfirm;
@@ -1369,6 +1847,8 @@ bool handleModalKey(WPARAM vkCode) {
             sBackdropValid = false;
             refreshModal();
           } else if (sSettingsFocus == 4) {
+            openLLCubicGuideModal();
+          } else if (sSettingsFocus == kSettingsRowCount) {
             if (sSettingsSubFocus == 0) {
               Config::save();
               closeModal();
@@ -1387,46 +1867,153 @@ bool handleModalKey(WPARAM vkCode) {
           return true;
       }
 
-    case ModalMode::KeyConfig:
+    case ModalMode::LLCubicGuide:
       switch (vkCode) {
         case VK_UP:
-          if (sKeySelectedIndex > 0) {
-            sKeySelectedIndex--;
-            if (sKeySelectedIndex < sKeyScrollOffset) {
-              sKeyScrollOffset = sKeySelectedIndex;
+          if (sGuideSelectedIndex > 0) {
+            sGuideSelectedIndex--;
+            if (sGuideSelectedIndex < sGuideScrollOffset) {
+              sGuideScrollOffset = sGuideSelectedIndex;
+              sGuidePageDirty = true;
             }
             refreshModal();
           }
           return true;
         case VK_DOWN:
-          if (sKeySelectedIndex < Config::getActionCount() - 1) {
-            sKeySelectedIndex++;
-            if (sKeySelectedIndex >= sKeyScrollOffset + kVisibleKeyRows) {
-              sKeyScrollOffset = sKeySelectedIndex - (kVisibleKeyRows - 1);
+          if (sGuideSelectedIndex < kGuideTopicCount - 1) {
+            sGuideSelectedIndex++;
+            if (sGuideSelectedIndex >= sGuideScrollOffset + kVisibleGuideRows) {
+              sGuideScrollOffset = sGuideSelectedIndex - (kVisibleGuideRows - 1);
+              sGuidePageDirty = true;
             }
             refreshModal();
           }
           return true;
         case VK_PRIOR:
-          sKeySelectedIndex -= kVisibleKeyRows;
-          if (sKeySelectedIndex < 0) sKeySelectedIndex = 0;
-          if (sKeySelectedIndex < sKeyScrollOffset) sKeyScrollOffset = sKeySelectedIndex;
-          refreshModal();
+          if (sGuideSelectedIndex > 0) {
+            int oldOff = sGuideScrollOffset;
+            sGuideSelectedIndex -= kVisibleGuideRows;
+            if (sGuideSelectedIndex < 0) sGuideSelectedIndex = 0;
+            if (sGuideSelectedIndex < sGuideScrollOffset) sGuideScrollOffset = sGuideSelectedIndex;
+            if (sGuideScrollOffset != oldOff) sGuidePageDirty = true;
+            refreshModal();
+          }
           return true;
         case VK_NEXT:
-          sKeySelectedIndex += kVisibleKeyRows;
-          if (sKeySelectedIndex >= Config::getActionCount()) sKeySelectedIndex = Config::getActionCount() - 1;
-          if (sKeySelectedIndex >= sKeyScrollOffset + kVisibleKeyRows) {
-            sKeyScrollOffset = sKeySelectedIndex - (kVisibleKeyRows - 1);
+          if (sGuideSelectedIndex < kGuideTopicCount - 1) {
+            int oldOff = sGuideScrollOffset;
+            sGuideSelectedIndex += kVisibleGuideRows;
+            if (sGuideSelectedIndex >= kGuideTopicCount) sGuideSelectedIndex = kGuideTopicCount - 1;
+            if (sGuideSelectedIndex >= sGuideScrollOffset + kVisibleGuideRows) {
+              sGuideScrollOffset = sGuideSelectedIndex - (kVisibleGuideRows - 1);
+            }
+            if (sGuideScrollOffset != oldOff) sGuidePageDirty = true;
+            refreshModal();
           }
-          refreshModal();
           return true;
         case VK_RETURN:
-          sWaitingActionIndex = sKeySelectedIndex;
-          sWaitingError = false;
-          sModalMode = ModalMode::WaitingForKey;
+        case VK_ESCAPE:
+        case VK_BACK:
+          sModalMode = ModalMode::SettingsMain;
           sBackdropValid = false;
           refreshModal();
+          return true;
+        default:
+          return true;
+      }
+
+    case ModalMode::KeyConfig:
+      switch (vkCode) {
+        case VK_LEFT:
+          sKeyCategoryTab = (sKeyCategoryTab + kKeyTabCount - 1) % kKeyTabCount;
+          sKeySelectedIndex = 0;
+          sKeyScrollOffset = 0;
+          rebuildFilteredKeyActions();
+          sKeyListPageDirty = true;
+          refreshModal();
+          return true;
+        case VK_RIGHT:
+        case VK_TAB:
+          sKeyCategoryTab = (sKeyCategoryTab + 1) % kKeyTabCount;
+          sKeySelectedIndex = 0;
+          sKeyScrollOffset = 0;
+          rebuildFilteredKeyActions();
+          sKeyListPageDirty = true;
+          refreshModal();
+          return true;
+        case VK_UP:
+          if (sKeySelectedIndex > 0) {
+            int oldOff = sKeyScrollOffset;
+            sKeySelectedIndex--;
+            if (sKeySelectedIndex < sKeyScrollOffset) {
+              sKeyScrollOffset = sKeySelectedIndex;
+            }
+            if (sKeyScrollOffset != oldOff) {
+              sKeyListPageDirty = true;
+            }
+            refreshModal();
+          }
+          return true;
+        case VK_DOWN:
+          if (sKeySelectedIndex < sFilteredCount - 1) {
+            int oldOff = sKeyScrollOffset;
+            sKeySelectedIndex++;
+            if (sKeySelectedIndex >= sKeyScrollOffset + kVisibleKeyRows) {
+              sKeyScrollOffset = sKeySelectedIndex - (kVisibleKeyRows - 1);
+            }
+            if (sKeyScrollOffset != oldOff) {
+              sKeyListPageDirty = true;
+            }
+            refreshModal();
+          }
+          return true;
+        case VK_PRIOR:
+          if (sFilteredCount > 0) {
+            int oldOff = sKeyScrollOffset;
+            sKeySelectedIndex -= kVisibleKeyRows;
+            if (sKeySelectedIndex < 0) sKeySelectedIndex = 0;
+            if (sKeySelectedIndex < sKeyScrollOffset) sKeyScrollOffset = sKeySelectedIndex;
+            if (sKeyScrollOffset != oldOff) {
+              sKeyListPageDirty = true;
+            }
+            refreshModal();
+          }
+          return true;
+        case VK_NEXT:
+          if (sFilteredCount > 0) {
+            int oldOff = sKeyScrollOffset;
+            sKeySelectedIndex += kVisibleKeyRows;
+            if (sKeySelectedIndex >= sFilteredCount) sKeySelectedIndex = sFilteredCount - 1;
+            if (sKeySelectedIndex >= sKeyScrollOffset + kVisibleKeyRows) {
+              sKeyScrollOffset = sKeySelectedIndex - (kVisibleKeyRows - 1);
+            }
+            if (sKeyScrollOffset != oldOff) {
+              sKeyListPageDirty = true;
+            }
+            refreshModal();
+          }
+          return true;
+        case VK_RETURN:
+          if (sFilteredCount > 0) {
+            sWaitingActionIndex = sFilteredActions[sKeySelectedIndex];
+            sWaitingError = false;
+            sModalMode = ModalMode::WaitingForKey;
+            sBackdropValid = false;
+            refreshModal();
+          }
+          return true;
+        case VK_DELETE:
+          if (sFilteredCount > 0) {
+            int actIdx = sFilteredActions[sKeySelectedIndex];
+            if (Config::getActionInfo(actIdx).currentVk != 0) {
+              sPendingActionIndex = actIdx;
+              sPendingNewVk = 0;
+              sKeyChangeConfirmFocus = 0;
+              sModalMode = ModalMode::KeyChangeConfirm;
+              sBackdropValid = false;
+              refreshModal();
+            }
+          }
           return true;
         case VK_F4:
           sPreviousModalMode = ModalMode::KeyConfig;
@@ -1446,8 +2033,23 @@ bool handleModalKey(WPARAM vkCode) {
       }
 
     case ModalMode::WaitingForKey:
-      if (vkCode == VK_ESCAPE || vkCode == VK_BACK) {
+      if (vkCode == VK_ESCAPE || vkCode == VK_F10 || vkCode == VK_HOME) {
         sModalMode = ModalMode::KeyConfig;
+        sBackdropValid = false;
+        refreshModal();
+        return true;
+      }
+      if (vkCode == VK_BACK || vkCode == VK_DELETE) {
+        if (Config::getActionInfo(sWaitingActionIndex).currentVk == 0) {
+          sModalMode = ModalMode::KeyConfig;
+          sBackdropValid = false;
+          refreshModal();
+          return true;
+        }
+        sPendingActionIndex = sWaitingActionIndex;
+        sPendingNewVk = 0;
+        sKeyChangeConfirmFocus = 0;
+        sModalMode = ModalMode::KeyChangeConfirm;
         sBackdropValid = false;
         refreshModal();
         return true;
@@ -1558,46 +2160,34 @@ bool handleModalClick(int x, int y) {
 
   if (sModalMode == ModalMode::SettingsMain) {
     if (x >= kSettingsDialogX + 16 && x < kSettingsDialogX + kSettingsDialogW - 16) {
-      int ry0 = kSettingsDialogY + 52;
-      int ry1 = kSettingsDialogY + 114;
-      int ry2 = kSettingsDialogY + 176;
-      int ry3 = kSettingsDialogY + 238;
-
-      if (y >= ry0 && y < ry0 + 54) {
-        sSettingsFocus = 0;
-        Config::setHelpEnabled(!Config::isHelpEnabled());
-        sBackdropValid = false;
-        refreshModal();
-        return true;
-      }
-      if (y >= ry1 && y < ry1 + 54) {
-        sSettingsFocus = 1;
-        Config::setLogEnabled(!Config::isLogEnabled());
-        sBackdropValid = false;
-        refreshModal();
-        return true;
-      }
-      if (y >= ry2 && y < ry2 + 54) {
-        sSettingsFocus = 2;
-        sModalMode = ModalMode::KeyConfig;
-        sKeySelectedIndex = 0;
-        sKeyScrollOffset = 0;
-        sBackdropValid = false;
-        refreshModal();
-        return true;
-      }
-      if (y >= ry3 && y < ry3 + 54) {
-        sSettingsFocus = 3;
-        sPreviousModalMode = ModalMode::SettingsMain;
-        sModalMode = ModalMode::ResetKeyConfirm;
-        sResetConfirmFocus = 0;
-        sBackdropValid = false;
-        refreshModal();
-        return true;
+      for (int r = 0; r < kSettingsRowCount; r++) {
+        int ry = kSettingsRowY[r];
+        if (y >= ry && y < ry + kSettingsRowH) {
+          sSettingsFocus = r;
+          if (r == 0) {
+            Config::setHelpEnabled(!Config::isHelpEnabled());
+            sBackdropValid = false;
+            refreshModal();
+          } else if (r == 1) {
+            Config::setLogEnabled(!Config::isLogEnabled());
+            sBackdropValid = false;
+            refreshModal();
+          } else if (r == 2) {
+            openKeyConfigModal();
+          } else if (r == 3) {
+            sPreviousModalMode = ModalMode::SettingsMain;
+            sModalMode = ModalMode::ResetKeyConfirm;
+            sResetConfirmFocus = 0;
+            sBackdropValid = false;
+            refreshModal();
+          } else if (r == 4) {
+            openLLCubicGuideModal();
+          }
+          return true;
+        }
       }
     }
-    int btnY = kSettingsDialogY + 312;
-    if (y >= btnY && y < btnY + 42) {
+    if (y >= kSettingsBtnY && y < kSettingsBtnY + 42) {
       int btn0X = kSettingsDialogX + 135;
       int btn1X = kSettingsDialogX + 345;
       if (x >= btn0X && x < btn0X + 160) {
@@ -1614,36 +2204,124 @@ bool handleModalClick(int x, int y) {
     return true;
   }
 
+  if (sModalMode == ModalMode::LLCubicGuide) {
+    for (int r = 0; r < kVisibleGuideRows; r++) {
+      int idx = sGuideScrollOffset + r;
+      if (idx >= kGuideTopicCount) break;
+      int ry = kGuideTocY + r * kGuideRowH;
+      if (x >= kGuideTocX && x < kGuideTocX + kGuideTocW && y >= ry && y < ry + 32) {
+        sGuideSelectedIndex = idx;
+        refreshModal();
+        return true;
+      }
+    }
+    const int footY = kGuideDialogY + 382;
+    if (x >= kGuideDialogX + 576 && x < kGuideDialogX + 706 && y >= footY + 7 && y < footY + 41) {
+      sModalMode = ModalMode::SettingsMain;
+      sBackdropValid = false;
+      refreshModal();
+      return true;
+    }
+    return true;
+  }
+
   if (sModalMode == ModalMode::KeyConfig) {
-    const int startY = kKeyDialogY + 68;
-    const int rowH = 36;
+    // 1. カテゴリタブクリック
+    if (y >= kKeyTabY && y < kKeyTabY + kKeyTabH) {
+      for (int t = 0; t < kKeyTabCount; t++) {
+        int tx = kKeyDialogX + 16 + t * (kKeyTabW + kKeyTabGap);
+        if (x >= tx && x < tx + kKeyTabW) {
+          if (sKeyCategoryTab != t) {
+            sKeyCategoryTab = t;
+            sKeySelectedIndex = 0;
+            sKeyScrollOffset = 0;
+            rebuildFilteredKeyActions();
+            sKeyListPageDirty = true;
+            refreshModal();
+          }
+          return true;
+        }
+      }
+    }
+
+    // 2. リスト行クリック
     for (int r = 0; r < kVisibleKeyRows; r++) {
-      int actIdx = sKeyScrollOffset + r;
-      if (actIdx >= Config::getActionCount()) break;
-      int ry = startY + r * rowH;
-      if (x >= kKeyDialogX + 16 && x < kKeyDialogX + 656 && y >= ry && y < ry + 32) {
-        if (sKeySelectedIndex == actIdx) {
-          sWaitingActionIndex = actIdx;
+      int filtIdx = sKeyScrollOffset + r;
+      if (filtIdx >= sFilteredCount) break;
+      int ry = kKeyListStartY + r * kKeyRowH;
+      if (x >= kKeyDialogX + 16 && x < kKeyDialogX + 16 + kKeyRowCardW && y >= ry && y < ry + 31) {
+        if (sKeySelectedIndex == filtIdx) {
+          sWaitingActionIndex = sFilteredActions[filtIdx];
           sWaitingError = false;
           sModalMode = ModalMode::WaitingForKey;
+          sBackdropValid = false;
         } else {
-          sKeySelectedIndex = actIdx;
+          sKeySelectedIndex = filtIdx;
         }
         refreshModal();
         return true;
       }
     }
-    const int footY = kKeyDialogY + 368;
-    if (y >= footY + 11 && y < footY + 45) {
-      if (x >= kKeyDialogX + 400 && x < kKeyDialogX + 550) {
+
+    // 3. フッターボタンクリック
+    if (y >= kKeyFootY + 10 && y < kKeyFootY + 44) {
+      // [ 未割当にする ]
+      if (x >= kKeyDialogX + 318 && x < kKeyDialogX + 436) {
+        if (sFilteredCount > 0) {
+          int actIdx = sFilteredActions[sKeySelectedIndex];
+          if (Config::getActionInfo(actIdx).currentVk != 0) {
+            sPendingActionIndex = actIdx;
+            sPendingNewVk = 0;
+            sKeyChangeConfirmFocus = 0;
+            sModalMode = ModalMode::KeyChangeConfirm;
+            sBackdropValid = false;
+            refreshModal();
+          }
+        }
+        return true;
+      }
+      // [ デフォルトに戻す ]
+      if (x >= kKeyDialogX + 444 && x < kKeyDialogX + 586) {
         sPreviousModalMode = ModalMode::KeyConfig;
         sModalMode = ModalMode::ResetKeyConfirm;
         sResetConfirmFocus = 0;
+        sBackdropValid = false;
         refreshModal();
         return true;
       }
-      if (x >= kKeyDialogX + 565 && x < kKeyDialogX + 670) {
+      // [ 戻　る ]
+      if (x >= kKeyDialogX + 594 && x < kKeyDialogX + 696) {
         sModalMode = ModalMode::SettingsMain;
+        sBackdropValid = false;
+        refreshModal();
+        return true;
+      }
+    }
+    return true;
+  }
+
+  if (sModalMode == ModalMode::WaitingForKey) {
+    const int boxW = 540;
+    const int boxH = 180;
+    const int boxX = (kBrainScreenWidth - boxW) / 2;
+    const int boxY = (kBrainScreenHeight - boxH) / 2;
+    if (y >= boxY + 124 && y < boxY + 158) {
+      if (x >= boxX + 64 && x < boxX + 260) {
+        if (Config::getActionInfo(sWaitingActionIndex).currentVk != 0) {
+          sPendingActionIndex = sWaitingActionIndex;
+          sPendingNewVk = 0;
+          sKeyChangeConfirmFocus = 0;
+          sModalMode = ModalMode::KeyChangeConfirm;
+        } else {
+          sModalMode = ModalMode::KeyConfig;
+        }
+        sBackdropValid = false;
+        refreshModal();
+        return true;
+      }
+      if (x >= boxX + 280 && x < boxX + 476) {
+        sModalMode = ModalMode::KeyConfig;
+        sBackdropValid = false;
         refreshModal();
         return true;
       }
@@ -1659,11 +2337,13 @@ bool handleModalClick(int x, int y) {
       if (x >= boxX + 75 && x < boxX + 225) {
         Config::setActionKey(Config::getActionInfo(sPendingActionIndex).action, sPendingNewVk);
         sModalMode = ModalMode::KeyConfig;
+        sBackdropValid = false;
         refreshModal();
         return true;
       }
       if (x >= boxX + 275 && x < boxX + 425) {
         sModalMode = ModalMode::KeyConfig;
+        sBackdropValid = false;
         refreshModal();
         return true;
       }
@@ -1679,11 +2359,13 @@ bool handleModalClick(int x, int y) {
       if (x >= boxX + 65 && x < boxX + 210) {
         Config::resetKeyMappingsToDefault();
         sModalMode = sPreviousModalMode;
+        sBackdropValid = false;
         refreshModal();
         return true;
       }
       if (x >= boxX + 250 && x < boxX + 395) {
         sModalMode = sPreviousModalMode;
+        sBackdropValid = false;
         refreshModal();
         return true;
       }
@@ -2052,34 +2734,41 @@ static void createBackdrop() {
   if (!sDibPixels || !sBackdropPixels) {
     return;
   }
-  // 未反映の電卓描画やサイドバー描画があれば先にメモリDCに反映
-  if (sCalcDirty) {
-    sCalcDirty = false;
-    renderCalculatorRect(sDirtyMinX, sDirtyMinY, sDirtyMaxX, sDirtyMaxY);
-    sDirtyMinX = Ion::Display::Width;
-    sDirtyMinY = Ion::Display::Height;
-    sDirtyMaxX = 0;
-    sDirtyMaxY = 0;
-  }
-  if (sSidebarDirty) {
-    sSidebarDirty = false;
-    renderRightSidebar(sMemDC);
-  }
 
-  // 画面全体を薄く暗転 (輝度70%) させて backdrop バッファにキャッシュ
-  for (int y = 0; y < kBrainScreenHeight; y++) {
-    const uint32_t * srcRow = sDibPixels + y * kBrainScreenWidth;
-    uint32_t * dstRow = sBackdropPixels + y * kBrainScreenWidth;
-    for (int x = 0; x < kBrainScreenWidth; x++) {
-      uint32_t c = srcRow[x];
-      uint32_t r = (((c >> 16) & 0xFF) * 180) >> 8;
-      uint32_t g = (((c >> 8)  & 0xFF) * 180) >> 8;
-      uint32_t b = ((c & 0xFF)         * 180) >> 8;
-      dstRow[x] = (r << 16) | (g << 8) | b;
+  // 初回モーダルオープン時のみ、素の電卓＋サイドバー画面を70%暗転して sCleanDarkBuf に保存
+  // モーダル間の遷移 (Settings -> KeyConfig -> WaitingForKey 等) では再暗転ループを走らせず
+  // 残像のないクリーンな暗転画面を memcpy 一発で復元する
+  if (!sCleanDarkValid) {
+    if (sCalcDirty) {
+      sCalcDirty = false;
+      renderCalculatorRect(sDirtyMinX, sDirtyMinY, sDirtyMaxX, sDirtyMaxY);
+      sDirtyMinX = Ion::Display::Width;
+      sDirtyMinY = Ion::Display::Height;
+      sDirtyMaxX = 0;
+      sDirtyMaxY = 0;
     }
+    if (sSidebarDirty) {
+      sSidebarDirty = false;
+      renderRightSidebar(sMemDC);
+    }
+
+    for (int y = 0; y < kBrainScreenHeight; y++) {
+      const uint32_t * srcRow = sDibPixels + y * kBrainScreenWidth;
+      uint32_t * dstRow = sCleanDarkBuf + y * kBrainScreenWidth;
+      for (int x = 0; x < kBrainScreenWidth; x++) {
+        uint32_t c = srcRow[x];
+        uint32_t r = (((c >> 16) & 0xFF) * 180) >> 8;
+        uint32_t g = (((c >> 8)  & 0xFF) * 180) >> 8;
+        uint32_t b = ((c & 0xFF)         * 180) >> 8;
+        dstRow[x] = (r << 16) | (g << 8) | b;
+      }
+    }
+    sCleanDarkValid = true;
   }
 
-  // Base+Overlay 最適化に対応したモーダル表示中であれば、そのモーダルの静的ベース下地 (全文字・全枠線) を sBackdropDC 上に描画してキャッシュ！
+  memcpy(sBackdropPixels, sCleanDarkBuf, sizeof(sCleanDarkBuf));
+
+  // Base+Overlay 最適化に対応したモーダル表示中であれば、そのモーダルの静的ベース下地を sBackdropDC 上に描画してキャッシュ
   if (sModalMode != ModalMode::None && isModalOverlaySupported(sModalMode)) {
     renderActiveModalBase(sBackdropDC);
   }
@@ -2093,8 +2782,7 @@ void draw() {
     return;
   }
 
-  // モーダルダイアログ表示時: 背景キャッシュを使ってダブルバッファ描画
-  // 素の電卓画面が実画面に描画されるのを防ぎ、チラつきと遅延を完全解消する
+  // モーダルダイアログ表示時: 背景キャッシュ＋最小DirtyRectを使った超高速ダブルバッファ描画
   if (sModalMode != ModalMode::None) {
     bool isInitialOpen = !sBackdropValid;
     if (isInitialOpen) {
@@ -2102,31 +2790,51 @@ void draw() {
       sLastExitConfirmFocus = -1;
       sLastSettingsFocus = -1;
       sLastSettingsSubFocus = -1;
+      sLastKeyRowOnScreen = -1;
+      sLastKeyScrollOffset = sKeyScrollOffset;
+      sLastKeyCategoryTab = sKeyCategoryTab;
+      sLastGuideScrollOffset = sGuideScrollOffset;
+      sKeyListPageDirty = false;
+      sGuidePageDirty = false;
+    } else if (sModalMode == ModalMode::KeyConfig && sKeyListPageDirty) {
+      // タブ切替・スクロール発生時のみ、リスト＆タブ領域の下地だけ部分再構築
+      renderKeyConfigListAndTabsBase(sBackdropDC);
+    } else if (sModalMode == ModalMode::LLCubicGuide && sGuidePageDirty) {
+      renderLLCubicGuideTocBase(sBackdropDC);
     }
 
-    // 初回は全画面 (800x480) を対象、以降のカーソル移動等はモーダル矩形のみ部分処理
-    int mx = 0, my = 0, mw = kBrainScreenWidth, mh = kBrainScreenHeight;
+    int sx = 0, sy = 0, sw = kBrainScreenWidth, sh = kBrainScreenHeight;
     if (!isInitialOpen) {
-      getModalBoundingRect(sModalMode, mx, my, mw, mh);
+      if (isModalOverlaySupported(sModalMode)) {
+        getModalDirtyRect(sModalMode, sx, sy, sw, sh);
+      } else {
+        getModalBoundingRect(sModalMode, sx, sy, sw, sh);
+      }
+    }
+
+    if (sx < 0) { sw += sx; sx = 0; }
+    if (sy < 0) { sh += sy; sy = 0; }
+    if (sx + sw > kBrainScreenWidth) sw = kBrainScreenWidth - sx;
+    if (sy + sh > kBrainScreenHeight) sh = kBrainScreenHeight - sy;
+    if (sw <= 0 || sh <= 0) {
+      return;
     }
 
     DWORD t0 = GetTickCount();
 
-    // 1. キャッシュされた暗転背景/下地から対象矩形を直接ポインタ memcpy で超高速復元 (BitBltの15倍高速: 8.6ms)
+    // 1. DirtyRect 範囲のみキャッシュ背景/下地から直接ポインタ memcpy で超高速復元
     if (sDibPixels && sBackdropPixels) {
-      for (int y = my; y < my + mh; y++) {
-        memcpy(sDibPixels + y * kBrainScreenWidth + mx,
-               sBackdropPixels + y * kBrainScreenWidth + mx,
-               mw * sizeof(uint32_t));
+      for (int y = sy; y < sy + sh; y++) {
+        memcpy(sDibPixels + y * kBrainScreenWidth + sx,
+               sBackdropPixels + y * kBrainScreenWidth + sx,
+               sw * sizeof(uint32_t));
       }
     } else {
-      BitBlt(sMemDC, mx, my, mw, mh, sBackdropDC, mx, my, SRCCOPY);
+      BitBlt(sMemDC, sx, sy, sw, sh, sBackdropDC, sx, sy, SRCCOPY);
     }
     DWORD t1 = GetTickCount();
 
-    // 2. モーダル描画:
-    // Base+Overlay 最適化対応モーダル (SettingsMain / ExitConfirm) の場合:
-    // 下地は sBackdropDC に全文字描画済みのため、選択行/ボタンのみを超軽量に上書き描画 (180文字のラスタライズ全廃！)
+    // 2. モーダル描画 (Overlay対応時は現在選択行1行/ボタンのみ上書き)
     if (isModalOverlaySupported(sModalMode)) {
       renderActiveModalOverlay(sMemDC);
     } else {
@@ -2134,14 +2842,7 @@ void draw() {
     }
     DWORD t2 = GetTickCount();
 
-    // 3. 対象矩形のみを実画面に転送:
-    // 初回表示時はダイアログ/画面全体を転送。
-    // Overlay対応モーダルのカーソル移動時は Dirty Rect (前後の選択行/ボタン行) のみに限定して転送
-    int sx = mx, sy = my, sw = mw, sh = mh;
-    if (!isInitialOpen && isModalOverlaySupported(sModalMode)) {
-      getModalDirtyRect(sModalMode, sx, sy, sw, sh);
-    }
-
+    // 3. DirtyRect 範囲のみ実画面へ転送
     HDC hdc = GetDC(sHwnd);
     if (hdc) {
       BitBlt(hdc, sx, sy, sw, sh, sMemDC, sx, sy, SRCCOPY);
@@ -2152,6 +2853,12 @@ void draw() {
     sLastExitConfirmFocus = sExitConfirmFocus;
     sLastSettingsFocus = sSettingsFocus;
     sLastSettingsSubFocus = sSettingsSubFocus;
+    sLastKeyRowOnScreen = sKeySelectedIndex - sKeyScrollOffset;
+    sLastKeyScrollOffset = sKeyScrollOffset;
+    sLastKeyCategoryTab = sKeyCategoryTab;
+    sLastGuideScrollOffset = sGuideScrollOffset;
+    sKeyListPageDirty = false;
+    sGuidePageDirty = false;
 
     BrainLogInt2("Profile modal (bg_ms, ui_ms)", (int)(t1 - t0), (int)(t2 - t1));
     BrainLogInt2("Profile modal (scr_ms, total_ms)", (int)(t3 - t2), (int)(t3 - t0));
@@ -2198,6 +2905,7 @@ void draw() {
 
 void quit() {
   sModalMode = ModalMode::None;
+  sCleanDarkValid = false;
   sHelpReady = false;
   sCurrentHelpIndex = -1;
   if (sUiFontBold) {

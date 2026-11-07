@@ -99,7 +99,7 @@ bool TypeMenuController::handleEvent(Ion::Events::Event event) {
       case 0: // z = f(x, y) [Formula]
         obj.initExplicit("z = x^2 + y^2", "x^2 + y^2", 0, 0 /* Blue */);
         break;
-      case 1: // Parametric [X, Y, Z] (fx-CG50ライク)
+      case 1: // Parametric [X, Y, Z]
         obj.initParametricSurface("Parametric [X,Y,Z]", "cos(u)*cos(v)", "sin(u)*cos(v)", "sin(v)", 5 /* Magenta */);
         break;
       case 2: // Sphere

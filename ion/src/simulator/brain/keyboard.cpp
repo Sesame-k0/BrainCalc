@@ -239,29 +239,20 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
         pushPendingEvent(Ion::Events::OK);
       }
       return;
-    case VK_SPACE:
-      pushPendingEvent(Ion::Events::Space);
+    case VK_SPACE: {
+      Config::KeyAction spAct = Config::findActionByVk(VK_SPACE);
+      if (spAct != Config::KeyAction::ActionCount) {
+        Config::executeAction(spAct);
+      } else {
+        pushPendingEvent(Ion::Events::Space);
+      }
       return;
+    }
 
-    // Section 3: 特殊キーの割り当て
-    case VK_F1: // [調べる] -> Toolbox（関数一覧・コマンドパレット）
-      pushPendingEvent(Ion::Events::Toolbox);
-      return;
-    case VK_F3: // [国語/漢字] -> OK
-      pushPendingEvent(Ion::Events::OK);
-      return;
-    case VK_F4: // [英和/和英] -> Clear (数式の一行全消去・履歴消去)
-      pushPendingEvent(Ion::Events::Clear);
-      return;
+    // Section 3: 特殊キーの割り当て（キー設定 Config と完全連動）
     case VK_F5: // [My辞書] -> 終了画面を出す
     case VK_F7:
       Display::showExitConfirm();
-      return;
-    case VK_F8: // [履歴] -> ">"
-      pushPendingEvent(Ion::Events::Greater);
-      return;
-    case VK_F9: // [ツール] -> Var（変数・ストアメニュー）
-      pushPendingEvent(Ion::Events::Var);
       return;
     case VK_HOME:
     case VK_F10: // [HOME] -> Home（ホーム画面に戻る）
@@ -271,29 +262,50 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
       }
       pushPendingEvent(Ion::Events::Home);
       return;
-    case VK_F11: // [音声] -> "<"
-      pushPendingEvent(Ion::Events::Lower);
-      return;
-    case VK_F12: // [記号] -> ">"
-      pushPendingEvent(Ion::Events::Greater);
-      return;
 
-    case VK_PRIOR: // [PageUp (>>↑)] -> "("
-      pushPendingEvent(Ion::Events::LeftParenthesis);
+    case VK_F1:
+    case VK_F3:
+    case VK_F4:
+    case VK_F6:
+    case VK_F8:
+    case VK_F9:
+    case VK_F11:
+    case VK_F12:
+    case VK_PRIOR:
+    case VK_NEXT: {
+      Config::KeyAction fnAct = Config::findActionByVk(static_cast<uint16_t>(vkCode));
+      if (fnAct != Config::KeyAction::ActionCount) {
+        Config::executeAction(fnAct);
+        Ion::Events::removeShift();
+      } else if (vkCode == VK_F8) {
+        // KEY-MAPPING.md Section 3: F8 未割り当て時は従来の ">" として動作
+        pushPendingEvent(Ion::Events::Greater);
+      }
       return;
+    }
 
-    case VK_NEXT: // [PageDown (>>↓)] -> ")"
-      pushPendingEvent(Ion::Events::RightParenthesis);
+    // PCテンキー・直接記号キー補助対応（リマップ時はリマップ優先）
+    case 0xBE: {
+      Config::KeyAction dotAct = Config::findActionByVk(0xBE);
+      if (dotAct != Config::KeyAction::ActionCount) {
+        Config::executeAction(dotAct);
+      } else {
+        pushPendingEvent(Ion::Events::Dot);
+      }
       return;
-
-    // PCテンキー・直接記号キー補助対応
-    case 0xBE:
+    }
     case VK_DECIMAL:
       pushPendingEvent(Ion::Events::Dot);
       return;
-    case 0xBC:
-      pushPendingEvent(Ion::Events::Comma);
+    case 0xBC: {
+      Config::KeyAction commaAct = Config::findActionByVk(0xBC);
+      if (commaAct != Config::KeyAction::ActionCount) {
+        Config::executeAction(commaAct);
+      } else {
+        pushPendingEvent(Ion::Events::Comma);
+      }
       return;
+    }
     case VK_ADD:
       pushPendingEvent(Ion::Events::Plus);
       return;
