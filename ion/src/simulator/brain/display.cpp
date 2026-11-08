@@ -669,6 +669,7 @@ static constexpr int kGuideTopicCount = 14;
 static constexpr int kVisibleGuideRows = 9;
 static int sGuideSelectedIndex = 0;
 static int sGuideScrollOffset = 0;
+static int sLastGuideSelectedIndex = -1;
 static int sLastGuideScrollOffset = -1;
 
 // C. キー配置変更ダイアログ (720x448, カテゴリタブ + 8行高速リスト)
@@ -1602,43 +1603,80 @@ static bool isModalOverlaySupported(ModalMode mode) {
          mode == ModalMode::KeyConfig;
 }
 
-static void getModalDirtyRect(ModalMode mode, int & dx, int & dy, int & dw, int & dh) {
+struct ModalDirtyRect {
+  int x, y, w, h;
+};
+
+static constexpr int kMaxModalDirtyRects = 4;
+
+struct ModalDirtyRectList {
+  int count;
+  ModalDirtyRect rects[kMaxModalDirtyRects];
+};
+
+static ModalDirtyRectList getModalDirtyRectList(ModalMode mode) {
+  ModalDirtyRectList list;
+  list.count = 0;
+
   if (mode == ModalMode::ExitConfirm) {
-    dx = kBtnQuitX - 4;
-    dy = kBtnExitY - 4;
-    dw = (kBtnCancelX + kBtnExitW + 4) - dx;
-    dh = kBtnExitH + 8;
-    return;
+    auto getBtnRect = [](int focus) -> ModalDirtyRect {
+      int bx = (focus == 0) ? kBtnQuitX : ((focus == 1) ? kBtnConfigX : kBtnCancelX);
+      return { bx - 4, kBtnExitY - 4, kBtnExitW + 8, kBtnExitH + 8 };
+    };
+    if (sLastExitConfirmFocus < 0 || sLastExitConfirmFocus == sExitConfirmFocus) {
+      list.rects[list.count++] = getBtnRect(sExitConfirmFocus);
+    } else {
+      list.rects[list.count++] = getBtnRect(sLastExitConfirmFocus);
+      list.rects[list.count++] = getBtnRect(sExitConfirmFocus);
+    }
+    return list;
   }
+
   if (mode == ModalMode::SettingsMain) {
-    int rA = sLastSettingsFocus;
-    int rB = sSettingsFocus;
-    if (rA < 0) {
-      rA = rB;
+    auto getSettingsRowRect = [](int focus) -> ModalDirtyRect {
+      if (focus >= 0 && focus < kSettingsRowCount) {
+        return { kSettingsDialogX + 12, kSettingsRowY[focus] - 2, kSettingsDialogW - 24, kSettingsRowH + 4 };
+      }
+      return { kSettingsDialogX + 120, kSettingsBtnY - 2, 400, 48 };
+    };
+
+    if (sLastSettingsFocus < 0 || sLastSettingsFocus == sSettingsFocus) {
+      list.rects[list.count++] = getSettingsRowRect(sSettingsFocus);
+    } else {
+      list.rects[list.count++] = getSettingsRowRect(sLastSettingsFocus);
+      list.rects[list.count++] = getSettingsRowRect(sSettingsFocus);
+    }
+    return list;
+  }
+
+  if (mode == ModalMode::LLCubicGuide) {
+    if (sGuidePageDirty || sLastGuideScrollOffset != sGuideScrollOffset || sLastGuideSelectedIndex < 0) {
+      int gx = kGuideTocX - 4;
+      int gy = kGuideTocY - 4;
+      int gw = (kGuidePaneX + kGuidePaneW + 4) - gx;
+      int gh = kGuidePaneH + 8;
+      list.rects[list.count++] = { gx, gy, gw, gh };
+      return list;
     }
 
-    int y0_A = (rA >= 0 && rA < kSettingsRowCount) ? kSettingsRowY[rA] : kSettingsBtnY;
-    int y1_A = y0_A + ((rA >= 0 && rA < kSettingsRowCount) ? kSettingsRowH : 44);
+    auto getGuideRowRect = [](int index) -> ModalDirtyRect {
+      int visRow = index - sGuideScrollOffset;
+      if (visRow < 0) visRow = 0;
+      if (visRow >= kVisibleGuideRows) visRow = kVisibleGuideRows - 1;
+      return { kGuideTocX - 2, kGuideTocY + visRow * kGuideRowH - 2, kGuideTocW + 4, kGuideRowH + 4 };
+    };
 
-    int y0_B = (rB >= 0 && rB < kSettingsRowCount) ? kSettingsRowY[rB] : kSettingsBtnY;
-    int y1_B = y0_B + ((rB >= 0 && rB < kSettingsRowCount) ? kSettingsRowH : 44);
-
-    int minY = (y0_A < y0_B) ? y0_A : y0_B;
-    int maxY = (y1_A > y1_B) ? y1_A : y1_B;
-
-    dx = kSettingsDialogX + 12;
-    dy = minY - 4;
-    dw = kSettingsDialogW - 24;
-    dh = (maxY - minY) + 8;
-    return;
+    if (sLastGuideSelectedIndex != sGuideSelectedIndex) {
+      list.rects[list.count++] = getGuideRowRect(sLastGuideSelectedIndex);
+      list.rects[list.count++] = getGuideRowRect(sGuideSelectedIndex);
+    } else {
+      list.rects[list.count++] = getGuideRowRect(sGuideSelectedIndex);
+    }
+    // 右ペイン解説カード
+    list.rects[list.count++] = { kGuidePaneX - 2, kGuidePaneY - 2, kGuidePaneW + 4, kGuidePaneH + 4 };
+    return list;
   }
-  if (mode == ModalMode::LLCubicGuide) {
-    dx = kGuideTocX - 4;
-    dy = kGuideTocY - 4;
-    dw = (kGuidePaneX + kGuidePaneW + 4) - dx;
-    dh = kGuidePaneH + 8;
-    return;
-  }
+
   if (mode == ModalMode::KeyConfig) {
     int curRow = sKeySelectedIndex - sKeyScrollOffset;
     if (curRow < 0) curRow = 0;
@@ -1647,23 +1685,32 @@ static void getModalDirtyRect(ModalMode mode, int & dx, int & dy, int & dw, int 
     if (sKeyListPageDirty || sLastKeyRowOnScreen < 0 ||
         sLastKeyScrollOffset != sKeyScrollOffset ||
         sLastKeyCategoryTab != sKeyCategoryTab) {
-      dx = kKeyDialogX + 12;
-      dy = kKeyTabY - 4;
-      dw = kKeyDialogW - 24;
-      dh = (kKeyFootY - 2) - dy;
-      return;
+      int kx = kKeyDialogX + 12;
+      int ky = kKeyTabY - 4;
+      int kw = kKeyDialogW - 24;
+      int kh = (kKeyFootY - 2) - ky;
+      list.rects[list.count++] = { kx, ky, kw, kh };
+      return list;
     }
 
+    auto getKeyRowRect = [](int rowOnScreen) -> ModalDirtyRect {
+      return { kKeyDialogX + 14, kKeyListStartY + rowOnScreen * kKeyRowH - 2, kKeyRowCardW + 4, kKeyRowH + 4 };
+    };
+
     int prevRow = sLastKeyRowOnScreen;
-    int minR = (prevRow < curRow) ? prevRow : curRow;
-    int maxR = (prevRow > curRow) ? prevRow : curRow;
-    dx = kKeyDialogX + 14;
-    dy = kKeyListStartY + minR * kKeyRowH - 2;
-    dw = kKeyRowCardW + 4;
-    dh = (maxR - minR + 1) * kKeyRowH + 4;
-    return;
+    if (prevRow != curRow) {
+      list.rects[list.count++] = getKeyRowRect(prevRow);
+      list.rects[list.count++] = getKeyRowRect(curRow);
+    } else {
+      list.rects[list.count++] = getKeyRowRect(curRow);
+    }
+    return list;
   }
-  getModalBoundingRect(mode, dx, dy, dw, dh);
+
+  int bx = 0, by = 0, bw = kBrainScreenWidth, bh = kBrainScreenHeight;
+  getModalBoundingRect(mode, bx, by, bw, bh);
+  list.rects[list.count++] = { bx, by, bw, bh };
+  return list;
 }
 
 static void renderActiveModalBase(HDC hdc) {
@@ -1759,6 +1806,7 @@ void closeModal() {
   sLastKeyRowOnScreen = -1;
   sLastKeyScrollOffset = -1;
   sLastKeyCategoryTab = -1;
+  sLastGuideSelectedIndex = -1;
   sLastGuideScrollOffset = -1;
   sKeyListPageDirty = false;
   sGuidePageDirty = false;
@@ -1805,6 +1853,7 @@ static void openLLCubicGuideModal() {
   sModalMode = ModalMode::LLCubicGuide;
   sGuideSelectedIndex = 0;
   sGuideScrollOffset = 0;
+  sLastGuideSelectedIndex = -1;
   sLastGuideScrollOffset = -1;
   sGuidePageDirty = false;
   sBackdropValid = false;
@@ -1813,6 +1862,18 @@ static void openLLCubicGuideModal() {
 
 bool isExitConfirmOpen() {
   return isModalOpen();
+}
+
+static inline bool hasPendingNavKey() {
+  MSG nextMsg;
+  if (PeekMessageW(&nextMsg, sHwnd, WM_KEYDOWN, WM_KEYDOWN, PM_NOREMOVE)) {
+    WPARAM vk = nextMsg.wParam;
+    if (vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT ||
+        vk == VK_TAB || vk == VK_PRIOR || vk == VK_NEXT) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool handleModalKey(WPARAM vkCode) {
@@ -1827,13 +1888,17 @@ bool handleModalKey(WPARAM vkCode) {
         case VK_LEFT:
         case VK_UP:
           sExitConfirmFocus = (sExitConfirmFocus + 2) % 3;
-          refreshModal();
+          if (!hasPendingNavKey()) {
+            refreshModal();
+          }
           return true;
         case VK_RIGHT:
         case VK_DOWN:
         case VK_TAB:
           sExitConfirmFocus = (sExitConfirmFocus + 1) % 3;
-          refreshModal();
+          if (!hasPendingNavKey()) {
+            refreshModal();
+          }
           return true;
         case VK_RETURN:
           if (sExitConfirmFocus == 0) {
@@ -1861,13 +1926,17 @@ bool handleModalKey(WPARAM vkCode) {
         case VK_UP:
           if (sSettingsFocus > 0) {
             sSettingsFocus--;
-            refreshModal();
+            if (!hasPendingNavKey()) {
+              refreshModal();
+            }
           }
           return true;
         case VK_DOWN:
           if (sSettingsFocus < kSettingsRowCount) {
             sSettingsFocus++;
-            refreshModal();
+            if (!hasPendingNavKey()) {
+              refreshModal();
+            }
           }
           return true;
         case VK_LEFT:
@@ -1882,7 +1951,9 @@ bool handleModalKey(WPARAM vkCode) {
             refreshModal();
           } else if (sSettingsFocus == kSettingsRowCount) {
             sSettingsSubFocus = 1 - sSettingsSubFocus;
-            refreshModal();
+            if (!hasPendingNavKey()) {
+              refreshModal();
+            }
           }
           return true;
         case VK_RETURN:
@@ -1932,7 +2003,9 @@ bool handleModalKey(WPARAM vkCode) {
               sGuideScrollOffset = sGuideSelectedIndex;
               sGuidePageDirty = true;
             }
-            refreshModal();
+            if (!hasPendingNavKey()) {
+              refreshModal();
+            }
           }
           return true;
         case VK_DOWN:
@@ -1942,7 +2015,9 @@ bool handleModalKey(WPARAM vkCode) {
               sGuideScrollOffset = sGuideSelectedIndex - (kVisibleGuideRows - 1);
               sGuidePageDirty = true;
             }
-            refreshModal();
+            if (!hasPendingNavKey()) {
+              refreshModal();
+            }
           }
           return true;
         case VK_PRIOR:
@@ -1952,7 +2027,9 @@ bool handleModalKey(WPARAM vkCode) {
             if (sGuideSelectedIndex < 0) sGuideSelectedIndex = 0;
             if (sGuideSelectedIndex < sGuideScrollOffset) sGuideScrollOffset = sGuideSelectedIndex;
             if (sGuideScrollOffset != oldOff) sGuidePageDirty = true;
-            refreshModal();
+            if (!hasPendingNavKey()) {
+              refreshModal();
+            }
           }
           return true;
         case VK_NEXT:
@@ -1964,7 +2041,9 @@ bool handleModalKey(WPARAM vkCode) {
               sGuideScrollOffset = sGuideSelectedIndex - (kVisibleGuideRows - 1);
             }
             if (sGuideScrollOffset != oldOff) sGuidePageDirty = true;
-            refreshModal();
+            if (!hasPendingNavKey()) {
+              refreshModal();
+            }
           }
           return true;
         case VK_RETURN:
@@ -1986,7 +2065,9 @@ bool handleModalKey(WPARAM vkCode) {
           sKeyScrollOffset = 0;
           rebuildFilteredKeyActions();
           sKeyListPageDirty = true;
-          refreshModal();
+          if (!hasPendingNavKey()) {
+            refreshModal();
+          }
           return true;
         case VK_RIGHT:
         case VK_TAB:
@@ -1995,7 +2076,9 @@ bool handleModalKey(WPARAM vkCode) {
           sKeyScrollOffset = 0;
           rebuildFilteredKeyActions();
           sKeyListPageDirty = true;
-          refreshModal();
+          if (!hasPendingNavKey()) {
+            refreshModal();
+          }
           return true;
         case VK_UP:
           if (sKeySelectedIndex > 0) {
@@ -2007,7 +2090,9 @@ bool handleModalKey(WPARAM vkCode) {
             if (sKeyScrollOffset != oldOff) {
               sKeyListPageDirty = true;
             }
-            refreshModal();
+            if (!hasPendingNavKey()) {
+              refreshModal();
+            }
           }
           return true;
         case VK_DOWN:
@@ -2020,7 +2105,9 @@ bool handleModalKey(WPARAM vkCode) {
             if (sKeyScrollOffset != oldOff) {
               sKeyListPageDirty = true;
             }
-            refreshModal();
+            if (!hasPendingNavKey()) {
+              refreshModal();
+            }
           }
           return true;
         case VK_PRIOR:
@@ -2032,7 +2119,9 @@ bool handleModalKey(WPARAM vkCode) {
             if (sKeyScrollOffset != oldOff) {
               sKeyListPageDirty = true;
             }
-            refreshModal();
+            if (!hasPendingNavKey()) {
+              refreshModal();
+            }
           }
           return true;
         case VK_NEXT:
@@ -2046,7 +2135,9 @@ bool handleModalKey(WPARAM vkCode) {
             if (sKeyScrollOffset != oldOff) {
               sKeyListPageDirty = true;
             }
-            refreshModal();
+            if (!hasPendingNavKey()) {
+              refreshModal();
+            }
           }
           return true;
         case VK_RETURN:
@@ -2793,6 +2884,7 @@ void draw() {
       sLastKeyRowOnScreen = -1;
       sLastKeyScrollOffset = sKeyScrollOffset;
       sLastKeyCategoryTab = sKeyCategoryTab;
+      sLastGuideSelectedIndex = -1;
       sLastGuideScrollOffset = sGuideScrollOffset;
       sKeyListPageDirty = false;
       sGuidePageDirty = false;
@@ -2803,34 +2895,47 @@ void draw() {
       renderLLCubicGuideTocBase(sBackdropDC);
     }
 
-    int sx = 0, sy = 0, sw = kBrainScreenWidth, sh = kBrainScreenHeight;
-    if (!isInitialOpen) {
-      if (isModalOverlaySupported(sModalMode)) {
-        getModalDirtyRect(sModalMode, sx, sy, sw, sh);
-      } else {
-        getModalBoundingRect(sModalMode, sx, sy, sw, sh);
-      }
+    ModalDirtyRectList dirtyList;
+    if (isInitialOpen) {
+      dirtyList.count = 1;
+      dirtyList.rects[0] = { 0, 0, kBrainScreenWidth, kBrainScreenHeight };
+    } else if (isModalOverlaySupported(sModalMode)) {
+      dirtyList = getModalDirtyRectList(sModalMode);
+    } else {
+      int bx = 0, by = 0, bw = kBrainScreenWidth, bh = kBrainScreenHeight;
+      getModalBoundingRect(sModalMode, bx, by, bw, bh);
+      dirtyList.count = 1;
+      dirtyList.rects[0] = { bx, by, bw, bh };
     }
 
-    if (sx < 0) { sw += sx; sx = 0; }
-    if (sy < 0) { sh += sy; sy = 0; }
-    if (sx + sw > kBrainScreenWidth) sw = kBrainScreenWidth - sx;
-    if (sy + sh > kBrainScreenHeight) sh = kBrainScreenHeight - sy;
-    if (sw <= 0 || sh <= 0) {
+    if (dirtyList.count <= 0) {
       return;
     }
 
     DWORD t0 = GetTickCount();
 
-    // 1. DirtyRect 範囲のみキャッシュ背景/下地から直接ポインタ memcpy で超高速復元
-    if (sDibPixels && sBackdropPixels) {
-      for (int y = sy; y < sy + sh; y++) {
-        memcpy(sDibPixels + y * kBrainScreenWidth + sx,
-               sBackdropPixels + y * kBrainScreenWidth + sx,
-               sw * sizeof(uint32_t));
+    // 1. 各 DirtyRect 範囲のみキャッシュ背景/下地から直接ポインタ memcpy で超高速復元
+    for (int i = 0; i < dirtyList.count; i++) {
+      int sx = dirtyList.rects[i].x;
+      int sy = dirtyList.rects[i].y;
+      int sw = dirtyList.rects[i].w;
+      int sh = dirtyList.rects[i].h;
+      if (sx < 0) { sw += sx; sx = 0; }
+      if (sy < 0) { sy += sy; sy = 0; }
+      if (sx + sw > kBrainScreenWidth) sw = kBrainScreenWidth - sx;
+      if (sy + sh > kBrainScreenHeight) sh = kBrainScreenHeight - sy;
+      dirtyList.rects[i] = { sx, sy, sw, sh };
+      if (sw <= 0 || sh <= 0) continue;
+
+      if (sDibPixels && sBackdropPixels) {
+        for (int y = sy; y < sy + sh; y++) {
+          memcpy(sDibPixels + y * kBrainScreenWidth + sx,
+                 sBackdropPixels + y * kBrainScreenWidth + sx,
+                 sw * sizeof(uint32_t));
+        }
+      } else {
+        BitBlt(sMemDC, sx, sy, sw, sh, sBackdropDC, sx, sy, SRCCOPY);
       }
-    } else {
-      BitBlt(sMemDC, sx, sy, sw, sh, sBackdropDC, sx, sy, SRCCOPY);
     }
     DWORD t1 = GetTickCount();
 
@@ -2842,10 +2947,17 @@ void draw() {
     }
     DWORD t2 = GetTickCount();
 
-    // 3. DirtyRect 範囲のみ実画面へ転送
+    // 3. 各 DirtyRect 範囲のみ実画面へ転送
     HDC hdc = GetDC(sHwnd);
     if (hdc) {
-      BitBlt(hdc, sx, sy, sw, sh, sMemDC, sx, sy, SRCCOPY);
+      for (int i = 0; i < dirtyList.count; i++) {
+        int sx = dirtyList.rects[i].x;
+        int sy = dirtyList.rects[i].y;
+        int sw = dirtyList.rects[i].w;
+        int sh = dirtyList.rects[i].h;
+        if (sw <= 0 || sh <= 0) continue;
+        BitBlt(hdc, sx, sy, sw, sh, sMemDC, sx, sy, SRCCOPY);
+      }
       ReleaseDC(sHwnd, hdc);
     }
     DWORD t3 = GetTickCount();
@@ -2856,6 +2968,7 @@ void draw() {
     sLastKeyRowOnScreen = sKeySelectedIndex - sKeyScrollOffset;
     sLastKeyScrollOffset = sKeyScrollOffset;
     sLastKeyCategoryTab = sKeyCategoryTab;
+    sLastGuideSelectedIndex = sGuideSelectedIndex;
     sLastGuideScrollOffset = sGuideScrollOffset;
     sKeyListPageDirty = false;
     sGuidePageDirty = false;
