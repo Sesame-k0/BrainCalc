@@ -3668,7 +3668,19 @@ extern "C" void BrainClearHelp() {
   if (!Ion::Simulator::Display::isHelpReady()) {
     return;
   }
+  if (Ion::Simulator::Display::isCustomHelpActive()) {
+    return;
+  }
   BrainLog("BrainClearHelp");
+  Ion::Simulator::Display::clearCustomHelp();
+  Ion::Simulator::Display::setCurrentHelpIndex(-1);
+}
+
+extern "C" void BrainClearCustomHelp() {
+  if (!Ion::Simulator::Display::isHelpReady()) {
+    return;
+  }
+  BrainLog("BrainClearCustomHelp");
   Ion::Simulator::Display::clearCustomHelp();
   Ion::Simulator::Display::setCurrentHelpIndex(-1);
 }

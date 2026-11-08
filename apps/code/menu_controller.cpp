@@ -161,7 +161,13 @@ void MenuController::viewWillAppear() {
   updateAddScriptRowDisplay();
   m_selectableTableView.reloadData();
   footer()->setSelectedButton(-1);
-  m_selectableTableView.selectCellAtLocation(0, 0);
+  int curRow = m_selectableTableView.selectedRow();
+  int curCol = m_selectableTableView.selectedColumn();
+  if (curRow < 0 || curRow >= numberOfRows()) {
+    m_selectableTableView.selectCellAtLocation(0, 0);
+  } else {
+    m_selectableTableView.selectCellAtLocation(curCol >= 0 ? curCol : 0, curRow);
+  }
 }
 
 bool MenuController::handleEvent(Ion::Events::Event event) {
@@ -221,7 +227,29 @@ void MenuController::renameSelectedScript() {
   const char * previousText = tf->text();
   tf->setEditing(true);
   tf->setText(previousText);
-  tf->setCursorLocation(tf->text() + strlen(previousText));
+  const char * dot = strrchr(previousText, '.');
+  if (dot) {
+    tf->setCursorLocation(dot);
+  } else {
+    tf->setCursorLocation(tf->text() + strlen(previousText));
+  }
+}
+
+void MenuController::renameScript(Script script) {
+  if (script.isNull()) {
+    return;
+  }
+  int index = -1;
+  for (int i = 0; i < m_scriptStore->numberOfScripts(); i++) {
+    if (strcmp(m_scriptStore->scriptAtIndex(i).fullName(), script.fullName()) == 0) {
+      index = i;
+      break;
+    }
+  }
+  if (index >= 0 && index < m_scriptStore->numberOfScripts()) {
+    m_selectableTableView.selectCellAtLocation(0, index);
+    renameSelectedScript();
+  }
 }
 
 void MenuController::duplicateScript(Script script) {
@@ -459,10 +487,14 @@ void MenuController::addScript() {
   Script::ErrorStatus error = m_scriptStore->addNewScript();
   if (error == Script::ErrorStatus::None) {
     updateAddScriptRowDisplay();
-    renameSelectedScript();
+    int newScriptRow = m_scriptStore->numberOfScripts() - 1;
+    if (newScriptRow >= 0) {
+      m_selectableTableView.selectCellAtLocation(0, newScriptRow);
+      renameSelectedScript();
+    }
     return;
   }
-  assert(false); // Adding a new script is called when !m_scriptStore.isFull() which guarantees that the available space in the storage is big enough
+  Container::activeApp()->displayWarning(I18n::Message::NameTaken);
 }
 
 void MenuController::configureScript() {

@@ -33,6 +33,14 @@ int ScriptStore::numberOfScripts() {
 }
 
 Ion::Storage::Record::ErrorStatus ScriptStore::addNewScript() {
+  const char * ext = currentScriptExtension();
+  char emptyName[8];
+  emptyName[0] = '.';
+  strlcpy(emptyName + 1, ext, sizeof(emptyName) - 1);
+  Script oldEmpty = ScriptNamed(emptyName);
+  if (!oldEmpty.isNull()) {
+    oldEmpty.destroy();
+  }
   return addScriptFromTemplate(ScriptTemplate::Empty());
 }
 

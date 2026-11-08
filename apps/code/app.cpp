@@ -5,6 +5,8 @@
 #include <ion/unicode/utf8_helper.h>
 #include <apps/apps_container.h>
 
+extern "C" void BrainClearCustomHelp();
+
 namespace Code {
 
 I18n::Message App::Descriptor::name() {
@@ -97,6 +99,7 @@ App::App(Snapshot * snapshot) :
 }
 
 App::~App() {
+  BrainClearCustomHelp();
   assert(!m_consoleController.inputRunLoopActive());
   Clipboard::sharedClipboard()->exitPython();
 }

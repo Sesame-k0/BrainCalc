@@ -57,7 +57,8 @@ bool Script::nameCompliant(const char * name) {
     if (c == '.' && (strcmp(decoder.stringPosition(), ScriptStore::currentScriptExtension()) == 0 ||
                      strcmp(decoder.stringPosition(), "py") == 0 ||
                      strcmp(decoder.stringPosition(), "bas") == 0 ||
-                     strcmp(decoder.stringPosition(), "lgo") == 0)) {
+                     strcmp(decoder.stringPosition(), "lgo") == 0 ||
+                     strcmp(decoder.stringPosition(), "bf") == 0)) {
       return true;
     }
     if (!(c.isLatinSmallLetter() || c == '_' || c.isDecimalDigit())) {

@@ -9,7 +9,7 @@ namespace Code {
 
 class MenuController;
 
-class ScriptParameterController : public ViewController, public SimpleListViewDataSource, public SelectableTableViewDataSource {
+class ScriptParameterController : public ViewController, public SimpleListViewDataSource, public SelectableTableViewDataSource, public SelectableTableViewDelegate {
 public:
   ScriptParameterController(Responder * parentResponder, I18n::Message title, MenuController * menuController);
   void setScript(Script script);
@@ -29,6 +29,11 @@ public:
   int reusableCellCount() const override { return k_totalNumberOfCell; }
   int numberOfRows() const override { return k_totalNumberOfCell; }
   void willDisplayCellForIndex(HighlightCell * cell, int index) override;
+
+  /* SelectableTableViewDelegate */
+  void tableViewDidChangeSelection(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection = false) override;
+
+  void updateParameterHelp();
 
 private:
   constexpr static int k_totalNumberOfCell = 6;

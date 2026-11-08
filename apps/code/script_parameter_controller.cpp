@@ -2,6 +2,8 @@
 #include "menu_controller.h"
 #include <poincare/integer.h>
 
+extern "C" void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8);
+
 namespace Code {
 
 ScriptParameterController::ScriptParameterController(Responder * parentResponder, I18n::Message title, MenuController * menuController) :
@@ -13,7 +15,7 @@ ScriptParameterController::ScriptParameterController(Responder * parentResponder
   m_deleteScript(I18n::Message::DeleteScript),
   m_duplicateScript(I18n::Message::DuplicateScript),
   m_size(I18n::Message::ScriptSize),
-  m_selectableTableView(this),
+  m_selectableTableView(this, this, this, this),
   m_script(Ion::Storage::Record()),
   m_menuController(menuController)
 {
@@ -32,6 +34,66 @@ const char * ScriptParameterController::title() {
   return I18n::translate(m_pageTitle);
 }
 
+void ScriptParameterController::updateParameterHelp() {
+  switch (selectedRow()) {
+    case 0:
+      BrainNotifyCustomHelp(
+        "スクリプトの実行",
+        "選択中のスクリプトを実行し、結果画面を表示します。\n\n"
+        "・[Enter]: スクリプトを実行\n"
+        "・[Back]: 一覧へ戻る"
+      );
+      break;
+    case 1:
+      BrainNotifyCustomHelp(
+        "名前の変更",
+        "スクリプトのファイル名を編集します。\n\n"
+        "・[Enter]: 名前の編集を開始\n"
+        "・文字や記号を入力し[Enter]で確定\n"
+        "・[Back]: 一覧へ戻る"
+      );
+      break;
+    case 2:
+      BrainNotifyCustomHelp(
+        "自動インポート",
+        "コンソール起動時に、このスクリプトの内容を自動的にロード（実行）するか切り替えます。\n\n"
+        "・[Enter]: ON / OFF 切り替え\n"
+        "・[Back]: 一覧へ戻る"
+      );
+      break;
+    case 3:
+      BrainNotifyCustomHelp(
+        "スクリプトサイズ",
+        "スクリプトのデータサイズおよび全ストレージ容量に対する占有割合です。\n\n"
+        "・[Enter]: バイト表示 / ％表示の切替\n"
+        "・[Back]: 一覧へ戻る"
+      );
+      break;
+    case 4:
+      BrainNotifyCustomHelp(
+        "スクリプトの複製",
+        "このスクリプトの内容をコピーし、新しい別名スクリプトとして複製します。\n\n"
+        "・[Enter]: 複製を実行\n"
+        "・[Back]: 一覧へ戻る"
+      );
+      break;
+    case 5:
+      BrainNotifyCustomHelp(
+        "スクリプトの削除",
+        "このスクリプトを本体ストレージから完全に削除します。\n\n"
+        "・[Enter]: 削除を実行\n"
+        "・[Back]: 一覧へ戻る"
+      );
+      break;
+    default:
+      break;
+  }
+}
+
+void ScriptParameterController::tableViewDidChangeSelection(SelectableTableView * t, int previousSelectedCellX, int previousSelectedCellY, bool withinTemporarySelection) {
+  updateParameterHelp();
+}
+
 bool ScriptParameterController::handleEvent(Ion::Events::Event event) {
   if (event == Ion::Events::OK || event == Ion::Events::EXE) {
     Script s = m_script;
@@ -40,10 +102,11 @@ bool ScriptParameterController::handleEvent(Ion::Events::Event event) {
         dismissScriptParameterController();
         m_menuController->openConsoleWithScript(s);
         return true;
-      case 1:
+      case 1: {
         dismissScriptParameterController();
-        m_menuController->renameSelectedScript();
+        m_menuController->renameScript(s);
         return true;
+      }
       case 2:
         m_script.toggleAutoimportationStatus();
         m_selectableTableView.reloadData();
@@ -78,11 +141,13 @@ void ScriptParameterController::viewWillAppear() {
   ViewController::viewWillAppear();
   m_selectableTableView.reloadData();
   m_selectableTableView.selectCellAtLocation(0,0);
+  updateParameterHelp();
 }
 
 void ScriptParameterController::didBecomeFirstResponder() {
   selectCellAtLocation(0, 0);
   Container::activeApp()->setFirstResponder(&m_selectableTableView);
+  updateParameterHelp();
 }
 
 HighlightCell * ScriptParameterController::reusableCell(int index) {
