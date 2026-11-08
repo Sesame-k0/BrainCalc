@@ -4,54 +4,33 @@
 #include <ion.h>
 #include "script.h"
 #include "script_template.h"
-#include <python/port/port.h>
-extern "C" {
-#include "py/parse.h"
-}
 
 namespace Code {
 
-class ScriptStore : public MicroPython::ScriptProvider {
+class ScriptStore {
 public:
-  static constexpr char k_scriptExtension[] = "py";
-  static constexpr size_t k_scriptExtensionLength = 2;
-
-  // Storage information
+  static constexpr size_t k_scriptExtensionLength = 3;
+  static const char * currentScriptExtension();
   static bool ScriptNameIsFree(const char * baseName);
 
   ScriptStore();
-  Script scriptAtIndex(int index) {
-    return Script(Ion::Storage::sharedStorage()->recordWithExtensionAtIndex(k_scriptExtension, index));
-  }
-  static Script ScriptNamed(const char * fullName) {
-    return Script(Ion::Storage::sharedStorage()->recordNamed(fullName));
-  }
-  static Script ScriptBaseNamed(const char * baseName) {
-    return Script(Ion::Storage::sharedStorage()->recordBaseNamedWithExtension(baseName, k_scriptExtension));
-  }
-  int numberOfScripts() {
-    return Ion::Storage::sharedStorage()->numberOfRecordsWithExtension(k_scriptExtension);
-  }
-  Ion::Storage::Record::ErrorStatus addNewScript() {
-    return addScriptFromTemplate(ScriptTemplate::Empty());
-  }
+  Script scriptAtIndex(int index);
+  static Script ScriptNamed(const char * fullName);
+  static Script ScriptBaseNamed(const char * baseName);
+  int numberOfScripts();
+  Ion::Storage::Record::ErrorStatus addNewScript();
   void deleteAllScripts();
   bool isFull();
 
-  /* MicroPython::ScriptProvider */
-  const char * contentOfScript(const char * name, bool markAsFetched) override;
+  const char * contentOfScript(const char * name, bool markAsFetched);
   void clearVariableBoxFetchInformation();
   void clearConsoleFetchInformation();
 
   Ion::Storage::Record::ErrorStatus addScriptFromTemplate(const ScriptTemplate * scriptTemplate);
+  void initDefaultSamples();
+
 private:
-  /* If the storage available space has a smaller size than
-   * k_fullFreeSpaceSizeLimit, we consider the script store as full.
-   * To be able to add a new empty record, the available space should at least
-   * be able to store a Script with default name and its extension, the
-   * importation status (1 char), the cursor (2 char), the default content "from math import *\n"
-   * (20 char) and 10 char of free space. */
-  static constexpr int k_fullFreeSpaceSizeLimit = sizeof(Ion::Storage::record_size_t)+Script::k_defaultScriptNameMaxSize+k_scriptExtensionLength+1+20+10;
+  static constexpr int k_fullFreeSpaceSizeLimit = sizeof(Ion::Storage::record_size_t) + Script::k_defaultScriptNameMaxSize + 4 + 1 + 20 + 10;
 };
 
 }

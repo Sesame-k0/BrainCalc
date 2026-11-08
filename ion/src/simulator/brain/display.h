@@ -54,6 +54,7 @@ bool handleModalClick(int x, int y);
 void showExitConfirm();
 void closeExitConfirm();
 void showSettingsDialog();
+void showLiliumManual();
 
 bool isExitConfirmOpen();
 bool handleExitConfirmKey(WPARAM vkCode);

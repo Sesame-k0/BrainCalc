@@ -277,6 +277,8 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
       if (fnAct != Config::KeyAction::ActionCount) {
         Config::executeAction(fnAct);
         Ion::Events::removeShift();
+      } else if (vkCode == VK_F12) {
+        Display::showLiliumManual();
       } else if (vkCode == VK_F8) {
         // KEY-MAPPING.md Section 3: F8 未割り当て時は従来の ">" として動作
         pushPendingEvent(Ion::Events::Greater);

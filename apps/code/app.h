@@ -6,10 +6,15 @@
 #include "../shared/input_event_handler_delegate_app.h"
 #include "console_controller.h"
 #include "menu_controller.h"
+#include "language_select_controller.h"
 #include "script_store.h"
 #include "python_toolbox.h"
 #include "variable_box_controller.h"
 #include "../shared/shared_app.h"
+#include "engines/interpreter_engine.h"
+#include "engines/pocketpy/pocketpy_engine.h"
+#include "engines/tinybasic/tinybasic_engine.h"
+#include "engines/logo/logo_engine.h"
 
 namespace Code {
 
@@ -22,6 +27,7 @@ public:
     App::Descriptor::ExaminationLevel examinationLevel() override;
     const Image * icon() override;
   };
+
   class Snapshot : public SharedApp::Snapshot {
   public:
     Snapshot();
@@ -39,11 +45,14 @@ public:
 #endif
     ScriptStore m_scriptStore;
   };
+
   static App * app() {
     return static_cast<App *>(Container::activeApp());
   }
-  ~App();
+
+  ~App() override;
   TELEMETRY_ID("Code");
+
   bool prepareForExit() override {
     if (m_consoleController.inputRunLoopActive()) {
       m_consoleController.terminateInputLoop();
@@ -51,9 +60,11 @@ public:
     }
     return true;
   }
+
   StackViewController * stackViewController() { return &m_codeStackViewController; }
   ConsoleController * consoleController() { return &m_consoleController; }
   MenuController * menuController() { return &m_menuController; }
+  LanguageSelectController * languageSelectController() { return &m_languageSelectController; }
 
   /* Responder */
   bool handleEvent(Ion::Events::Event event) override;
@@ -66,33 +77,34 @@ public:
   /* TextInputDelegate */
   bool textInputDidReceiveEvent(InputEventHandler * textInput, Ion::Events::Event event);
 
-  /* Code::App */
-  // Python delegate
-  bool pythonIsInited() { return m_pythonUser != nullptr; }
-  bool isPythonUser(const void * pythonUser) { return m_pythonUser == pythonUser; }
-  void initPythonWithUser(const void * pythonUser);
-  void deinitPython();
+  // Engine management
+  InterpreterEngine * currentEngine();
+  PocketPyEngine * pocketPyEngine() { return &m_pocketPyEngine; }
+  TinyBasicEngine * tinyBasicEngine() { return &m_tinyBasicEngine; }
+  LogoEngine * logoEngine() { return &m_logoEngine; }
+
+  // Backward compatibility stubs for PythonUser
+  bool pythonIsInited() { return true; }
+  bool isPythonUser(const void * pythonUser) { return true; }
+  void initPythonWithUser(const void * pythonUser) {}
+  void deinitPython() {}
 
   VariableBoxController * variableBoxController() { return &m_variableBoxController; }
 
-  static constexpr int k_pythonHeapSize = 85986;
-
 private:
-  /* Python delegate:
-   * MicroPython requires a heap. To avoid dynamic allocation, we keep a working
-   * buffer here and we give to controllers that load Python environment. We
-   * also memoize the last Python user to avoid re-initiating MicroPython when
-   * unneeded. */
-  char m_pythonHeap[k_pythonHeapSize];
-  const void * m_pythonUser;
-
   App(Snapshot * snapshot);
+
   ConsoleController m_consoleController;
   ButtonRowController m_listFooter;
   MenuController m_menuController;
+  LanguageSelectController m_languageSelectController;
   StackViewController m_codeStackViewController;
   PythonToolbox m_toolbox;
   VariableBoxController m_variableBoxController;
+
+  PocketPyEngine m_pocketPyEngine;
+  TinyBasicEngine m_tinyBasicEngine;
+  LogoEngine m_logoEngine;
 };
 
 }

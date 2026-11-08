@@ -11,29 +11,31 @@
 #include <string.h>
 #include <algorithm>
 
+#ifndef TARGET_BRAIN
 extern "C" {
 #include "py/lexer.h"
 #include "py/nlr.h"
 #include "py/objmodule.h"
 }
+#endif
 
 namespace Code {
 
 // Got these in python/py/src/compile.cpp compiled file
-constexpr static uint PN_file_input_2 = 1;
-constexpr static uint PN_funcdef = 3;
-constexpr static uint PN_expr_stmt = 5;
-constexpr static uint PN_import_name = 14; // import math // import math as m // import math, cmath // import math as m, cmath as cm
-constexpr static uint PN_import_from = 15; // from math import * // from math import sin // from math import sin as stew // from math import sin, cos // from math import sin as stew, cos as cabbage // from a.b import *
-constexpr static uint PN_import_as_name = 99; // sin as stew
-constexpr static uint PN_import_as_names = 102; // ... import sin as stew, cos as cabbage
-constexpr static uint PN_dotted_name = 104;
+constexpr static unsigned int PN_file_input_2 = 1;
+constexpr static unsigned int PN_funcdef = 3;
+constexpr static unsigned int PN_expr_stmt = 5;
+constexpr static unsigned int PN_import_name = 14; // import math // import math as m // import math, cmath // import math as m, cmath as cm
+constexpr static unsigned int PN_import_from = 15; // from math import * // from math import sin // from math import sin as stew // from math import sin, cos // from math import sin as stew, cos as cabbage // from a.b import *
+constexpr static unsigned int PN_import_as_name = 99; // sin as stew
+constexpr static unsigned int PN_import_as_names = 102; // ... import sin as stew, cos as cabbage
+constexpr static unsigned int PN_dotted_name = 104;
 /* These are not used for now but might be relevant at some point?
-constexpr static uint PN_import_stmt = 92;
-constexpr static uint PN_import_from_2 = 93;
-constexpr static uint PN_import_from_2b = 94; // "from .foo import"
-constexpr static uint PN_import_from_3 = 95;
-constexpr static uint PN_import_as_names_paren = 96;
+constexpr static unsigned int PN_import_stmt = 92;
+constexpr static unsigned int PN_import_from_2 = 93;
+constexpr static unsigned int PN_import_from_2b = 94; // "from .foo import"
+constexpr static unsigned int PN_import_from_3 = 95;
+constexpr static unsigned int PN_import_as_names_paren = 96;
 */
 
 VariableBoxController::VariableBoxController(ScriptStore * scriptStore) :
@@ -389,6 +391,34 @@ void VariableBoxController::insertTextInCaller(const char * text, int textLength
   sender()->handleEventWithText(commandBuffer);
 }
 
+#if TARGET_BRAIN
+void VariableBoxController::loadBuiltinNodes(const char * textToAutocomplete, int textToAutocompleteLength) {
+  static const struct { const char * name; ScriptNode::Type type; } builtinNames[] = {
+    {"False", ScriptNode::Type::WithoutParentheses},
+    {"None", ScriptNode::Type::WithoutParentheses},
+    {"True", ScriptNode::Type::WithoutParentheses},
+    {"abs", ScriptNode::Type::WithParentheses},
+    {"all", ScriptNode::Type::WithParentheses},
+    {"any", ScriptNode::Type::WithParentheses},
+    {"input", ScriptNode::Type::WithParentheses},
+    {"len", ScriptNode::Type::WithParentheses},
+    {"print", ScriptNode::Type::WithParentheses},
+    {"range", ScriptNode::Type::WithParentheses},
+  };
+  for (size_t i = 0; i < sizeof(builtinNames)/sizeof(builtinNames[0]); i++) {
+    addNodeIfMatches(textToAutocomplete, textToAutocompleteLength, builtinNames[i].type, NodeOrigin::Builtins, builtinNames[i].name);
+  }
+}
+
+void VariableBoxController::loadImportedVariablesInScript(const char * scriptContent, const char * textToAutocomplete, int textToAutocompleteLength) {}
+void VariableBoxController::loadCurrentVariablesInScript(const char * scriptContent, const char * textToAutocomplete, int textToAutocompleteLength) {}
+void VariableBoxController::loadGlobalAndImportedVariablesInScriptAsImported(Script script, const char * textToAutocomplete, int textToAutocompleteLength, bool importFromModules) {}
+bool VariableBoxController::addNodesFromImportMaybe(mp_parse_node_struct_t * parseNode, const char * textToAutocomplete, int textToAutocompleteLength, bool importFromModules) { return false; }
+const char * VariableBoxController::importationSourceNameFromNode(mp_parse_node_t & node) { return nullptr; }
+bool VariableBoxController::importationSourceIsModule(const char * sourceName, const ToolboxMessageTree * * moduleChildren, int * numberOfModuleChildren) { return false; }
+bool VariableBoxController::importationSourceIsScript(const char * sourceName, const char * * scriptFullName, Script * retrievedScript) { return false; }
+bool VariableBoxController::addImportStructFromScript(mp_parse_node_struct_t * pns, unsigned int structKind, const char * scriptName, const char * textToAutocomplete, int textToAutocompleteLength) { return false; }
+#else
 void VariableBoxController::loadBuiltinNodes(const char * textToAutocomplete, int textToAutocompleteLength) {
   //TODO Could be great to use strings defined in STATIC const char *const tok_kw[] in python/lexer.c
   /* The commented values do not work with our current MicroPython but might
@@ -643,7 +673,7 @@ void VariableBoxController::loadGlobalAndImportedVariablesInScriptAsImported(Scr
 
     if (MP_PARSE_NODE_IS_STRUCT(pn)) {
       mp_parse_node_struct_t * pns = (mp_parse_node_struct_t *)pn;
-      uint structKind = (uint)MP_PARSE_NODE_STRUCT_KIND(pns);
+      unsigned int structKind = (uint)MP_PARSE_NODE_STRUCT_KIND(pns);
       if (structKind == PN_funcdef || structKind == PN_expr_stmt) {
         // The script is only a single function or variable definition
         addImportStructFromScript(pns, structKind, scriptName, textToAutocomplete, textToAutocompleteLength);
@@ -680,7 +710,7 @@ void VariableBoxController::loadGlobalAndImportedVariablesInScriptAsImported(Scr
 
 bool VariableBoxController::addNodesFromImportMaybe(mp_parse_node_struct_t * parseNode, const char * textToAutocomplete, int textToAutocompleteLength, bool importFromModules) {
   // Determine if the node is an import structure
-  uint structKind = (uint) MP_PARSE_NODE_STRUCT_KIND(parseNode);
+  unsigned int structKind = (uint) MP_PARSE_NODE_STRUCT_KIND(parseNode);
   bool structKindIsImportWithoutFrom = structKind == PN_import_name;
   if (!structKindIsImportWithoutFrom
       && structKind != PN_import_from
@@ -855,7 +885,7 @@ const char * structName(mp_parse_node_struct_t * structNode) {
   return nullptr;
 }
 
-bool VariableBoxController::addImportStructFromScript(mp_parse_node_struct_t * pns, uint structKind, const char * scriptName, const char * textToAutocomplete, int textToAutocompleteLength) {
+bool VariableBoxController::addImportStructFromScript(mp_parse_node_struct_t * pns, unsigned int structKind, const char * scriptName, const char * textToAutocomplete, int textToAutocompleteLength) {
   assert(structKind == PN_funcdef || structKind == PN_expr_stmt);
   // Find the id child node, which stores the struct's name
   const char * name = structName(pns);
@@ -866,6 +896,8 @@ bool VariableBoxController::addImportStructFromScript(mp_parse_node_struct_t * p
 }
 
 // The returned boolean means we should escape the process
+#endif
+
 bool VariableBoxController::addNodeIfMatches(const char * textToAutocomplete, int textToAutocompleteLength, ScriptNode::Type nodeType, NodeOrigin nodeOrigin, const char * nodeName, int nodeNameLength, const char * nodeSourceName, const char * nodeDescription) {
   assert(nodeName != nullptr);
   if (nodeNameLength < 0) {

@@ -5,12 +5,6 @@
 #include <ion/unicode/utf8_helper.h>
 #include <apps/apps_container.h>
 
-#if defined _FXCG || defined NSPIRE_NEWLIB
-extern "C" int calculator;
-extern "C" const int prizm_heap_size;
-extern "C" char prizm_heap[];
-#endif
-
 namespace Code {
 
 I18n::Message App::Descriptor::name() {
@@ -69,15 +63,10 @@ void App::Snapshot::setOpt(const char * name, const char * value) {
     }
     *separator = 0;
     const char * scriptName = value;
-    /* We include the 0 in the scriptContent to represent the importation
-     * status. It is set to 1 after addScriptFromTemplate. Indeed, this '/0'
-     * char has two goals: ending the scriptName and representing the
-     * importation status; we cannot set it to 1 before adding the script to
-     * storage. */
     const char * scriptContent = separator;
     Code::ScriptTemplate script(scriptName, scriptContent);
     m_scriptStore.addScriptFromTemplate(&script);
-    ScriptStore::ScriptNamed(scriptName).toggleAutoimportationStatus(); // set Importation Status to 1
+    ScriptStore::ScriptNamed(scriptName).toggleAutoimportationStatus();
     return;
   }
   if (strcmp(name, "lock-on-console") == 0) {
@@ -89,8 +78,6 @@ void App::Snapshot::setOpt(const char * name, const char * value) {
 
 App::App(Snapshot * snapshot) :
   Shared::InputEventHandlerDelegateApp(snapshot, &m_codeStackViewController),
-  m_pythonHeap{},
-  m_pythonUser(nullptr),
   m_consoleController(nullptr, this, snapshot->scriptStore()
 #if EPSILON_GETOPT
       , snapshot->lockOnConsole()
@@ -98,22 +85,32 @@ App::App(Snapshot * snapshot) :
       ),
   m_listFooter(&m_codeStackViewController, &m_menuController, &m_menuController, ButtonRowController::Position::Bottom, ButtonRowController::Style::EmbossedGray, ButtonRowController::Size::Large),
   m_menuController(&m_listFooter, this, snapshot->scriptStore(), &m_listFooter),
-  m_codeStackViewController(&m_modalViewController, &m_listFooter),
-  m_variableBoxController(snapshot->scriptStore())
+  m_languageSelectController(&m_codeStackViewController, &m_listFooter),
+  m_codeStackViewController(&m_modalViewController, &m_languageSelectController),
+  m_variableBoxController(snapshot->scriptStore()),
+  m_pocketPyEngine(&m_consoleController),
+  m_tinyBasicEngine(&m_consoleController),
+  m_logoEngine(&m_consoleController)
 {
   Clipboard::sharedClipboard()->enterPython();
 }
 
 App::~App() {
   assert(!m_consoleController.inputRunLoopActive());
-  deinitPython();
   Clipboard::sharedClipboard()->exitPython();
+}
+
+InterpreterEngine * App::currentEngine() {
+  switch (LanguageSelectController::currentLanguage()) {
+    case LanguageType::Python: return &m_pocketPyEngine;
+    case LanguageType::Basic:  return &m_tinyBasicEngine;
+    case LanguageType::Logo:   return &m_logoEngine;
+    default:                   return &m_pocketPyEngine;
+  }
 }
 
 bool App::handleEvent(Ion::Events::Event event) {
   if (event == Ion::Events::Home && m_consoleController.inputRunLoopActive()) {
-    /* We need to return true here because we want to actually exit from the
-     * input run loop, which requires ending a dispatchEvent cycle. */
     m_consoleController.terminateInputLoop();
     if (m_modalViewController.isDisplayingModal()) {
       m_modalViewController.dismissModalViewController();
@@ -146,36 +143,61 @@ bool App::textInputDidReceiveEvent(InputEventHandler * textInput, Ion::Events::E
     textInput->handleEventWithText(const_cast<char *>(buffer), false, false, shouldRemoveLastCharacter);
     return true;
   }
+
+  // Calculator key shortcut symbol conversions for programming
+  LanguageType lang = LanguageSelectController::currentLanguage();
+
+  if (event == Ion::Events::Imaginary) { // 'i' key -> double quote "
+    textInput->handleEventWithText("\"");
+    return true;
+  }
+  if (event == Ion::Events::Pi) { // Pi key -> colon :
+    textInput->handleEventWithText(":");
+    return true;
+  }
+  if (event == Ion::Events::Sto) { // Sto key -> =
+    textInput->handleEventWithText("=");
+    return true;
+  }
+  if (event == Ion::Events::Square) {
+    textInput->handleEventWithText(lang == LanguageType::Python ? "**2" : "^2");
+    return true;
+  }
+  if (event == Ion::Events::Power) {
+    textInput->handleEventWithText(lang == LanguageType::Python ? "**" : "^");
+    return true;
+  }
+  if (event == Ion::Events::Sqrt) {
+    textInput->handleEventWithText(lang == LanguageType::Python ? "math.sqrt(" : "SQRT(");
+    return true;
+  }
+  if (event == Ion::Events::Sine) {
+    textInput->handleEventWithText(lang == LanguageType::Python ? "math.sin(" : "SIN(");
+    return true;
+  }
+  if (event == Ion::Events::Cosine) {
+    textInput->handleEventWithText(lang == LanguageType::Python ? "math.cos(" : "COS(");
+    return true;
+  }
+  if (event == Ion::Events::Tangent) {
+    textInput->handleEventWithText(lang == LanguageType::Python ? "math.tan(" : "TAN(");
+    return true;
+  }
+  if (event == Ion::Events::Ln) {
+    textInput->handleEventWithText(lang == LanguageType::Python ? "math.log(" : "LOG(");
+    return true;
+  }
+  if (event == Ion::Events::Log) {
+    textInput->handleEventWithText(lang == LanguageType::Python ? "math.log10(" : "LOG(");
+    return true;
+  }
+
   const char * pythonText = Helpers::PythonTextForEvent(event);
   if (pythonText != nullptr) {
     textInput->handleEventWithText(pythonText);
     return true;
   }
   return false;
-}
-
-void App::initPythonWithUser(const void * pythonUser) {
-  if (!m_pythonUser) {
-#if defined _FXCG || defined NSPIRE_NEWLIB
-    if (calculator == 1) { // fxcg50
-      MicroPython::init( (void *) 0x8c200000, (void *)(0x8c200000+ 0x2e0000));
-    } else if (calculator >= 1 && calculator <=4 ) {
-      MicroPython::init( prizm_heap, prizm_heap+prizm_heap_size);
-    } else {
-#endif
-      MicroPython::init(m_pythonHeap, m_pythonHeap + k_pythonHeapSize);
-#if defined _FXCG || defined NSPIRE_NEWLIB
-    }
-#endif
-  }
-  m_pythonUser = pythonUser;
-}
-
-void App::deinitPython() {
-  if (m_pythonUser) {
-    MicroPython::deinit();
-    m_pythonUser = nullptr;
-  }
 }
 
 }

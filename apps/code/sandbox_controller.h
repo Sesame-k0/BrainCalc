@@ -2,10 +2,10 @@
 #define CODE_SANDBOX_CONTROLLER_H
 
 #include <escher/responder.h>
-#include <escher/solid_color_view.h>
-#include <escher/stack_view_controller.h>
+#include <escher/view.h>
 #include <escher/view_controller.h>
-#include <python/port/port.h>
+
+class StackViewController;
 
 namespace Code {
 
@@ -16,16 +16,25 @@ public:
   void reset();
 
   // ViewController
-  View * view() override { return &m_solidColorView; }
+  View * view() override { return &m_contentView; }
   void viewWillAppear() override;
   void viewDidDisappear() override;
   bool handleEvent(Ion::Events::Event event) override;
   ViewController::DisplayParameter displayParameter() override { return ViewController::DisplayParameter::WantsMaximumSpace; }
 
 private:
+  class ContentView : public View {
+  public:
+    ContentView() {}
+    void drawRect(KDContext * ctx, KDRect rect) const override {
+      // Direct frame buffer drawing is preserved; do not clear.
+    }
+  };
+
   void redrawWindow();
-  SolidColorView m_solidColorView;
+  ContentView m_contentView;
 };
+
 }
 
 #endif

@@ -1,7 +1,7 @@
 apps += Code::App
 app_headers += apps/code/app.h
 
-SFLAGS += -DHAS_CODE
+SFLAGS += -DHAS_CODE -DPK_ENABLE_OS=0
 
 app_code_src = $(addprefix apps/code/,\
   app.cpp \
@@ -12,12 +12,17 @@ app_code_src = $(addprefix apps/code/,\
   editor_controller.cpp \
   editor_view.cpp \
   helpers.cpp \
+  language_select_controller.cpp \
   menu_controller.cpp \
   python_text_area.cpp \
   sandbox_controller.cpp \
   script_name_cell.cpp \
   script_parameter_controller.cpp \
   toolbox_ion_keys.cpp \
+  engines/pocketpy/pocketpy.c \
+  engines/pocketpy/pocketpy_engine.cpp \
+  engines/tinybasic/tinybasic_engine.cpp \
+  engines/logo/logo_engine.cpp \
 )
 
 app_code_test_src = $(addprefix apps/code/,\

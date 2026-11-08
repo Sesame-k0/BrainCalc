@@ -64,8 +64,8 @@ enum class KeyAction : uint16_t {
   Toolbox,
   Var,
   Clear,
-  Lower,
-  Greater,
+  LessGreater, // 小なり/大なり (< >)
+  Manual,      // 総合マニュアル (Help)
 
   // === NumWorks 物理電卓キー網羅追加分（初期値: OK=F3、他は未割り当て 0） ===
   OK,

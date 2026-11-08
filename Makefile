@@ -138,7 +138,9 @@ include ion/Makefile
 include kandinsky/Makefile
 include poincare/Makefile
 ifneq ($(filter code,$(apps_list)),)
+ifneq ($(TARGET),brain)
 include python/Makefile
+endif
 endif
 include escher/Makefile
 # Executable Makefiles

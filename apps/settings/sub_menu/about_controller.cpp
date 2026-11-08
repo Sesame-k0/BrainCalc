@@ -1,8 +1,8 @@
 #include "about_controller.h"
-#ifdef HAS_CODE
+#if defined(HAS_CODE) && !defined(TARGET_BRAIN)
 #include "../../../python/src/py/mpconfig.h"
 #else
-#define MICROPY_VERSION_STRING "Disabled"
+#define MICROPY_VERSION_STRING "PocketPy/BASIC/Logo"
 #endif
 #include "poincare/division.h"
 #include <assert.h>

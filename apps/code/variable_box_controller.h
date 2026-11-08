@@ -9,6 +9,17 @@
 #include "script_store.h"
 #include "variable_box_empty_controller.h"
 
+#if !TARGET_BRAIN
+extern "C" {
+#include <py/obj.h>
+#include <py/parse.h>
+}
+#else
+struct _mp_parse_node_struct_t;
+typedef struct _mp_parse_node_struct_t mp_parse_node_struct_t;
+typedef uintptr_t mp_parse_node_t;
+#endif
+
 namespace Code {
 
 class VariableBoxController : public AlternateEmptyNestedMenuController {
@@ -93,7 +104,7 @@ private:
   const char * importationSourceNameFromNode(mp_parse_node_t & node);
   bool importationSourceIsModule(const char * sourceName, const ToolboxMessageTree * * moduleChildren = nullptr, int * numberOfModuleChildren = nullptr);
   bool importationSourceIsScript(const char * sourceName, const char * * scriptFullName, Script * retrievedScript = nullptr);
-  bool addImportStructFromScript(mp_parse_node_struct_t * pns, uint structKind, const char * scriptName, const char * textToAutocomplete, int textToAutocompleteLength);
+  bool addImportStructFromScript(mp_parse_node_struct_t * pns, unsigned int structKind, const char * scriptName, const char * textToAutocomplete, int textToAutocompleteLength);
   /* Add a node if it completes the text to autocomplete and if it is not
    * already contained in the variable box. The returned boolean means we
    * should escape the node scanning process (due to the lexicographical order

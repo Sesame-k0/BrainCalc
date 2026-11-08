@@ -82,9 +82,16 @@ void MenuController::didBecomeFirstResponder() {
 void MenuController::viewWillAppear() {
   ViewController::viewWillAppear();
   updateAddScriptRowDisplay();
+  m_selectableTableView.reloadData();
+  footer()->setSelectedButton(-1);
+  m_selectableTableView.selectCellAtLocation(0, 0);
 }
 
 bool MenuController::handleEvent(Ion::Events::Event event) {
+  if (event == Ion::Events::Back) {
+    stackViewController()->pop();
+    return true;
+  }
   if (event == Ion::Events::Down) {
     m_selectableTableView.deselectTable();
     footer()->setSelectedButton(0);
@@ -147,7 +154,7 @@ void MenuController::duplicateScript(Script script) {
   char buffer[10];
   Script::DefaultName(buffer, 10);
   
-  Ion::Storage::sharedStorage()->createRecordWithExtension(buffer, Code::ScriptStore::k_scriptExtension, script.value().buffer, script.value().size);
+  Ion::Storage::sharedStorage()->createRecordWithExtension(buffer, Code::ScriptStore::currentScriptExtension(), script.value().buffer, script.value().size);
   
   updateAddScriptRowDisplay();
 }
@@ -314,7 +321,7 @@ bool MenuController::textFieldDidFinishEditing(TextField * textField, const char
   static constexpr int bufferSize = Script::k_defaultScriptNameMaxSize + 1 + ScriptStore::k_scriptExtensionLength; //"script99" + "." + "py"
   char numberedDefaultName[bufferSize];
 
-  if (strlen(text) > 1 + strlen(ScriptStore::k_scriptExtension)) {
+  if (strlen(text) > 1 + strlen(ScriptStore::currentScriptExtension())) {
     newName = text;
   } else {
     // The user entered an empty name. Use a numbered default script name.
@@ -323,7 +330,7 @@ bool MenuController::textFieldDidFinishEditing(TextField * textField, const char
     assert(UTF8Decoder::CharSizeOfCodePoint('.') == 1);
     numberedDefaultName[defaultNameLength++] = '.';
     assert(defaultNameLength < bufferSize);
-    strlcpy(numberedDefaultName + defaultNameLength, ScriptStore::k_scriptExtension, bufferSize - defaultNameLength);
+    strlcpy(numberedDefaultName + defaultNameLength, ScriptStore::currentScriptExtension(), bufferSize - defaultNameLength);
     /* If there are already scripts named script1.py, script2.py,... until
      * Script::k_maxNumberOfDefaultScriptNames, we want to write the last tried
      * default name and let the user modify it. */
@@ -360,7 +367,7 @@ bool MenuController::textFieldDidFinishEditing(TextField * textField, const char
 }
 
 bool MenuController::textFieldDidHandleEvent(TextField * textField, bool returnValue, bool textSizeDidChange) {
-  int scriptExtensionLength = 1 + strlen(ScriptStore::k_scriptExtension);
+  int scriptExtensionLength = 1 + strlen(ScriptStore::currentScriptExtension());
   if (textField->isEditing()) {
     const char * maxPointerLocation = textField->text() + textField->draftTextLength() - scriptExtensionLength;
     if (textField->cursorLocation() > maxPointerLocation) {
@@ -405,7 +412,7 @@ bool MenuController::privateTextFieldDidAbortEditing(TextField * textField, bool
    * middle of another setFirstResponder call. */
   Script script = m_scriptStore->scriptAtIndex(m_selectableTableView.selectedRow());
   const char * scriptName = script.fullName();
-  if (strlen(scriptName) <= 1 + strlen(ScriptStore::k_scriptExtension)) {
+  if (strlen(scriptName) <= 1 + strlen(ScriptStore::currentScriptExtension())) {
     // The previous text was an empty name. Use a numbered default script name.
     char numberedDefaultName[Script::k_defaultScriptNameMaxSize];
     bool foundDefaultName = Script::DefaultName(numberedDefaultName, Script::k_defaultScriptNameMaxSize);
@@ -414,7 +421,7 @@ bool MenuController::privateTextFieldDidAbortEditing(TextField * textField, bool
       deleteScript(script);
       return true;
     }
-    Script::ErrorStatus error = script.setBaseNameWithExtension(numberedDefaultName, ScriptStore::k_scriptExtension);
+    Script::ErrorStatus error = script.setBaseNameWithExtension(numberedDefaultName, ScriptStore::currentScriptExtension());
     scriptName = m_scriptStore->scriptAtIndex(m_selectableTableView.selectedRow()).fullName();
     /* Because we use the numbered default name, the name should not be
      * already taken. Plus, the script could be added only if the storage has

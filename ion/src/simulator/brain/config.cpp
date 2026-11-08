@@ -5,6 +5,7 @@
 #include <wchar.h>
 
 #include "keyboard.h"
+#include "display.h"
 #include "logger.h"
 
 namespace Ion {
@@ -50,8 +51,8 @@ static ActionInfo sActions[kActionCount] = {
   { KeyAction::Toolbox,      L"関数一覧 (Toolbox)",   L"Tool", VK_F1,    VK_F1,    false, KeyCategory::System   },
   { KeyAction::Var,          L"変数一覧 (Var)",       L"Var",  VK_F9,    VK_F9,    false, KeyCategory::System   },
   { KeyAction::Clear,        L"数式全消去 (Clear)",   L"Clr",  VK_F4,    VK_F4,    false, KeyCategory::System   },
-  { KeyAction::Lower,        L"小なり (<)",           L"<",    VK_F11,   VK_F11,   false, KeyCategory::Symbol   },
-  { KeyAction::Greater,      L"大なり (>)",           L">",    VK_F12,   VK_F12,   false, KeyCategory::Symbol   },
+  { KeyAction::LessGreater,  L"小なり/大なり (< >)",  L"< >",  VK_F11,   VK_F11,   false, KeyCategory::Symbol   },
+  { KeyAction::Manual,       L"総合マニュアル (Help)",L"Help", VK_F12,   VK_F12,   false, KeyCategory::System   },
 
   // === NumWorks 物理電卓キー網羅追加分（既存F3=OKを維持し、あぶれたキーは「未割り当て(0)」） ===
   { KeyAction::OK,           L"決定・選択 (OK)",      L"OK",   VK_F3,    VK_F3,    false, KeyCategory::Basic    },
@@ -146,7 +147,7 @@ void init() {
     return;
   }
 
-  if (memcmp(data.magic, "LILMCONF", 8) != 0 || data.version != 1) {
+  if (memcmp(data.magic, "LILMCONF", 8) != 0 || data.version != 2) {
     BrainLog("Config::init: invalid magic/version -> using defaults");
     return;
   }
@@ -194,7 +195,7 @@ void save() {
   LiliumConfigData data;
   memset(&data, 0, sizeof(data));
   memcpy(data.magic, "LILMCONF", 8);
-  data.version = 1;
+  data.version = 2;
   data.helpEnabled = sHelpEnabled ? 1 : 0;
   data.logEnabled = sLogEnabled ? 1 : 0;
   data.keyCount = static_cast<uint16_t>(kActionCount);
@@ -418,8 +419,18 @@ bool executeAction(KeyAction action) {
     case KeyAction::Toolbox:      Keyboard::pushPendingEvent(Ion::Events::Toolbox); return true;
     case KeyAction::Var:          Keyboard::pushPendingEvent(Ion::Events::Var); return true;
     case KeyAction::Clear:        Keyboard::pushPendingEvent(Ion::Events::Clear); return true;
-    case KeyAction::Lower:        Keyboard::pushPendingEvent(Ion::Events::Lower); return true;
-    case KeyAction::Greater:      Keyboard::pushPendingEvent(Ion::Events::Greater); return true;
+    case KeyAction::LessGreater: {
+      bool isShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+      if (isShift) {
+        Keyboard::pushPendingEvent(Ion::Events::Greater);
+      } else {
+        Keyboard::pushPendingEvent(Ion::Events::Lower);
+      }
+      return true;
+    }
+    case KeyAction::Manual:
+      Display::showLiliumManual();
+      return true;
 
     case KeyAction::OK:           Keyboard::pushPendingEvent(Ion::Events::OK); return true;
     case KeyAction::EXE:          Keyboard::pushPendingEvent(Ion::Events::EXE); return true;

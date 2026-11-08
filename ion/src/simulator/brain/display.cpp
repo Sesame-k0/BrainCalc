@@ -660,13 +660,15 @@ static int sSettingsSubFocus = 0; // 0: 完了して保存, 1: キャンセル
 static int sLastSettingsFocus = -1;
 static int sLastSettingsSubFocus = -1;
 
-// B2. LLCubic 操作ガイド特設ダイアログ (720x444, 左目次 + 右解説2ペイン)
+// B2. Lilium 総合マニュアル (720x444, 4大カテゴリタブ + 左目次 + 右解説2ペイン)
 static constexpr int kGuideDialogW = 720;
 static constexpr int kGuideDialogH = 444;
 static constexpr int kGuideDialogX = (kBrainScreenWidth - kGuideDialogW) / 2;  // 40
 static constexpr int kGuideDialogY = (kBrainScreenHeight - kGuideDialogH) / 2; // 18
-static constexpr int kGuideTopicCount = 14;
-static constexpr int kVisibleGuideRows = 9;
+static constexpr int kGuideCategoryCount = 4; // 0:3Dグラフ, 1:Python, 2:BASIC, 3:Logo
+static constexpr int kVisibleGuideRows = 8;
+static int sGuideCategory = 0;
+static int sLastGuideCategory = -1;
 static int sGuideSelectedIndex = 0;
 static int sGuideScrollOffset = 0;
 static int sLastGuideSelectedIndex = -1;
@@ -877,10 +879,10 @@ static void renderSettingsRowContent(HDC hdc, int r) {
                  L"デフォルトに戻す", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   } else if (r == 4) {
     SelectObject(hdc, sUiFontBold);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 5, 360, 20, RGB(30, 40, 50), L"■ LLCubic (3Dグラフ) 操作ガイド");
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 5, 360, 20, RGB(30, 40, 50), L"■ Lilium 総合マニュアル (3D/言語ガイド)");
     SelectObject(hdc, sUiFontTiny);
     drawTextLine(hdc, kSettingsDialogX + 32, ry + 28, 420, 15, RGB(90, 100, 110),
-                 L"3Dグラフの数式自然入力・回転・断面・交線吸着などの使い方を表示します");
+                 L"3Dグラフ、Python、BASIC、Logoの構文・関数・例文を表示します");
     SelectObject(hdc, sUiFontBold);
     drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(232, 246, 244), RGB(79, 191, 175));
     drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(20, 108, 96),
@@ -964,7 +966,7 @@ static void renderSettingsMainDialog(HDC hdc) {
 }
 
 // =============================================================================
-// B2. LLCubic (3D立体グラフ) 操作ガイド (特設2ペイン高速ダイアログ)
+// B2. Lilium 総合マニュアル (4大カテゴリ多層化高速2ペインダイアログ)
 // =============================================================================
 struct GuideTopic {
   const wchar_t * shortTitle;
@@ -972,7 +974,8 @@ struct GuideTopic {
   const wchar_t * body;
 };
 
-static constexpr GuideTopic kGuideTopics[kGuideTopicCount] = {
+// --- カテゴリ 0: 3D立体グラフ (LLCubic) ---
+static constexpr GuideTopic kPlot3DTopics[14] = {
   {
     L"1. LLCubic の概要",
     L"1. LLCubic (3D立体グラフ) とは",
@@ -1108,38 +1111,328 @@ static constexpr GuideTopic kGuideTopics[kGuideTopicCount] = {
   }
 };
 
+// --- カテゴリ 1: Python (PocketPy) ---
+static constexpr GuideTopic kPythonTopics[8] = {
+  {
+    L"1. PocketPy の概要",
+    L"1. Python (PocketPy) プログラミング",
+    L"【組み込み向け超軽量 Python 3】\n"
+    L"BrainCalc に内蔵されたモダンな Python 3 インタプリタです。\n\n"
+    L"・関数定義、クラス、内包表記、例外処理などの標準構文を完全サポート。\n"
+    L"・[F1] (Toolbox) から構文テンプレートや関数を一発入力できます。\n"
+    L"・12xモード時はコロン (:) やクォート (\")、等号 (=) がキーボードから素早く打てます。"
+  },
+  {
+    L"2. 変数と基本データ型",
+    L"2. 変数・数値・文字列・リスト・辞書",
+    L"【基本データ型の記述例】\n"
+    L"x = 10\n"
+    L"name = \"Lilium\"\n"
+    L"nums = [1, 2, 3, 4, 5]\n"
+    L"point = {\"x\": 100, \"y\": 50}\n\n"
+    L"・リスト要素追加: nums.append(6)\n"
+    L"・長さ取得: len(nums)\n"
+    L"・インデックス: nums[0], point[\"x\"]"
+  },
+  {
+    L"3. 条件分岐 (if 文)",
+    L"3. 条件分岐 if / elif / else",
+    L"【コロンとインデントによるブロック】\n"
+    L"score = 85\n\n"
+    L"if score >= 90:\n"
+    L"    print(\"Excellent!\")\n"
+    L"elif score >= 60:\n"
+    L"    print(\"Pass\")\n"
+    L"else:\n"
+    L"    print(\"Try Again\")\n\n"
+    L"※ [Tab] キーで4文字インデントが自動挿入されます。"
+  },
+  {
+    L"4. 繰り返しと内包表記",
+    L"4. 繰り返し (for / while) と内包表記",
+    L"【for ループとリスト内包】\n"
+    L"for i in range(5):\n"
+    L"    print(i * 10)\n\n"
+    L"# リスト内包表記 (平方数のリスト)\n"
+    L"sq = [x**2 for x in range(1, 11)]\n"
+    L"print(sq)\n\n"
+    L"・break でループ中断、continue で次へ進みます。"
+  },
+  {
+    L"5. 関数定義 (def)",
+    L"5. 関数定義 (def) とラムダ式",
+    L"【処理の関数化】\n"
+    L"def gcd(a, b):\n"
+    L"    while b != 0:\n"
+    L"        a, b = b, a % b\n"
+    L"    return a\n\n"
+    L"print(gcd(48, 18))  # 結果: 6\n\n"
+    L"・ラムダ式: f = lambda x, y: x + y"
+  },
+  {
+    L"6. 数学関数 (math)",
+    L"6. 数学モジュール (import math)",
+    L"【三角関数・対数・平方根】\n"
+    L"import math\n\n"
+    L"rad = math.radians(45)\n"
+    L"s = math.sin(rad)\n"
+    L"c = math.cos(rad)\n"
+    L"d = math.sqrt(3**2 + 4**2)\n\n"
+    L"・math.pi (円周率)、math.e (ネイピア数) も利用可能です。"
+  },
+  {
+    L"7. 画面描画 (kandinsky)",
+    L"7. グラフィックス描画 (kandinsky)",
+    L"【320x240 フルカラー描画】\n"
+    L"import kandinsky as kd\n\n"
+    L"kd.clear_screen((255, 255, 255))\n"
+    L"kd.set_pixel(160, 120, (255, 0, 0))\n"
+    L"kd.fill_rect(50, 40, 100, 60, (79, 191, 175))\n"
+    L"kd.draw_string(\"Hello\", 60, 50, (0,0,0), (79,191,175))\n\n"
+    L"・実行後、[Back / Esc] でエディタに戻ります。"
+  },
+  {
+    L"8. サンプルプログラム",
+    L"8. サンプル (フラクタル樹木 / 数式グラフ)",
+    L"【付属のサンプルコード】\n"
+    L"Code アプリ内の \"sample.py\" を開いて [EXE / 決定] を押すと、再帰関数による美しいフラクタル樹木の描画デモが実行されます。\n\n"
+    L"・独自の数式プロットや数値計算に自由に改造してみましょう。"
+  }
+};
+
+// --- カテゴリ 2: BASIC (TinyBasic) ---
+static constexpr GuideTopic kBasicTopics[8] = {
+  {
+    L"1. TinyBasic の概要",
+    L"1. 令和のポケコン (TinyBasic)",
+    L"【行番号による親しみやすい BASIC】\n"
+    L"昔ながらのポケコンスタイルで直感的にコーディングできます。\n\n"
+    L"・行番号 (10, 20, 30...) を付けてプログラムを入力。\n"
+    L"・RUN でプログラムを実行、LIST でプログラム一覧表示。\n"
+    L"・アルファベットと数字、最小限の記号だけで書けるため、電子辞書と相性抜群です。"
+  },
+  {
+    L"2. PRINT と INPUT",
+    L"2. 画面入出力 (PRINT / INPUT)",
+    L"【文字と数値の入出力】\n"
+    L"10 PRINT \"=== BASIC DEMO ===\"\n"
+    L"20 INPUT \"ANATA NO NAMAO WA? \", N$\n"
+    L"30 PRINT \"KONNICHIWA, \"; N$\n\n"
+    L"・セミコロン (;) で区切ると改行せずに続けて表示します。\n"
+    L"・カンマ (,) で区切るとタブ間隔で表示します。"
+  },
+  {
+    L"3. 代入と計算 (LET)",
+    L"3. 変数代入と四則演算 (LET)",
+    L"【数値の計算】\n"
+    L"10 LET A = 100\n"
+    L"20 B = 25  (LET は省略可能)\n"
+    L"30 C = (A + B) * 2 - 50 / 5\n"
+    L"40 PRINT \"RESULT=\"; C\n\n"
+    L"・算術演算子: + - * /\n"
+    L"・関数: SIN(X), COS(X), SQR(X), ABS(X), RND(N)"
+  },
+  {
+    L"4. 条件分岐 (IF) と GOTO",
+    L"4. 条件分岐 (IF ... THEN) と GOTO",
+    L"【判定とプログラムのジャンプ】\n"
+    L"10 INPUT \"TENSU (0-100)= \"; S\n"
+    L"20 IF S >= 60 THEN GOTO 50\n"
+    L"30 PRINT \"MOU SUKOSHI! GANBARE\"\n"
+    L"40 GOTO 60\n"
+    L"50 PRINT \"GOUKAKU! OMEDETOU\"\n"
+    L"60 END"
+  },
+  {
+    L"5. 繰り返し (FOR ... NEXT)",
+    L"5. 繰り返しループ (FOR ... NEXT)",
+    L"【指定回数の繰り返し】\n"
+    L"10 FOR I = 1 TO 10 STEP 2\n"
+    L"20   PRINT I; \" NO 2-JOU WA \"; I * I\n"
+    L"30 NEXT I\n\n"
+    L"・STEP で増分を指定できます（省略時は 1）。\n"
+    L"・マイナス方向 (STEP -1) にも対応しています。"
+  },
+  {
+    L"6. ポケコングラフィックス",
+    L"6. 図形描画 (CLS / PSET / LINE)",
+    L"【画面座標系とグラフィックス命令】\n"
+    L"10 CLS\n"
+    L"20 FOR X = 0 TO 319\n"
+    L"30   Y = 120 + 50 * SIN(X * 0.05)\n"
+    L"40   PSET(X, Y), 1\n"
+    L"50 NEXT X\n"
+    L"60 LINE(0, 120, 319, 120), 2\n\n"
+    L"・CLS: 画面クリア\n"
+    L"・PSET(X,Y): 点描画\n"
+    L"・LINE(X1,Y1,X2,Y2): 線描画"
+  },
+  {
+    L"7. サブルーチン (GOSUB)",
+    L"7. サブルーチン呼び出し (GOSUB / RETURN)",
+    L"【構造化された処理】\n"
+    L"10 PRINT \"MAIN PROGRAM START\"\n"
+    L"20 GOSUB 100\n"
+    L"30 PRINT \"MAIN PROGRAM END\"\n"
+    L"40 END\n"
+    L"100 PRINT \">> SUBROUTINE EXECUTED\"\n"
+    L"110 RETURN"
+  },
+  {
+    L"8. サンプルプログラム",
+    L"8. サンプル (数当てゲーム / 正弦波)",
+    L"【付属のサンプルコード】\n"
+    L"Code アプリ内の \"sample.bas\" には、コンピュータが考えた 1〜100 の数を当てる数当てゲームと、美しい波動グラフィックスデモが収録されています。"
+  }
+};
+
+// --- カテゴリ 3: Logo (Turtle) ---
+static constexpr GuideTopic kLogoTopics[8] = {
+  {
+    L"1. Logo の概要",
+    L"1. タートルグラフィックス (Logo)",
+    L"【画面上の亀に指示を出して描画】\n"
+    L"アルファベットの簡単な命令だけで、幾何学模様を美しく描ける教育用プログラミング言語です。\n\n"
+    L"・前進 (FD)、回転 (RT)、ループ (REPEAT) だけで多彩な図形が描けます。\n"
+    L"・難しい記号がほとんど不要で、電子辞書での入力に最適です。"
+  },
+  {
+    L"2. 前進と後退 (FD / BK)",
+    L"2. 直進移動 (FORWARD / BACK)",
+    L"【タートルを歩かせる】\n"
+    L"FORWARD 100 (短縮: FD 100)\n"
+    L"BACK 50    (短縮: BK 50)\n\n"
+    L"・現在の向きに向かって指定ピクセル分進み、軌跡に線を引きます。\n"
+    L"・初期位置は画面中央 (160, 120)、向きは真上 (北) です。"
+  },
+  {
+    L"3. 回転 (RT / LT)",
+    L"3. 回転 (RIGHT / LEFT)",
+    L"【タートルの向きを変える】\n"
+    L"RIGHT 90 (短縮: RT 90)\n"
+    L"LEFT 45  (短縮: LT 45)\n\n"
+    L"・RIGHT は時計回り、LEFT は反時計回りに指定角度（度数法）だけ回頭します。\n"
+    L"・正三角形なら RT 120、正五角形なら RT 72、正六角形なら RT 60 です。"
+  },
+  {
+    L"4. ペン操作と画面クリア",
+    L"4. ペン操作 (PU / PD) とクリア (CS)",
+    L"【線を描かずに移動する】\n"
+    L"PENUP   (短縮: PU) : ペンを上げる（移動しても線を描かない）\n"
+    L"PENDOWN (短縮: PD) : ペンを下げる（移動で線を描く）\n"
+    L"CLEARSCREEN (短縮: CS) : 画面を消去し、タートルを中央に戻す"
+  },
+  {
+    L"5. 繰り返し (REPEAT)",
+    L"5. 繰り返しブロック (REPEAT [ ... ])",
+    L"【多角形のワンライナー描画】\n"
+    L"正方形を描く:\n"
+    L"REPEAT 4 [ FD 80 RT 90 ]\n\n"
+    L"正五角形を描く:\n"
+    L"REPEAT 5 [ FD 60 RT 72 ]\n\n"
+    L"円を描く:\n"
+    L"REPEAT 36 [ FD 10 RT 10 ]"
+  },
+  {
+    L"6. 星型多角形の描き方",
+    L"6. 星型多角形 (Star) の作図",
+    L"【線の交差する神秘的な図形】\n"
+    L"五芒星 (五つ星):\n"
+    L"REPEAT 5 [ FD 100 RT 144 ]\n\n"
+    L"七芒星:\n"
+    L"REPEAT 7 [ FD 100 RT 154.28 ]\n\n"
+    L"八芒星:\n"
+    L"REPEAT 8 [ FD 100 RT 135 ]"
+  },
+  {
+    L"7. 渦巻きと幾何学アート",
+    L"7. 渦巻きと複合幾何学パターン",
+    L"【多重ループによる幾何学模様】\n"
+    L"花の模様を描く:\n"
+    L"REPEAT 12 [ REPEAT 4 [ FD 50 RT 90 ] RT 30 ]\n\n"
+    L"円を回転させて広がる曼荼羅模様:\n"
+    L"REPEAT 36 [ REPEAT 36 [ FD 5 RT 10 ] RT 10 ]"
+  },
+  {
+    L"8. サンプルプログラム",
+    L"8. サンプル (華麗な幾何学タートルアート)",
+    L"【付属のサンプルコード】\n"
+    L"Code アプリ内の \"sample.lgo\" を開いて実行すると、星型多角形と渦巻きが組み合わさった華麗な幾何学タートルアートが描画されます。"
+  }
+};
+
+struct GuideCategoryDef {
+  const wchar_t * name;
+  const GuideTopic * topics;
+  int count;
+};
+
+static constexpr GuideCategoryDef kGuideCategories[kGuideCategoryCount] = {
+  { L"3Dグラフ", kPlot3DTopics, 14 },
+  { L"Python",   kPythonTopics,  8 },
+  { L"BASIC",    kBasicTopics,   8 },
+  { L"Logo",     kLogoTopics,    8 },
+};
+
 static bool sGuidePageDirty = false;
+static constexpr int kGuideTabY = kGuideDialogY + 44;
+static constexpr int kGuideTabH = 26;
 static constexpr int kGuideTocX = kGuideDialogX + 14;
-static constexpr int kGuideTocY = kGuideDialogY + 50;
+static constexpr int kGuideTocY = kGuideDialogY + 76;
 static constexpr int kGuideTocW = 246;
-static constexpr int kGuideRowH = 36;
+static constexpr int kGuideRowH = 37;
 static constexpr int kGuidePaneX = kGuideDialogX + 280;
-static constexpr int kGuidePaneY = kGuideDialogY + 50;
+static constexpr int kGuidePaneY = kGuideDialogY + 76;
 static constexpr int kGuidePaneW = 426;
-static constexpr int kGuidePaneH = kVisibleGuideRows * kGuideRowH; // 324
+static constexpr int kGuidePaneH = kVisibleGuideRows * kGuideRowH; // 296
+
+static void renderLLCubicGuideTabs(HDC hdc) {
+  const int tabW = 150;
+  const int tabH = kGuideTabH;
+  const int gap = 8;
+  const int startX = kGuideDialogX + 48;
+  const int tabY = kGuideTabY;
+
+  SelectObject(hdc, sUiFontBold);
+  for (int c = 0; c < kGuideCategoryCount; c++) {
+    int tx = startX + c * (tabW + gap);
+    if (c == sGuideCategory) {
+      drawBox(hdc, tx, tabY, tabW, tabH, RGB(79, 191, 175), RGB(50, 160, 145));
+      drawTextLine(hdc, tx, tabY + 4, tabW, 18, RGB(255, 255, 255),
+                   kGuideCategories[c].name, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    } else {
+      drawBox(hdc, tx, tabY, tabW, tabH, RGB(236, 240, 244), RGB(200, 210, 220));
+      drawTextLine(hdc, tx, tabY + 4, tabW, 18, RGB(90, 105, 120),
+                   kGuideCategories[c].name, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    }
+  }
+}
 
 static void renderLLCubicGuideTocBase(HDC hdc) {
   // 左目次領域のクリア
   drawBox(hdc, kGuideTocX - 2, kGuideTocY - 2, kGuideTocW + 18, kGuidePaneH + 4,
           RGB(246, 248, 252), RGB(246, 248, 252));
 
+  int topicCount = kGuideCategories[sGuideCategory].count;
+  const GuideTopic * topics = kGuideCategories[sGuideCategory].topics;
+
   SelectObject(hdc, sUiFontBold);
   for (int r = 0; r < kVisibleGuideRows; r++) {
     int idx = sGuideScrollOffset + r;
-    if (idx >= kGuideTopicCount) break;
+    if (idx >= topicCount) break;
     int ry = kGuideTocY + r * kGuideRowH;
-    drawBox(hdc, kGuideTocX, ry, kGuideTocW, 32, RGB(255, 255, 255), RGB(216, 224, 232));
-    drawTextLine(hdc, kGuideTocX + 12, ry + 6, kGuideTocW - 18, 20,
-                 RGB(42, 52, 64), kGuideTopics[idx].shortTitle);
+    drawBox(hdc, kGuideTocX, ry, kGuideTocW, 33, RGB(255, 255, 255), RGB(216, 224, 232));
+    drawTextLine(hdc, kGuideTocX + 12, ry + 7, kGuideTocW - 18, 20,
+                 RGB(42, 52, 64), topics[idx].shortTitle);
   }
 
   // 左目次スクロールバー
   const int trackX = kGuideTocX + kGuideTocW + 4;
   const int trackH = kGuidePaneH - 4;
   drawBox(hdc, trackX, kGuideTocY, 8, trackH, RGB(232, 236, 242), RGB(212, 218, 226));
-  if (kGuideTopicCount > kVisibleGuideRows) {
-    int maxOffset = kGuideTopicCount - kVisibleGuideRows;
-    int thumbH = (kVisibleGuideRows * trackH) / kGuideTopicCount;
+  if (topicCount > kVisibleGuideRows) {
+    int maxOffset = topicCount - kVisibleGuideRows;
+    int thumbH = (kVisibleGuideRows * trackH) / topicCount;
     if (thumbH < 24) thumbH = 24;
     int thumbY = kGuideTocY + (sGuideScrollOffset * (trackH - thumbH)) / maxOffset;
     drawBox(hdc, trackX + 1, thumbY, 6, thumbH, RGB(140, 155, 170), RGB(115, 130, 145));
@@ -1158,35 +1451,44 @@ static void renderLLCubicGuideBase(HDC hdc) {
           RGB(79, 191, 175), RGB(50, 160, 145));
   SelectObject(hdc, sUiFontBold);
   drawTextLine(hdc, kGuideDialogX, kGuideDialogY + 9, kGuideDialogW, 20,
-               RGB(255, 255, 255), L"【 LLCubic (3D立体グラフ) 操作ガイド 】",
+               RGB(255, 255, 255), L"【 Lilium 総合電子辞書マニュアル 】",
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-  // 3. 左ペイン目次ベース
+  // 3. 上部カテゴリタブ
+  renderLLCubicGuideTabs(hdc);
+
+  // 4. 左ペイン目次ベース
   renderLLCubicGuideTocBase(hdc);
 
-  // 4. 下部フッター
+  // 5. 下部フッター
   const int footY = kGuideDialogY + 382;
   drawBox(hdc, kGuideDialogX + 14, footY, kGuideDialogW - 28, 48,
           RGB(242, 246, 248), RGB(216, 224, 232));
   SelectObject(hdc, sUiFontTiny);
   drawTextLine(hdc, kGuideDialogX + 24, footY + 15, 530, 18, RGB(70, 82, 96),
-               L"[↑/↓]: トピック選択   [PgUp/PgDn]: ページ移動   [Enter / Esc / 戻る]: 設定へ戻る");
+               L"[←/→]: 言語切替   [↑/↓]: トピック選択   [Esc/戻る/F12]: 閉じる");
 
   SelectObject(hdc, sUiFontBold);
   drawBox(hdc, kGuideDialogX + 576, footY + 7, 130, 34, RGB(79, 191, 175), RGB(40, 150, 135));
   drawTextLine(hdc, kGuideDialogX + 576, footY + 7, 130, 34, RGB(255, 255, 255),
-               L"設定に戻る", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+               L"閉じる", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
 static void renderLLCubicGuideOverlay(HDC hdc) {
+  // タブの現在選択状態
+  renderLLCubicGuideTabs(hdc);
+
+  int topicCount = kGuideCategories[sGuideCategory].count;
+  const GuideTopic * topics = kGuideCategories[sGuideCategory].topics;
+
   int visRow = sGuideSelectedIndex - sGuideScrollOffset;
-  if (visRow >= 0 && visRow < kVisibleGuideRows) {
+  if (visRow >= 0 && visRow < kVisibleGuideRows && sGuideSelectedIndex < topicCount) {
     int ry = kGuideTocY + visRow * kGuideRowH;
-    drawBox(hdc, kGuideTocX, ry, kGuideTocW, 32, RGB(232, 246, 244), RGB(79, 191, 175));
-    drawBox(hdc, kGuideTocX, ry, 6, 32, RGB(79, 191, 175), RGB(79, 191, 175));
+    drawBox(hdc, kGuideTocX, ry, kGuideTocW, 33, RGB(232, 246, 244), RGB(79, 191, 175));
+    drawBox(hdc, kGuideTocX, ry, 6, 33, RGB(79, 191, 175), RGB(79, 191, 175));
     SelectObject(hdc, sUiFontBold);
-    drawTextLine(hdc, kGuideTocX + 12, ry + 6, kGuideTocW - 18, 20,
-                 RGB(16, 96, 86), kGuideTopics[sGuideSelectedIndex].shortTitle);
+    drawTextLine(hdc, kGuideTocX + 12, ry + 7, kGuideTocW - 18, 20,
+                 RGB(16, 96, 86), topics[sGuideSelectedIndex].shortTitle);
   }
 
   // 右ペイン詳細カード描画
@@ -1195,15 +1497,17 @@ static void renderLLCubicGuideOverlay(HDC hdc) {
   drawBox(hdc, kGuidePaneX, kGuidePaneY, kGuidePaneW, 34,
           RGB(232, 246, 244), RGB(180, 218, 212));
   SelectObject(hdc, sUiFontBold);
-  drawTextLine(hdc, kGuidePaneX + 12, kGuidePaneY + 7, kGuidePaneW - 24, 20,
-               RGB(18, 96, 86), kGuideTopics[sGuideSelectedIndex].fullTitle);
+  if (sGuideSelectedIndex < topicCount) {
+    drawTextLine(hdc, kGuidePaneX + 12, kGuidePaneY + 7, kGuidePaneW - 24, 20,
+                 RGB(18, 96, 86), topics[sGuideSelectedIndex].fullTitle);
 
-  drawWrappedHelpDesc(hdc,
-                      kGuidePaneX + 14,
-                      kGuidePaneY + 44,
-                      kGuidePaneW - 28,
-                      kGuidePaneY + kGuidePaneH - 12,
-                      kGuideTopics[sGuideSelectedIndex].body);
+    drawWrappedHelpDesc(hdc,
+                        kGuidePaneX + 14,
+                        kGuidePaneY + 44,
+                        kGuidePaneW - 28,
+                        kGuidePaneY + kGuidePaneH - 12,
+                        topics[sGuideSelectedIndex].body);
+  }
 }
 
 static void renderLLCubicGuideDialog(HDC hdc) {
@@ -1650,11 +1954,12 @@ static ModalDirtyRectList getModalDirtyRectList(ModalMode mode) {
   }
 
   if (mode == ModalMode::LLCubicGuide) {
-    if (sGuidePageDirty || sLastGuideScrollOffset != sGuideScrollOffset || sLastGuideSelectedIndex < 0) {
-      int gx = kGuideTocX - 4;
-      int gy = kGuideTocY - 4;
-      int gw = (kGuidePaneX + kGuidePaneW + 4) - gx;
-      int gh = kGuidePaneH + 8;
+    if (sGuidePageDirty || sLastGuideCategory != sGuideCategory ||
+        sLastGuideScrollOffset != sGuideScrollOffset || sLastGuideSelectedIndex < 0) {
+      int gx = kGuideDialogX + 12;
+      int gy = kGuideDialogY + 40;
+      int gw = kGuideDialogW - 24;
+      int gh = (kGuideDialogY + 380) - gy;
       list.rects[list.count++] = { gx, gy, gw, gh };
       return list;
     }
@@ -1853,11 +2158,21 @@ static void openLLCubicGuideModal() {
   sModalMode = ModalMode::LLCubicGuide;
   sGuideSelectedIndex = 0;
   sGuideScrollOffset = 0;
+  sLastGuideCategory = -1;
   sLastGuideSelectedIndex = -1;
   sLastGuideScrollOffset = -1;
   sGuidePageDirty = false;
   sBackdropValid = false;
   refreshModal();
+}
+
+void showLiliumManual() {
+  if (sModalMode == ModalMode::LLCubicGuide) {
+    closeModal();
+    return;
+  }
+  sPreviousModalMode = sModalMode;
+  openLLCubicGuideModal();
 }
 
 bool isExitConfirmOpen() {
@@ -1996,6 +2311,25 @@ bool handleModalKey(WPARAM vkCode) {
 
     case ModalMode::LLCubicGuide:
       switch (vkCode) {
+        case VK_LEFT:
+          sGuideCategory = (sGuideCategory + kGuideCategoryCount - 1) % kGuideCategoryCount;
+          sGuideSelectedIndex = 0;
+          sGuideScrollOffset = 0;
+          sGuidePageDirty = true;
+          if (!hasPendingNavKey()) {
+            refreshModal();
+          }
+          return true;
+        case VK_RIGHT:
+        case VK_TAB:
+          sGuideCategory = (sGuideCategory + 1) % kGuideCategoryCount;
+          sGuideSelectedIndex = 0;
+          sGuideScrollOffset = 0;
+          sGuidePageDirty = true;
+          if (!hasPendingNavKey()) {
+            refreshModal();
+          }
+          return true;
         case VK_UP:
           if (sGuideSelectedIndex > 0) {
             sGuideSelectedIndex--;
@@ -2008,8 +2342,9 @@ bool handleModalKey(WPARAM vkCode) {
             }
           }
           return true;
-        case VK_DOWN:
-          if (sGuideSelectedIndex < kGuideTopicCount - 1) {
+        case VK_DOWN: {
+          int maxTopics = kGuideCategories[sGuideCategory].count;
+          if (sGuideSelectedIndex < maxTopics - 1) {
             sGuideSelectedIndex++;
             if (sGuideSelectedIndex >= sGuideScrollOffset + kVisibleGuideRows) {
               sGuideScrollOffset = sGuideSelectedIndex - (kVisibleGuideRows - 1);
@@ -2020,6 +2355,7 @@ bool handleModalKey(WPARAM vkCode) {
             }
           }
           return true;
+        }
         case VK_PRIOR:
           if (sGuideSelectedIndex > 0) {
             int oldOff = sGuideScrollOffset;
@@ -2032,11 +2368,12 @@ bool handleModalKey(WPARAM vkCode) {
             }
           }
           return true;
-        case VK_NEXT:
-          if (sGuideSelectedIndex < kGuideTopicCount - 1) {
+        case VK_NEXT: {
+          int maxTopics = kGuideCategories[sGuideCategory].count;
+          if (sGuideSelectedIndex < maxTopics - 1) {
             int oldOff = sGuideScrollOffset;
             sGuideSelectedIndex += kVisibleGuideRows;
-            if (sGuideSelectedIndex >= kGuideTopicCount) sGuideSelectedIndex = kGuideTopicCount - 1;
+            if (sGuideSelectedIndex >= maxTopics) sGuideSelectedIndex = maxTopics - 1;
             if (sGuideSelectedIndex >= sGuideScrollOffset + kVisibleGuideRows) {
               sGuideScrollOffset = sGuideSelectedIndex - (kVisibleGuideRows - 1);
             }
@@ -2046,12 +2383,18 @@ bool handleModalKey(WPARAM vkCode) {
             }
           }
           return true;
+        }
+        case VK_F12:
         case VK_RETURN:
         case VK_ESCAPE:
         case VK_BACK:
-          sModalMode = ModalMode::SettingsMain;
-          sBackdropValid = false;
-          refreshModal();
+          if (sPreviousModalMode == ModalMode::SettingsMain) {
+            sModalMode = ModalMode::SettingsMain;
+            sBackdropValid = false;
+            refreshModal();
+          } else {
+            closeModal();
+          }
           return true;
         default:
           return true;
@@ -2352,21 +2695,49 @@ bool handleModalClick(int x, int y) {
   }
 
   if (sModalMode == ModalMode::LLCubicGuide) {
+    // 1. カテゴリタブクリック
+    if (y >= kGuideTabY && y < kGuideTabY + kGuideTabH) {
+      const int tabW = 150;
+      const int gap = 8;
+      const int startX = kGuideDialogX + 48;
+      for (int c = 0; c < kGuideCategoryCount; c++) {
+        int tx = startX + c * (tabW + gap);
+        if (x >= tx && x < tx + tabW) {
+          if (sGuideCategory != c) {
+            sGuideCategory = c;
+            sGuideSelectedIndex = 0;
+            sGuideScrollOffset = 0;
+            sGuidePageDirty = true;
+            refreshModal();
+          }
+          return true;
+        }
+      }
+    }
+
+    // 2. 目次項目クリック
+    int topicCount = kGuideCategories[sGuideCategory].count;
     for (int r = 0; r < kVisibleGuideRows; r++) {
       int idx = sGuideScrollOffset + r;
-      if (idx >= kGuideTopicCount) break;
+      if (idx >= topicCount) break;
       int ry = kGuideTocY + r * kGuideRowH;
-      if (x >= kGuideTocX && x < kGuideTocX + kGuideTocW && y >= ry && y < ry + 32) {
+      if (x >= kGuideTocX && x < kGuideTocX + kGuideTocW && y >= ry && y < ry + 33) {
         sGuideSelectedIndex = idx;
         refreshModal();
         return true;
       }
     }
+
+    // 3. 右下「閉じる」ボタンクリック
     const int footY = kGuideDialogY + 382;
     if (x >= kGuideDialogX + 576 && x < kGuideDialogX + 706 && y >= footY + 7 && y < footY + 41) {
-      sModalMode = ModalMode::SettingsMain;
-      sBackdropValid = false;
-      refreshModal();
+      if (sPreviousModalMode == ModalMode::SettingsMain) {
+        sModalMode = ModalMode::SettingsMain;
+        sBackdropValid = false;
+        refreshModal();
+      } else {
+        closeModal();
+      }
       return true;
     }
     return true;
@@ -2884,6 +3255,7 @@ void draw() {
       sLastKeyRowOnScreen = -1;
       sLastKeyScrollOffset = sKeyScrollOffset;
       sLastKeyCategoryTab = sKeyCategoryTab;
+      sLastGuideCategory = -1;
       sLastGuideSelectedIndex = -1;
       sLastGuideScrollOffset = sGuideScrollOffset;
       sKeyListPageDirty = false;
@@ -2968,6 +3340,7 @@ void draw() {
     sLastKeyRowOnScreen = sKeySelectedIndex - sKeyScrollOffset;
     sLastKeyScrollOffset = sKeyScrollOffset;
     sLastKeyCategoryTab = sKeyCategoryTab;
+    sLastGuideCategory = sGuideCategory;
     sLastGuideSelectedIndex = sGuideSelectedIndex;
     sLastGuideScrollOffset = sGuideScrollOffset;
     sKeyListPageDirty = false;

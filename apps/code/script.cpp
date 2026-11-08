@@ -54,7 +54,10 @@ bool Script::nameCompliant(const char * name) {
     return false;
   }
   while (c != UCodePointNull) {
-    if (c == '.' && strcmp(decoder.stringPosition(), ScriptStore::k_scriptExtension) == 0) {
+    if (c == '.' && (strcmp(decoder.stringPosition(), ScriptStore::currentScriptExtension()) == 0 ||
+                     strcmp(decoder.stringPosition(), "py") == 0 ||
+                     strcmp(decoder.stringPosition(), "bas") == 0 ||
+                     strcmp(decoder.stringPosition(), "lgo") == 0)) {
       return true;
     }
     if (!(c.isLatinSmallLetter() || c == '_' || c.isDecimalDigit())) {

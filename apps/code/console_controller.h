@@ -2,7 +2,6 @@
 #define CODE_CONSOLE_CONTROLLER_H
 
 #include <escher.h>
-#include <python/port/port.h>
 #include <poincare/preferences.h>
 
 #include "console_edit_cell.h"
@@ -12,12 +11,13 @@
 #include "script_store.h"
 #include "variable_box_controller.h"
 #include "../shared/input_event_handler_delegate.h"
+#include "engines/interpreter_engine.h"
 
 namespace Code {
 
 class App;
 
-class ConsoleController : public ViewController, public ListViewDataSource, public SelectableTableViewDataSource, public SelectableTableViewDelegate, public TextFieldDelegate, public Shared::InputEventHandlerDelegate, public MicroPython::ExecutionEnvironment {
+class ConsoleController : public ViewController, public ListViewDataSource, public SelectableTableViewDataSource, public SelectableTableViewDelegate, public TextFieldDelegate, public Shared::InputEventHandlerDelegate, public OutputReceiver {
 public:
   ConsoleController(Responder * parentResponder, App * pythonDelegate, ScriptStore * scriptStore
 #if EPSILON_GETOPT
@@ -65,14 +65,25 @@ public:
   // InputEventHandlerDelegate
   VariableBoxController * variableBoxForInputEventHandler(InputEventHandler * textInput) override;
 
-  // MicroPython::ExecutionEnvironment
-  ViewController * sandbox() override { return &m_sandboxController; }
-  void resetSandbox() override;
-  void displayViewController(ViewController * controller) override;
-  void hideAnyDisplayedViewController() override;
-  void refreshPrintOutput() override;
+  // OutputReceiver
   void printText(const char * text, size_t length) override;
   const char * inputText(const char * prompt) override;
+  void clearConsole() override;
+
+  // Graphics callbacks
+  void showGraphicsScreen() override;
+  void clearGraphics(KDColor color = KDColorBlack) override;
+  void drawPixel(int x, int y, KDColor color) override;
+  KDColor getPixel(int x, int y) override;
+  void drawLine(int x0, int y0, int x1, int y1, KDColor color) override;
+  void fillRect(int x, int y, int w, int h, KDColor color) override;
+  void drawString(const char * text, int x, int y, KDColor textColor, KDColor backgroundColor = KDColorBlack) override;
+  bool isInterrupted() const override;
+
+  // Generic View Controller
+  void displayViewController(ViewController * controller);
+  void hideAnyDisplayedViewController();
+  void refreshPrintOutput();
 
 #if EPSILON_GETOPT
   bool locked() const {
@@ -80,14 +91,11 @@ public:
   }
 #endif
 private:
-  static constexpr const char * k_importCommand1 = "from ";
-  static constexpr const char * k_importCommand2 = " import *";
-  static constexpr size_t k_maxImportCommandSize = 5 + 9 + TextField::maxBufferSize(); // strlen(k_importCommand1) + strlen(k_importCommand2) + TextField::maxBufferSize()
   static constexpr int LineCellType = 0;
   static constexpr int EditCellType = 1;
-  static constexpr int k_numberOfLineCells = (Ion::Display::Height - Metric::TitleBarHeight) / 14 + 2; // 14 = KDFont::SmallFont->glyphSize().height()
-  // k_numberOfLineCells = (240 - 18)/14 ~ 15.9. The 0.1 cell can be above and below the 15 other cells so we add +2 cells.
+  static constexpr int k_numberOfLineCells = (Ion::Display::Height - Metric::TitleBarHeight) / 14 + 2;
   static constexpr int k_outputAccumulationBufferSize = 100;
+
   bool isDisplayingViewController();
   void reloadData(bool isEditing);
   void flushOutputAccumulationBufferToStore();
@@ -95,6 +103,7 @@ private:
   void emptyOutputAccumulationBuffer();
   size_t firstNewLineCharIndex(const char * text, size_t length);
   StackViewController * stackViewController();
+
   App * m_pythonDelegate;
   bool m_importScriptsWhenViewAppears;
   ConsoleStore m_consoleStore;
@@ -102,19 +111,16 @@ private:
   ConsoleLineCell m_cells[k_numberOfLineCells];
   ConsoleEditCell m_editCell;
   char m_outputAccumulationBuffer[k_outputAccumulationBufferSize];
-  /* The Python machine might call printText several times to print a single
-   * string. We thus use m_outputAccumulationBuffer to store and concatenate the
-   * different strings until a new line char appears in the text. When this
-   * happens, or when m_outputAccumulationBuffer is full, we create a new
-   * ConsoleLine in the ConsoleStore and empty m_outputAccumulationBuffer. */
   ScriptStore * m_scriptStore;
   SandboxController m_sandboxController;
   bool m_inputRunLoopActive;
   bool m_autoImportScripts;
+  bool m_interrupted;
 #if EPSILON_GETOPT
   bool m_locked;
 #endif
 };
+
 }
 
 #endif
