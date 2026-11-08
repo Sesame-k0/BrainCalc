@@ -24267,13 +24267,13 @@ void pk__add_module_base64(){
 
 // src/modules\builtins.c
 static bool builtins_exit(int argc, py_Ref argv) {
-    int code = 0;
+    int code = 0; (void)code;
     if(argc > 1) return TypeError("exit() takes at most 1 argument");
     if(argc == 1) {
         PY_CHECK_ARG_TYPE(0, tp_int);
         code = py_toint(argv);
     }
-    exit(code);
+    return ValueError("exit() is disabled in calculator environment");
     return false;
 }
 
@@ -33997,6 +33997,7 @@ bool py_matchexc(py_Type type) {
 
 void py_clearexc(py_StackRef p0) {
     VM* vm = pk_current_vm;
+    if(!vm) return;
     py_newnil(&vm->unhandled_exc);
     if(p0) {
         c11__rtassert(p0 >= vm->stack.begin && p0 <= vm->stack.sp);

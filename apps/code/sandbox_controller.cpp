@@ -21,6 +21,7 @@ void SandboxController::viewWillAppear() {
 }
 
 void SandboxController::viewDidDisappear() {
+  AppsContainer::sharedAppsContainer()->redrawWindow(true);
 }
 
 bool SandboxController::handleEvent(Ion::Events::Event event) {

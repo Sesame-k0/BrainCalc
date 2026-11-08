@@ -92,6 +92,9 @@ static bool sSidebarDirty = true;
 // Japanese Help Display state (Strictly integer index only - no pointers held)
 static int sCurrentHelpIndex = -1;
 static bool sHelpReady = false;
+static wchar_t sCustomHelpTitle[64] = { 0 };
+static wchar_t sCustomHelpDesc[512] = { 0 };
+static bool sHasCustomHelp = false;
 
 static inline uint32_t rgb565ToRgb888(uint16_t c) {
   uint32_t r = (c >> 11) & 0x1F;
@@ -523,11 +526,15 @@ static void renderRightSidebar(HDC hdc) {
     modeHint = L"F2:切替   Ent:OK";
   }
 
-  if (Config::isHelpEnabled() && sCurrentHelpIndex >= 0 && sCurrentHelpIndex < kHelpEntriesCount) {
+  bool showCustom = Config::isHelpEnabled() && sHasCustomHelp;
+  bool showDict = Config::isHelpEnabled() && !sHasCustomHelp && sCurrentHelpIndex >= 0 && sCurrentHelpIndex < kHelpEntriesCount;
+
+  if (showCustom || showDict) {
     // =========================================================================
-    // A. 日本語ヘルプ表示モード (メニュー・設定・関数検索・ホーム画面等)
+    // A. 日本語ヘルプ表示モード (メニュー・設定・関数検索・ホーム画面・コーディング等)
     // =========================================================================
-    const HelpEntry & entry = kHelpEntries[sCurrentHelpIndex];
+    const wchar_t * helpTitle = showCustom ? sCustomHelpTitle : kHelpEntries[sCurrentHelpIndex].jaTitle;
+    const wchar_t * helpDesc = showCustom ? sCustomHelpDesc : kHelpEntries[sCurrentHelpIndex].jaDesc;
 
     // 1. 上部コンパクトモード枠 (Y = 6..50)
     drawBox(hdc, sx, 6, sw, 44, RGB(255, 255, 255), RGB(180, 208, 203));
@@ -551,15 +558,15 @@ static void renderRightSidebar(HDC hdc) {
     // タイトル描画
     SelectObject(hdc, sUiFontBold);
     SIZE titleSz = { 0, 0 };
-    GetTextExtentPoint32W(hdc, entry.jaTitle, static_cast<int>(wcslen(entry.jaTitle)), &titleSz);
+    GetTextExtentPoint32W(hdc, helpTitle, static_cast<int>(wcslen(helpTitle)), &titleSz);
     if (titleSz.cx > cardW - 6) {
       SelectObject(hdc, sUiFontTiny);
     }
     drawTextLine(hdc, cardX + 3, 60, cardW - 6, 28, RGB(20, 82, 74),
-                 entry.jaTitle, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+                 helpTitle, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // 解説本文 (テキストボックス幅 maxW = 144px に基づく自動折り返し・禁則処理・数式途中切断防止)
-    drawWrappedHelpDesc(hdc, cardX + 3, 96, cardW - 6, 392, entry.jaDesc);
+    drawWrappedHelpDesc(hdc, cardX + 3, 96, cardW - 6, 392, helpDesc);
 
     // 下部操作ガイドフッター (8ドットフォント)
     drawBox(hdc, cardX, 394, cardW, 32, RGB(240, 247, 245), RGB(150, 206, 198));
@@ -1204,9 +1211,9 @@ static constexpr GuideTopic kPythonTopics[8] = {
 static constexpr GuideTopic kBasicTopics[8] = {
   {
     L"1. TinyBasic の概要",
-    L"1. 令和のポケコン (TinyBasic)",
+    L"1. TinyBasic の基本構文",
     L"【行番号による親しみやすい BASIC】\n"
-    L"昔ながらのポケコンスタイルで直感的にコーディングできます。\n\n"
+    L"古典的な行番号付きBASICで直感的にコーディングできます。\n\n"
     L"・行番号 (10, 20, 30...) を付けてプログラムを入力。\n"
     L"・RUN でプログラムを実行、LIST でプログラム一覧表示。\n"
     L"・アルファベットと数字、最小限の記号だけで書けるため、電子辞書と相性抜群です。"
@@ -1254,7 +1261,7 @@ static constexpr GuideTopic kBasicTopics[8] = {
     L"・マイナス方向 (STEP -1) にも対応しています。"
   },
   {
-    L"6. ポケコングラフィックス",
+    L"6. BASICグラフィックス",
     L"6. 図形描画 (CLS / PSET / LINE)",
     L"【画面座標系とグラフィックス命令】\n"
     L"10 CLS\n"
@@ -2975,6 +2982,15 @@ static LRESULT CALLBACK BrainWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
       return 0;
     }
 
+    case WM_PRINT:
+    case WM_PRINTCLIENT: {
+      HDC hdcTarget = reinterpret_cast<HDC>(wParam);
+      if (sMemDC && hdcTarget) {
+        BitBlt(hdcTarget, 0, 0, kBrainScreenWidth, kBrainScreenHeight, sMemDC, 0, 0, SRCCOPY);
+      }
+      return 0;
+    }
+
     case WM_CLOSE:
     case WM_DESTROY:
       Main::restoreTaskBar();
@@ -3437,12 +3453,39 @@ bool isHelpReady() {
 }
 
 void setCurrentHelpIndex(int index) {
+  sHasCustomHelp = false;
   if (sCurrentHelpIndex != index) {
     BrainLogInt2("Display::setCurrentHelpIndex", sCurrentHelpIndex, index);
     sCurrentHelpIndex = index;
     sSidebarDirty = true;
     Simulator::Main::setNeedsRefresh();
   }
+}
+
+void setCustomHelp(const char * titleUtf8, const char * descUtf8) {
+  if (!sHelpReady) return;
+  if (!titleUtf8 || !titleUtf8[0]) {
+    sHasCustomHelp = false;
+    sCurrentHelpIndex = -1;
+    sSidebarDirty = true;
+    Simulator::Main::setNeedsRefresh();
+    return;
+  }
+  MultiByteToWideChar(CP_UTF8, 0, titleUtf8, -1, sCustomHelpTitle, 64);
+  sCustomHelpTitle[63] = L'\0';
+  if (descUtf8) {
+    MultiByteToWideChar(CP_UTF8, 0, descUtf8, -1, sCustomHelpDesc, 512);
+    sCustomHelpDesc[511] = L'\0';
+  } else {
+    sCustomHelpDesc[0] = L'\0';
+  }
+  sHasCustomHelp = true;
+  sSidebarDirty = true;
+  Simulator::Main::setNeedsRefresh();
+}
+
+void clearCustomHelp() {
+  sHasCustomHelp = false;
 }
 
 }
@@ -3461,10 +3504,15 @@ extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText)
   Ion::Simulator::Display::setCurrentHelpIndex(idx);
 }
 
+extern "C" void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8) {
+  Ion::Simulator::Display::setCustomHelp(titleUtf8, descUtf8);
+}
+
 extern "C" void BrainClearHelp() {
   if (!Ion::Simulator::Display::isHelpReady()) {
     return;
   }
   BrainLog("BrainClearHelp");
+  Ion::Simulator::Display::clearCustomHelp();
   Ion::Simulator::Display::setCurrentHelpIndex(-1);
 }

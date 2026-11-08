@@ -12,6 +12,8 @@
 #include <stdlib.h>
 #include <math.h>
 
+extern "C" void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8);
+
 namespace Code {
 
 static const char * sStandardPromptText = ">>> ";
@@ -213,7 +215,16 @@ bool ConsoleController::isInterrupted() const {
 
 void ConsoleController::viewWillAppear() {
   ViewController::viewWillAppear();
+  AppsContainer::sharedAppsContainer()->redrawWindow(true);
   m_interrupted = false;
+  BrainNotifyCustomHelp(
+    "コンソール (REPL)",
+    "対話型のコード実行画面です。\n\n"
+    "・コードを入力して即時実行\n"
+    "・スクリプトの実行結果を表示\n"
+    "・[Back]: 一覧へ戻る\n"
+    "・[F12]: マニュアル表示"
+  );
   loadPythonEnvironment();
   reloadData(true);
 }
@@ -379,6 +390,7 @@ void ConsoleController::autoImportScript(Script script, bool force) {
       engine->runScript(script.content());
     }
     flushOutputAccumulationBufferToStore();
+    AppsContainer::sharedAppsContainer()->redrawWindow(true);
   }
   if (!isDisplayingViewController() && force) {
     reloadData(true);

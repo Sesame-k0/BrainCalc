@@ -64,4 +64,14 @@ bool handleExitConfirmClick(int x, int y);
 }
 }
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+void BrainNotifyHelpText(const char * mainText, const char * subText);
+void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8);
+void BrainClearHelp();
+#ifdef __cplusplus
+}
+#endif
+
 #endif

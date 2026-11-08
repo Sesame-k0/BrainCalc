@@ -7,6 +7,7 @@
 #include "../global_preferences.h"
 #include <apps/apps_container.h>
 
+extern "C" void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8);
 using namespace Shared;
 
 namespace Code {
@@ -65,6 +66,15 @@ void EditorController::didBecomeFirstResponder() {
 void EditorController::viewWillAppear() {
   ViewController::viewWillAppear();
   m_editorView.loadSyntaxHighlighter();
+  BrainNotifyCustomHelp(
+    "コード編集",
+    "スクリプトの作成・編集画面です。\n\n"
+    "・文字や記号を入力してプログラムを作成\n"
+    "・[F1]: 関数・命令パレット\n"
+    "・[F2]: 文字/数字モード切替\n"
+    "・[F12]: マニュアル表示\n"
+    "・[Back]: 編集を完了して一覧へ戻る"
+  );
   m_editorView.setCursorLocation(m_editorView.text() + strlen(m_editorView.text()));
 }
 

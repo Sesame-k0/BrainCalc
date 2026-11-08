@@ -1,5 +1,6 @@
 #include "menu_controller.h"
 #include "app.h"
+#include "language_select_controller.h"
 #include <apps/i18n.h>
 #include "../apps_container.h"
 #include <assert.h>
@@ -8,7 +9,44 @@
 #include <ion/events.h>
 #include <ion/unicode/utf8_decoder.h>
 
+extern "C" void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8);
+
 namespace Code {
+
+static void updateScriptMenuHelp() {
+  LanguageType lang = LanguageSelectController::currentLanguage();
+  if (lang == LanguageType::Python) {
+    BrainNotifyCustomHelp(
+      "Pythonスクリプト",
+      "Python 3.11スクリプトの一覧です。\n\n"
+      "・[EXE]: スクリプトを実行\n"
+      "・[OK] / 右側[...]: 編集・設定\n"
+      "・一番下[スクリプトを追加]: 新規作成\n"
+      "・[F12]: マニュアル表示\n"
+      "・[Back]: 言語選択へ戻る"
+    );
+  } else if (lang == LanguageType::Basic) {
+    BrainNotifyCustomHelp(
+      "BASICスクリプト",
+      "TinyBasicスクリプトの一覧です。\n\n"
+      "・[EXE]: スクリプトを実行\n"
+      "・[OK] / 右側[...]: 編集・設定\n"
+      "・一番下[スクリプトを追加]: 新規作成\n"
+      "・[F12]: マニュアル表示\n"
+      "・[Back]: 言語選択へ戻る"
+    );
+  } else if (lang == LanguageType::Logo) {
+    BrainNotifyCustomHelp(
+      "Logoスクリプト",
+      "Logoタートルスクリプトの一覧です。\n\n"
+      "・[EXE]: スクリプトを実行\n"
+      "・[OK] / 右側[...]: 編集・設定\n"
+      "・一番下[スクリプトを追加]: 新規作成\n"
+      "・[F12]: マニュアル表示\n"
+      "・[Back]: 言語選択へ戻る"
+    );
+  }
+}
 
 MenuController::MenuController(Responder * parentResponder, App * pythonDelegate, ScriptStore * scriptStore, ButtonRowController * footer) :
   ViewController(parentResponder),
@@ -57,6 +95,7 @@ void MenuController::willExitResponderChain(Responder * nextFirstResponder) {
 }
 
 void MenuController::didBecomeFirstResponder() {
+  updateScriptMenuHelp();
   if (m_reloadConsoleWhenBecomingFirstResponder) {
     reloadConsole();
   }
@@ -81,6 +120,8 @@ void MenuController::didBecomeFirstResponder() {
 
 void MenuController::viewWillAppear() {
   ViewController::viewWillAppear();
+  AppsContainer::sharedAppsContainer()->redrawWindow(true);
+  updateScriptMenuHelp();
   updateAddScriptRowDisplay();
   m_selectableTableView.reloadData();
   footer()->setSelectedButton(-1);
@@ -110,7 +151,14 @@ bool MenuController::handleEvent(Ion::Events::Event event) {
       return true;
     }
   }
-  if (event == Ion::Events::OK || event == Ion::Events::EXE) {
+  if (event == Ion::Events::EXE) {
+    int selectedRow = m_selectableTableView.selectedRow();
+    if (selectedRow >= 0 && selectedRow < m_scriptStore->numberOfScripts()) {
+      openConsoleWithScript(m_scriptStore->scriptAtIndex(selectedRow));
+      return true;
+    }
+  }
+  if (event == Ion::Events::OK) {
     int selectedRow = m_selectableTableView.selectedRow();
     int selectedColumn = m_selectableTableView.selectedColumn();
     if (selectedRow >= 0 && selectedRow < m_scriptStore->numberOfScripts()) {

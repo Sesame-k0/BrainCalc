@@ -99,7 +99,7 @@ void ScriptStore::initDefaultSamples() {
     static const char basCode[] =
       "\x01"
       "10 CLS\n"
-      "20 PRINT \"=== POKECON GRAPHICS ===\"\n"
+      "20 PRINT \"=== BASIC GRAPHICS ===\"\n"
       "30 FOR I = 0 TO 100 STEP 5\n"
       "40 LINE(160-I, 120-I, 160+I, 120+I, 2)\n"
       "50 LINE(160-I, 120+I, 160+I, 120-I, 3)\n"

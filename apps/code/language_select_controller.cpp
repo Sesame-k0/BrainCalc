@@ -6,9 +6,44 @@
 #include <apps/apps_container.h>
 #include <string.h>
 
+extern "C" void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8);
+
 namespace Code {
 
 LanguageType LanguageSelectController::s_currentLanguage = LanguageType::Python;
+
+static void updateLanguageHelp(int langIndex) {
+  if (langIndex == 0) {
+    BrainNotifyCustomHelp(
+      "PocketPy (Python)",
+      "軽量なPython 3.11互換インタプリタです。\n\n"
+      "・kandinsky, math, timeモジュール搭載\n"
+      "・行頭インデントはスペース2個または4個\n"
+      "・スクリプト一覧で[EXE]を押して実行\n"
+      "・[F12]: マニュアル表示"
+    );
+  } else if (langIndex == 1) {
+    BrainNotifyCustomHelp(
+      "TinyBasic",
+      "直感的に記述できる古典的BASIC言語です。\n\n"
+      "・行番号順に実行 (10, 20...)\n"
+      "・主な命令: PRINT, INPUT, LET, IF-THEN, GOTO, GOSUB, RETURN, FOR-TO-STEP-NEXT\n"
+      "・グラフィックス: CLS, PLOT, LINE, RECT\n"
+      "・[F12]: マニュアル表示"
+    );
+  } else if (langIndex == 2) {
+    BrainNotifyCustomHelp(
+      "Logo (タートル)",
+      "亀のカーソルを動かして幾何学図形を描画する言語です。\n\n"
+      "・FD (前進), BK (後退)\n"
+      "・RT (右回転), LT (左回転)\n"
+      "・REPEAT n [ ... ] (繰り返し)\n"
+      "・PU (ペン上げ), PD (ペン下げ)\n"
+      "・CS (画面消去)\n"
+      "・[F12]: マニュアル表示"
+    );
+  }
+}
 
 const char * LanguageSelectController::currentExtension() {
   switch (s_currentLanguage) {
@@ -25,11 +60,11 @@ LanguageSelectController::ContentView::ContentView() :
 }
 
 void LanguageSelectController::ContentView::drawRect(KDContext * ctx, KDRect rect) const {
-  ctx->fillRect(bounds(), Palette::CodeBackground);
+  ctx->fillRect(bounds(), KDColorWhite);
 
   // Header Title
   const char * title = "=== SELECT LANGUAGE ===";
-  ctx->drawString(title, KDPoint(16, 12), KDFont::LargeFont, KDColorWhite, Palette::CodeBackground);
+  ctx->drawString(title, KDPoint(16, 8), KDFont::LargeFont, KDColor::RGB24(0x1B8271), KDColorWhite);
 
   struct LangItem {
     const char * name;
@@ -39,17 +74,17 @@ void LanguageSelectController::ContentView::drawRect(KDContext * ctx, KDRect rec
 
   static const LangItem items[3] = {
     { "1. PocketPy (Python 3)", "Python 3.11 / kandinsky, math", "[.py]" },
-    { "2. TinyBasic (Pokecom)", "Classic BASIC / PRINT, LINE, RECT", "[.bas]" },
+    { "2. TinyBasic", "Classic BASIC / PRINT, LINE, RECT", "[.bas]" },
     { "3. Logo (Turtle)", "Turtle Drawing / FD, RT, REPEAT", "[.lgo]" },
   };
 
-  const KDColor liliumGreen = KDColor::RGB24(0x00FF88);
-  const KDColor cardBg = KDColor::RGB24(0x1E1E1E);
-  const KDColor cardSelectedBg = KDColor::RGB24(0x282C34);
+  const KDColor liliumGreen = KDColor::RGB24(0x1B8271);
+  const KDColor cardSelectedBg = KDColor::RGB24(0xEEF8F6);
+  const KDColor cardBg = KDColorWhite;
 
   for (int i = 0; i < 3; i++) {
-    int y = 40 + i * 58;
-    KDRect cardRect(14, y, 292, 52);
+    int y = 30 + i * 52;
+    KDRect cardRect(12, y, 296, 48);
     bool isSel = (i == m_selectedIndex);
 
     KDColor bg = isSel ? cardSelectedBg : cardBg;
@@ -63,7 +98,7 @@ void LanguageSelectController::ContentView::drawRect(KDContext * ctx, KDRect rec
       ctx->fillRect(KDRect(cardRect.right() - 2, cardRect.y(), 2, cardRect.height()), liliumGreen);
     } else {
       // 1px subtle gray border
-      KDColor border = KDColor::RGB24(0x3A3A3A);
+      KDColor border = KDColor::RGB24(0xD0D7DE);
       ctx->fillRect(KDRect(cardRect.x(), cardRect.y(), cardRect.width(), 1), border);
       ctx->fillRect(KDRect(cardRect.x(), cardRect.bottom() - 1, cardRect.width(), 1), border);
       ctx->fillRect(KDRect(cardRect.x(), cardRect.y(), 1, cardRect.height()), border);
@@ -71,18 +106,19 @@ void LanguageSelectController::ContentView::drawRect(KDContext * ctx, KDRect rec
     }
 
     // Name & Tag
-    KDColor nameColor = isSel ? liliumGreen : KDColorWhite;
-    ctx->drawString(items[i].name, KDPoint(cardRect.x() + 10, cardRect.y() + 8), KDFont::LargeFont, nameColor, bg);
-    ctx->drawString(items[i].tag, KDPoint(cardRect.right() - 55, cardRect.y() + 8), KDFont::SmallFont, KDColor::RGB24(0x888888), bg);
+    KDColor nameColor = isSel ? liliumGreen : KDColor::RGB24(0x242A30);
+    KDColor tagColor = isSel ? liliumGreen : KDColor::RGB24(0x888888);
+    ctx->drawString(items[i].name, KDPoint(cardRect.x() + 10, cardRect.y() + 6), KDFont::LargeFont, nameColor, bg);
+    ctx->drawString(items[i].tag, KDPoint(cardRect.right() - 52, cardRect.y() + 7), KDFont::SmallFont, tagColor, bg);
 
     // Description
-    KDColor descColor = isSel ? KDColor::RGB24(0xCCCCCC) : KDColor::RGB24(0x888888);
-    ctx->drawString(items[i].desc, KDPoint(cardRect.x() + 12, cardRect.y() + 30), KDFont::SmallFont, descColor, bg);
+    KDColor descColor = isSel ? KDColor::RGB24(0x2B4F4A) : KDColor::RGB24(0x666666);
+    ctx->drawString(items[i].desc, KDPoint(cardRect.x() + 12, cardRect.y() + 27), KDFont::SmallFont, descColor, bg);
   }
 
-  // Footer instructions
+  // Footer instructions (y = 194 leaves plenty of room in 222px view height)
   const char * footer = "[Up/Down]:Select  [OK]:Confirm  [F12]:Manual";
-  ctx->drawString(footer, KDPoint(16, 218), KDFont::SmallFont, KDColor::RGB24(0x777777), Palette::CodeBackground);
+  ctx->drawString(footer, KDPoint(16, 194), KDFont::SmallFont, KDColor::RGB24(0x777777), KDColorWhite);
 }
 
 LanguageSelectController::LanguageSelectController(Responder * parentResponder, ViewController * nextController) :
@@ -98,7 +134,9 @@ StackViewController * LanguageSelectController::stackViewController() {
 
 void LanguageSelectController::viewWillAppear() {
   ViewController::viewWillAppear();
+  AppsContainer::sharedAppsContainer()->redrawWindow(true);
   m_contentView.setSelectedIndex((int)s_currentLanguage);
+  updateLanguageHelp((int)s_currentLanguage);
 }
 
 void LanguageSelectController::didBecomeFirstResponder() {
@@ -109,6 +147,7 @@ bool LanguageSelectController::handleEvent(Ion::Events::Event event) {
     int sel = m_contentView.selectedIndex();
     if (sel > 0) {
       m_contentView.setSelectedIndex(sel - 1);
+      updateLanguageHelp(sel - 1);
     }
     return true;
   }
@@ -116,6 +155,7 @@ bool LanguageSelectController::handleEvent(Ion::Events::Event event) {
     int sel = m_contentView.selectedIndex();
     if (sel < k_numberOfLanguages - 1) {
       m_contentView.setSelectedIndex(sel + 1);
+      updateLanguageHelp(sel + 1);
     }
     return true;
   }

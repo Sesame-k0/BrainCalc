@@ -14,7 +14,7 @@ public:
   ~TinyBasicEngine() override;
 
   LanguageType languageType() const override { return LanguageType::Basic; }
-  const char * languageName() const override { return "TinyBasic (Pokecon)"; }
+  const char * languageName() const override { return "TinyBasic"; }
   const char * fileExtension() const override { return ".bas"; }
 
   void init() override;

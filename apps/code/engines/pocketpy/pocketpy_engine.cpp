@@ -20,10 +20,6 @@ static void py_print_callback(const char * msg) {
 static KDColor parseColorArg(py_Ref arg) {
   if (py_istype(arg, tp_int)) {
     uint32_t val = (uint32_t)py_toint(arg);
-    // If val <= 0xFFFFFF, treat as 0xRRGGBB
-    uint8_t r = (val >> 16) & 0xFF;
-    uint8_t g = (val >> 8) & 0xFF;
-    uint8_t b = val & 0xFF;
     return KDColor::RGB24(val);
   } else if (py_istype(arg, tp_tuple) || py_istype(arg, tp_list)) {
     int len = py_len(arg);
@@ -34,9 +30,9 @@ static KDColor parseColorArg(py_Ref arg) {
       int r = py_istype(r_item, tp_int) ? (int)py_toint(r_item) : 0;
       int g = py_istype(g_item, tp_int) ? (int)py_toint(g_item) : 0;
       int b = py_istype(b_item, tp_int) ? (int)py_toint(b_item) : 0;
-      if (r < 0) r = 0; if (r > 255) r = 255;
-      if (g < 0) g = 0; if (g > 255) g = 255;
-      if (b < 0) b = 0; if (b > 255) b = 255;
+      if (r < 0) { r = 0; } else if (r > 255) { r = 255; }
+      if (g < 0) { g = 0; } else if (g > 255) { g = 255; }
+      if (b < 0) { b = 0; } else if (b > 255) { b = 255; }
       return KDColor::RGB24((r << 16) | (g << 8) | b);
     }
   }
@@ -183,7 +179,12 @@ void PocketPyEngine::bindKandinskyModule() {
 }
 
 void PocketPyEngine::init() {
-  if (m_initialized) return;
+  if (m_initialized) {
+    s_currentReceiver = m_receiver;
+    m_interrupted = false;
+    py_clearexc(NULL);
+    return;
+  }
 
   s_currentReceiver = m_receiver;
   py_initialize();
@@ -196,13 +197,14 @@ void PocketPyEngine::init() {
 
 void PocketPyEngine::deinit() {
   if (m_initialized) {
-    py_finalize();
-    m_initialized = false;
-    if (s_currentReceiver == m_receiver) {
-      s_currentReceiver = nullptr;
-    }
+    py_clearexc(NULL);
+  }
+  if (s_currentReceiver == m_receiver) {
+    s_currentReceiver = nullptr;
   }
 }
+
+
 
 bool PocketPyEngine::runScript(const char * code) {
   if (!code) return false;
