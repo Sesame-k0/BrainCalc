@@ -19,7 +19,9 @@ static void updateLanguageHelp(int langIndex) {
       "軽量なPython 3.11互換インタプリタです。\n\n"
       "・kandinsky, math, timeモジュール搭載\n"
       "・行頭インデントはスペース2個または4個\n"
-      "・スクリプト一覧で[EXE]を押して実行\n"
+      "・[Enter]: コード編集\n"
+      "・[→]: ファイル設定・実行\n"
+      "・[PgDn]: 秘密の言語出現\n"
       "・[F12]: マニュアル表示"
     );
   } else if (langIndex == 1) {
@@ -27,20 +29,30 @@ static void updateLanguageHelp(int langIndex) {
       "TinyBasic",
       "直感的に記述できる古典的BASIC言語です。\n\n"
       "・行番号順に実行 (10, 20...)\n"
-      "・主な命令: PRINT, INPUT, LET, IF-THEN, GOTO, GOSUB, RETURN, FOR-TO-STEP-NEXT\n"
+      "・主な命令: PRINT, INPUT, LET, IF-THEN, GOTO, GOSUB, RETURN, FOR-NEXT\n"
       "・グラフィックス: CLS, PLOT, LINE, RECT\n"
+      "・[Enter]: コード編集 / [→]: 設定・実行\n"
       "・[F12]: マニュアル表示"
     );
   } else if (langIndex == 2) {
     BrainNotifyCustomHelp(
       "Logo (タートル)",
       "亀のカーソルを動かして幾何学図形を描画する言語です。\n\n"
-      "・FD (前進), BK (後退)\n"
-      "・RT (右回転), LT (左回転)\n"
+      "・FD (前進), BK (後退), RT/LT (回転)\n"
       "・REPEAT n [ ... ] (繰り返し)\n"
-      "・PU (ペン上げ), PD (ペン下げ)\n"
-      "・CS (画面消去)\n"
+      "・PU (ペン上げ), PD (ペン下げ), CS (消去)\n"
+      "・[Enter]: コード編集 / [→]: 設定・実行\n"
       "・[F12]: マニュアル表示"
+    );
+  } else if (langIndex == 3) {
+    BrainNotifyCustomHelp(
+      "BrainF*ck",
+      "わずか8文字の命令で動作する極限の難解言語です。\n\n"
+      "・命令: > < + - . , [ ]\n"
+      "・30,000バイトのメモリ配列とポインタを直接操作\n"
+      "・12xモードで [A S D F] [H J K L] に8命令を配置\n"
+      "・[Up/PgUp]: 通常モードへ戻る\n"
+      "・[F12]: 初心者向け解説マニュアル"
     );
   }
 }
@@ -50,21 +62,51 @@ const char * LanguageSelectController::currentExtension() {
     case LanguageType::Python: return "py";
     case LanguageType::Basic:  return "bas";
     case LanguageType::Logo:   return "lgo";
+    case LanguageType::Brainfuck: return "bf";
     default:                   return "py";
   }
 }
 
 LanguageSelectController::ContentView::ContentView() :
-  m_selectedIndex(0)
+  m_selectedIndex(0),
+  m_secretMode(false)
 {
 }
 
 void LanguageSelectController::ContentView::drawRect(KDContext * ctx, KDRect rect) const {
   ctx->fillRect(bounds(), KDColorWhite);
 
-  // Header Title
+  const KDColor liliumGreen = KDColor::RGB24(0x1B8271);
+  const KDColor cardSelectedBg = KDColor::RGB24(0xEEF8F6);
+  const KDColor cardBg = KDColorWhite;
+
+  if (m_secretMode) {
+    // Secret BrainF*ck Mode
+    const char * title = "=== SECRET LANGUAGE ===";
+    ctx->drawString(title, KDPoint(16, 8), KDFont::LargeFont, KDColor::RGB24(0xC43B3B), KDColorWhite);
+
+    // Single card in center
+    KDRect cardRect(12, 82, 296, 52);
+    ctx->fillRect(cardRect, cardSelectedBg);
+
+    // 2px green border
+    ctx->fillRect(KDRect(cardRect.x(), cardRect.y(), cardRect.width(), 2), liliumGreen);
+    ctx->fillRect(KDRect(cardRect.x(), cardRect.bottom() - 2, cardRect.width(), 2), liliumGreen);
+    ctx->fillRect(KDRect(cardRect.x(), cardRect.y(), 2, cardRect.height()), liliumGreen);
+    ctx->fillRect(KDRect(cardRect.right() - 2, cardRect.y(), 2, cardRect.height()), liliumGreen);
+
+    ctx->drawString("4. BrainF*ck", KDPoint(cardRect.x() + 10, cardRect.y() + 6), KDFont::LargeFont, liliumGreen, cardSelectedBg);
+    ctx->drawString("[.bf]", KDPoint(cardRect.right() - 52, cardRect.y() + 7), KDFont::SmallFont, liliumGreen, cardSelectedBg);
+    ctx->drawString("Minimal Turing-Complete 8-Op Language", KDPoint(cardRect.x() + 12, cardRect.y() + 29), KDFont::SmallFont, KDColor::RGB24(0x2B4F4A), cardSelectedBg);
+
+    const char * footer = "[OK/EXE]:Confirm  [Up/PgUp]:Normal  [F12]:Manual";
+    ctx->drawString(footer, KDPoint(16, 194), KDFont::SmallFont, KDColor::RGB24(0x777777), KDColorWhite);
+    return;
+  }
+
+  // Normal 3-item mode
   const char * title = "=== SELECT LANGUAGE ===";
-  ctx->drawString(title, KDPoint(16, 8), KDFont::LargeFont, KDColor::RGB24(0x1B8271), KDColorWhite);
+  ctx->drawString(title, KDPoint(16, 8), KDFont::LargeFont, liliumGreen, KDColorWhite);
 
   struct LangItem {
     const char * name;
@@ -77,10 +119,6 @@ void LanguageSelectController::ContentView::drawRect(KDContext * ctx, KDRect rec
     { "2. TinyBasic", "Classic BASIC / PRINT, LINE, RECT", "[.bas]" },
     { "3. Logo (Turtle)", "Turtle Drawing / FD, RT, REPEAT", "[.lgo]" },
   };
-
-  const KDColor liliumGreen = KDColor::RGB24(0x1B8271);
-  const KDColor cardSelectedBg = KDColor::RGB24(0xEEF8F6);
-  const KDColor cardBg = KDColorWhite;
 
   for (int i = 0; i < 3; i++) {
     int y = 30 + i * 52;
@@ -116,7 +154,7 @@ void LanguageSelectController::ContentView::drawRect(KDContext * ctx, KDRect rec
     ctx->drawString(items[i].desc, KDPoint(cardRect.x() + 12, cardRect.y() + 27), KDFont::SmallFont, descColor, bg);
   }
 
-  // Footer instructions (y = 194 leaves plenty of room in 222px view height)
+  // Footer instructions
   const char * footer = "[Up/Down]:Select  [OK]:Confirm  [F12]:Manual";
   ctx->drawString(footer, KDPoint(16, 194), KDFont::SmallFont, KDColor::RGB24(0x777777), KDColorWhite);
 }
@@ -135,14 +173,47 @@ StackViewController * LanguageSelectController::stackViewController() {
 void LanguageSelectController::viewWillAppear() {
   ViewController::viewWillAppear();
   AppsContainer::sharedAppsContainer()->redrawWindow(true);
-  m_contentView.setSelectedIndex((int)s_currentLanguage);
-  updateLanguageHelp((int)s_currentLanguage);
+  if (s_currentLanguage == LanguageType::Brainfuck) {
+    m_contentView.setSecretMode(true);
+    m_contentView.setSelectedIndex(3);
+    updateLanguageHelp(3);
+  } else {
+    m_contentView.setSecretMode(false);
+    m_contentView.setSelectedIndex((int)s_currentLanguage);
+    updateLanguageHelp((int)s_currentLanguage);
+  }
 }
 
 void LanguageSelectController::didBecomeFirstResponder() {
 }
 
 bool LanguageSelectController::handleEvent(Ion::Events::Event event) {
+  if (m_contentView.secretMode()) {
+    if (event == Ion::Events::Up || event == Ion::Events::LeftParenthesis) {
+      m_contentView.setSecretMode(false);
+      m_contentView.setSelectedIndex(0);
+      s_currentLanguage = LanguageType::Python;
+      updateLanguageHelp(0);
+      return true;
+    }
+    if (event == Ion::Events::OK || event == Ion::Events::EXE || event == Ion::Events::Four) {
+      s_currentLanguage = LanguageType::Brainfuck;
+      ScriptStore store;
+      store.initDefaultSamples();
+      if (m_nextController) stackViewController()->push(m_nextController);
+      return true;
+    }
+    return false;
+  }
+
+  if (event == Ion::Events::RightParenthesis) {
+    m_contentView.setSecretMode(true);
+    m_contentView.setSelectedIndex(3);
+    s_currentLanguage = LanguageType::Brainfuck;
+    updateLanguageHelp(3);
+    return true;
+  }
+
   if (event == Ion::Events::Up) {
     int sel = m_contentView.selectedIndex();
     if (sel > 0) {
@@ -153,7 +224,7 @@ bool LanguageSelectController::handleEvent(Ion::Events::Event event) {
   }
   if (event == Ion::Events::Down) {
     int sel = m_contentView.selectedIndex();
-    if (sel < k_numberOfLanguages - 1) {
+    if (sel < 2) {
       m_contentView.setSelectedIndex(sel + 1);
       updateLanguageHelp(sel + 1);
     }
@@ -190,6 +261,13 @@ bool LanguageSelectController::handleEvent(Ion::Events::Event event) {
     ScriptStore store;
     store.initDefaultSamples();
     if (m_nextController) stackViewController()->push(m_nextController);
+    return true;
+  }
+  if (event == Ion::Events::Four) {
+    m_contentView.setSecretMode(true);
+    m_contentView.setSelectedIndex(3);
+    s_currentLanguage = LanguageType::Brainfuck;
+    updateLanguageHelp(3);
     return true;
   }
   return false;

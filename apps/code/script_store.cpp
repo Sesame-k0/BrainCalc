@@ -122,6 +122,15 @@ void ScriptStore::initDefaultSamples() {
     Code::ScriptTemplate lgoSample("sample.lgo", lgoCode);
     addScriptFromTemplate(&lgoSample);
   }
+
+  // 4. BrainF*ck sample (Hello World!)
+  if (Ion::Storage::sharedStorage()->recordNamed("sample.bf").isNull()) {
+    static const char bfCode[] =
+      "\x01"
+      "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.\n";
+    Code::ScriptTemplate bfSample("sample.bf", bfCode);
+    addScriptFromTemplate(&bfSample);
+  }
 }
 
 }

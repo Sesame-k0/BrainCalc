@@ -11,6 +11,7 @@ enum class LanguageType : uint8_t {
   Python = 0,
   Basic = 1,
   Logo = 2,
+  Brainfuck = 3,
 };
 
 class OutputReceiver {

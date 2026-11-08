@@ -13,14 +13,30 @@ extern "C" void BrainNotifyCustomHelp(const char * titleUtf8, const char * descU
 
 namespace Code {
 
-static void updateScriptMenuHelp() {
+void MenuController::updateScriptMenuHelp() {
   LanguageType lang = LanguageSelectController::currentLanguage();
+  int selRow = m_selectableTableView.selectedRow();
+  bool isAddScriptRow = (m_shouldDisplayAddScriptRow && selRow == m_scriptStore->numberOfScripts());
+
+  if (isAddScriptRow) {
+    if (lang == LanguageType::Python) {
+      BrainNotifyCustomHelp("スクリプト追加", "新しいPythonスクリプトを作成します。\n\n・[Enter]: 新規スクリプト作成\n・[↑]: 一覧へ戻る\n・[F12]: マニュアル表示");
+    } else if (lang == LanguageType::Basic) {
+      BrainNotifyCustomHelp("スクリプト追加", "新しいBASICスクリプトを作成します。\n\n・[Enter]: 新規スクリプト作成\n・[↑]: 一覧へ戻る\n・[F12]: マニュアル表示");
+    } else if (lang == LanguageType::Logo) {
+      BrainNotifyCustomHelp("スクリプト追加", "新しいLogoスクリプトを作成します。\n\n・[Enter]: 新規スクリプト作成\n・[↑]: 一覧へ戻る\n・[F12]: マニュアル表示");
+    } else if (lang == LanguageType::Brainfuck) {
+      BrainNotifyCustomHelp("スクリプト追加", "新しいBrainF*ckスクリプトを作成します。\n\n・[Enter]: 新規スクリプト作成\n・[↑]: 一覧へ戻る\n・[F12]: マニュアル表示");
+    }
+    return;
+  }
+
   if (lang == LanguageType::Python) {
     BrainNotifyCustomHelp(
       "Pythonスクリプト",
       "Python 3.11スクリプトの一覧です。\n\n"
-      "・[EXE]: スクリプトを実行\n"
-      "・[OK] / 右側[...]: 編集・設定\n"
+      "・[Enter]: コード編集\n"
+      "・右側[...]: 実行・ファイル設定\n"
       "・一番下[スクリプトを追加]: 新規作成\n"
       "・[F12]: マニュアル表示\n"
       "・[Back]: 言語選択へ戻る"
@@ -29,8 +45,8 @@ static void updateScriptMenuHelp() {
     BrainNotifyCustomHelp(
       "BASICスクリプト",
       "TinyBasicスクリプトの一覧です。\n\n"
-      "・[EXE]: スクリプトを実行\n"
-      "・[OK] / 右側[...]: 編集・設定\n"
+      "・[Enter]: コード編集\n"
+      "・右側[...]: 実行・ファイル設定\n"
       "・一番下[スクリプトを追加]: 新規作成\n"
       "・[F12]: マニュアル表示\n"
       "・[Back]: 言語選択へ戻る"
@@ -39,8 +55,18 @@ static void updateScriptMenuHelp() {
     BrainNotifyCustomHelp(
       "Logoスクリプト",
       "Logoタートルスクリプトの一覧です。\n\n"
-      "・[EXE]: スクリプトを実行\n"
-      "・[OK] / 右側[...]: 編集・設定\n"
+      "・[Enter]: コード編集\n"
+      "・右側[...]: 実行・ファイル設定\n"
+      "・一番下[スクリプトを追加]: 新規作成\n"
+      "・[F12]: マニュアル表示\n"
+      "・[Back]: 言語選択へ戻る"
+    );
+  } else if (lang == LanguageType::Brainfuck) {
+    BrainNotifyCustomHelp(
+      "BrainF*ckスクリプト",
+      "BrainF*ckスクリプトの一覧です。\n\n"
+      "・[Enter]: コード編集\n"
+      "・右側[...]: 実行・ファイル設定\n"
       "・一番下[スクリプトを追加]: 新規作成\n"
       "・[F12]: マニュアル表示\n"
       "・[Back]: 言語選択へ戻る"
@@ -121,6 +147,16 @@ void MenuController::didBecomeFirstResponder() {
 void MenuController::viewWillAppear() {
   ViewController::viewWillAppear();
   AppsContainer::sharedAppsContainer()->redrawWindow(true);
+  LanguageType lang = LanguageSelectController::currentLanguage();
+  if (lang == LanguageType::Python) {
+    m_consoleButton.setMessage(I18n::Message::ConsolePython);
+  } else if (lang == LanguageType::Basic) {
+    m_consoleButton.setMessage(I18n::Message::ConsoleBasic);
+  } else if (lang == LanguageType::Logo) {
+    m_consoleButton.setMessage(I18n::Message::ConsoleLogo);
+  } else if (lang == LanguageType::Brainfuck) {
+    m_consoleButton.setMessage(I18n::Message::ConsoleBrainfuck);
+  }
   updateScriptMenuHelp();
   updateAddScriptRowDisplay();
   m_selectableTableView.reloadData();
@@ -151,14 +187,7 @@ bool MenuController::handleEvent(Ion::Events::Event event) {
       return true;
     }
   }
-  if (event == Ion::Events::EXE) {
-    int selectedRow = m_selectableTableView.selectedRow();
-    if (selectedRow >= 0 && selectedRow < m_scriptStore->numberOfScripts()) {
-      openConsoleWithScript(m_scriptStore->scriptAtIndex(selectedRow));
-      return true;
-    }
-  }
-  if (event == Ion::Events::OK) {
+  if (event == Ion::Events::OK || event == Ion::Events::EXE) {
     int selectedRow = m_selectableTableView.selectedRow();
     int selectedColumn = m_selectableTableView.selectedColumn();
     if (selectedRow >= 0 && selectedRow < m_scriptStore->numberOfScripts()) {
@@ -357,6 +386,7 @@ void MenuController::tableViewDidChangeSelection(SelectableTableView * t, int pr
   if (selectedRow() == numberOfRows() - 1 && selectedColumn() == 1 && m_shouldDisplayAddScriptRow) {
     t->selectCellAtLocation(0, numberOfRows()-1);
   }
+  updateScriptMenuHelp();
 }
 
 bool MenuController::textFieldShouldFinishEditing(TextField * textField, Ion::Events::Event event) {

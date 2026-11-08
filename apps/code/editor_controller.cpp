@@ -7,7 +7,9 @@
 #include "../global_preferences.h"
 #include <apps/apps_container.h>
 
+#include "language_select_controller.h"
 extern "C" void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8);
+extern "C" void BrainSetCodingEditorLang(int lang);
 using namespace Shared;
 
 namespace Code {
@@ -65,20 +67,37 @@ void EditorController::didBecomeFirstResponder() {
 
 void EditorController::viewWillAppear() {
   ViewController::viewWillAppear();
+  LanguageType lang = LanguageSelectController::currentLanguage();
+  BrainSetCodingEditorLang((int)lang + 1);
   m_editorView.loadSyntaxHighlighter();
-  BrainNotifyCustomHelp(
-    "コード編集",
-    "スクリプトの作成・編集画面です。\n\n"
-    "・文字や記号を入力してプログラムを作成\n"
-    "・[F1]: 関数・命令パレット\n"
-    "・[F2]: 文字/数字モード切替\n"
-    "・[F12]: マニュアル表示\n"
-    "・[Back]: 編集を完了して一覧へ戻る"
-  );
+
+  if (lang == LanguageType::Brainfuck) {
+    BrainNotifyCustomHelp(
+      "BrainF*ck編集",
+      "8文字の命令でコードを記述します。\n\n"
+      "・12xモード: A:>, S:<, D:+, F:-\n"
+      "            H:., J:,, K:[, L:]\n"
+      "・他の文字キーは誤入力を防ぐため無効化\n"
+      "・[F12]: マニュアル表示\n"
+      "・[Back]: 編集を完了して一覧へ戻る"
+    );
+  } else {
+    BrainNotifyCustomHelp(
+      "コード編集",
+      "スクリプトの作成・編集画面です。\n\n"
+      "・文字や記号を入力してプログラムを作成\n"
+      "・12xモードで主要な記号・括弧を入力\n"
+      "・[F1]: 関数・命令パレット\n"
+      "・[F2]: 文字/数字モード切替\n"
+      "・[F12]: マニュアル表示\n"
+      "・[Back]: 編集を完了して一覧へ戻る"
+    );
+  }
   m_editorView.setCursorLocation(m_editorView.text() + strlen(m_editorView.text()));
 }
 
 void EditorController::viewDidDisappear() {
+  BrainSetCodingEditorLang(0);
   m_editorView.resetSelection();
   m_menuController->scriptContentEditionDidFinish();
 }

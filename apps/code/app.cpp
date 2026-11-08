@@ -90,7 +90,8 @@ App::App(Snapshot * snapshot) :
   m_variableBoxController(snapshot->scriptStore()),
   m_pocketPyEngine(&m_consoleController),
   m_tinyBasicEngine(&m_consoleController),
-  m_logoEngine(&m_consoleController)
+  m_logoEngine(&m_consoleController),
+  m_brainfuckEngine(&m_consoleController)
 {
   Clipboard::sharedClipboard()->enterPython();
 }
@@ -105,6 +106,7 @@ InterpreterEngine * App::currentEngine() {
     case LanguageType::Python: return &m_pocketPyEngine;
     case LanguageType::Basic:  return &m_tinyBasicEngine;
     case LanguageType::Logo:   return &m_logoEngine;
+    case LanguageType::Brainfuck: return &m_brainfuckEngine;
     default:                   return &m_pocketPyEngine;
   }
 }

@@ -23,6 +23,8 @@
 
 #include "misaki_font_data.h"
 
+static int sCodingEditorLang = 0;
+
 namespace Ion {
 namespace Simulator {
 namespace Display {
@@ -95,6 +97,7 @@ static bool sHelpReady = false;
 static wchar_t sCustomHelpTitle[64] = { 0 };
 static wchar_t sCustomHelpDesc[512] = { 0 };
 static bool sHasCustomHelp = false;
+bool isCustomHelpActive() { return sHasCustomHelp; }
 
 static inline uint32_t rgb565ToRgb888(uint16_t c) {
   uint32_t r = (c >> 11) & 0x1F;
@@ -275,7 +278,10 @@ static void drawKeyGridBlock(HDC hdc, int startX, int startY, const KeyCapSpec g
       const wchar_t * activeLabel = spec.numLabel;
       bool isDigit = spec.isDigitInNumMode;
       if (mode == Keyboard::InputMode::Number) {
-        if (spec.keyName) {
+        if (sCodingEditorLang > 0) {
+          activeLabel = spec.numLabel;
+          isDigit = spec.isDigitInNumMode;
+        } else if (spec.keyName) {
           uint16_t vk = (wcscmp(spec.keyName, L"ー") == 0) ? 0xBD : static_cast<uint16_t>(spec.keyName[0]);
           activeLabel = Config::getShortLabelForVk(vk, L"-");
           if (Config::findActionByVk(vk) == Config::KeyAction::ActionCount) {
@@ -515,6 +521,12 @@ static void renderRightSidebar(HDC hdc) {
   const wchar_t * modeTitle = L"モード: 12x";
   COLORREF modeColor = RGB(24, 128, 116);
   const wchar_t * modeHint = L"F2:切替   Ent:EXE";
+  if (mode == Keyboard::InputMode::Number) {
+    if (sCodingEditorLang == 4) modeTitle = L"モード: 12x (BF)";
+    else if (sCodingEditorLang == 1) modeTitle = L"モード: 12x (Py)";
+    else if (sCodingEditorLang == 2) modeTitle = L"モード: 12x (BAS)";
+    else if (sCodingEditorLang == 3) modeTitle = L"モード: 12x (LGO)";
+  }
 
   if (mode == Keyboard::InputMode::AlphaLower) {
     modeTitle = L"モード: abc";
@@ -600,12 +612,76 @@ static void renderRightSidebar(HDC hdc) {
     // 3. 左手側キー 5列×3段グリッド (Y = 142..276)
     SelectObject(hdc, sUiFontSmall);
     drawTextLine(hdc, sx, 142, sw, 18, RGB(38, 115, 104), L"■左手側 (Q-T/A-G)");
-    drawKeyGridBlock(hdc, sx, 163, kLeftHandGrid, mode);
+    static constexpr KeyCapSpec kLeftHandGridPy[3][5] = {
+      { { L"Q", L"1", L"q", true }, { L"W", L"2", L"w", true }, { L"E", L"3", L"e", true }, { L"R", L"4", L"r", true }, { L"T", L"5", L"t", true } },
+      { { L"A", L"+", L"a", false }, { L"S", L"-", L"s", false }, { L"D", L"*", L"d", false }, { L"F", L"/", L"f", false }, { L"G", L"=", L"g", false } },
+      { { L"Z", L":", L"z", false }, { L"X", L"\"", L"x", false }, { L"C", L"'", L"c", false }, { L"V", L"_", L"v", false }, { L"B", L"%", L"b", false } }
+    };
+    static constexpr KeyCapSpec kRightHandGridPy[3][5] = {
+      { { L"Y", L"6", L"y", true }, { L"U", L"7", L"u", true }, { L"I", L"8", L"i", true }, { L"O", L"9", L"o", true }, { L"P", L"0", L"p", true } },
+      { { L"H", L"(", L"h", false }, { L"J", L")", L"j", false }, { L"K", L"[", L"k", false }, { L"L", L"]", L"l", false }, { nullptr, nullptr, nullptr, false } },
+      { { L"N", L",", L"n", false }, { L"M", L".", L"m", false }, { L"ー", L"<", L"-", false }, { nullptr, nullptr, nullptr, false }, { nullptr, nullptr, nullptr, false } }
+    };
 
-    // 4. 右手側キー 5列×3段グリッド (Y = 282..416)
-    SelectObject(hdc, sUiFontSmall);
-    drawTextLine(hdc, sx, 282, sw, 18, RGB(38, 115, 104), L"■右手側 (Y-P/H-L)");
-    drawKeyGridBlock(hdc, sx, 303, kRightHandGrid, mode);
+    static constexpr KeyCapSpec kLeftHandGridBasic[3][5] = {
+      { { L"Q", L"1", L"q", true }, { L"W", L"2", L"w", true }, { L"E", L"3", L"e", true }, { L"R", L"4", L"r", true }, { L"T", L"5", L"t", true } },
+      { { L"A", L"+", L"a", false }, { L"S", L"-", L"s", false }, { L"D", L"*", L"d", false }, { L"F", L"/", L"f", false }, { L"G", L"=", L"g", false } },
+      { { L"Z", L"<", L"z", false }, { L"X", L">", L"x", false }, { L"C", L"\"", L"c", false }, { L"V", L"$", L"v", false }, { L"B", L"%", L"b", false } }
+    };
+    static constexpr KeyCapSpec kRightHandGridBasic[3][5] = {
+      { { L"Y", L"6", L"y", true }, { L"U", L"7", L"u", true }, { L"I", L"8", L"i", true }, { L"O", L"9", L"o", true }, { L"P", L"0", L"p", true } },
+      { { L"H", L"(", L"h", false }, { L"J", L")", L"j", false }, { L"K", L";", L"k", false }, { L"L", L":", L"l", false }, { nullptr, nullptr, nullptr, false } },
+      { { L"N", L",", L"n", false }, { L"M", L".", L"m", false }, { L"ー", L"?", L"-", false }, { nullptr, nullptr, nullptr, false }, { nullptr, nullptr, nullptr, false } }
+    };
+
+    static constexpr KeyCapSpec kLeftHandGridLogo[3][5] = {
+      { { L"Q", L"1", L"q", true }, { L"W", L"2", L"w", true }, { L"E", L"3", L"e", true }, { L"R", L"4", L"r", true }, { L"T", L"5", L"t", true } },
+      { { L"A", L"+", L"a", false }, { L"S", L"-", L"s", false }, { L"D", L"*", L"d", false }, { L"F", L"/", L"f", false }, { L"G", L"=", L"g", false } },
+      { { L"Z", L"[", L"z", false }, { L"X", L"]", L"x", false }, { L"C", L"\"", L"c", false }, { L"V", L":", L"v", false }, { L"B", L"<", L"b", false } }
+    };
+    static constexpr KeyCapSpec kRightHandGridLogo[3][5] = {
+      { { L"Y", L"6", L"y", true }, { L"U", L"7", L"u", true }, { L"I", L"8", L"i", true }, { L"O", L"9", L"o", true }, { L"P", L"0", L"p", true } },
+      { { L"H", L"(", L"h", false }, { L"J", L")", L"j", false }, { L"K", L">", L"k", false }, { L"L", L"_", L"l", false }, { nullptr, nullptr, nullptr, false } },
+      { { L"N", L",", L"n", false }, { L"M", L".", L"m", false }, { L"ー", L" ", L"-", false }, { nullptr, nullptr, nullptr, false }, { nullptr, nullptr, nullptr, false } }
+    };
+
+    static constexpr KeyCapSpec kLeftHandGridBF[3][5] = {
+      { { L"Q", L"-", L"q", false }, { L"W", L"-", L"w", false }, { L"E", L"-", L"e", false }, { L"R", L"-", L"r", false }, { L"T", L"-", L"t", false } },
+      { { L"A", L">", L"a", false }, { L"S", L"<", L"s", false }, { L"D", L"+", L"d", false }, { L"F", L"-", L"f", false }, { L"G", L"-", L"g", false } },
+      { { L"Z", L"-", L"z", false }, { L"X", L"-", L"x", false }, { L"C", L"-", L"c", false }, { L"V", L"-", L"v", false }, { L"B", L"-", L"b", false } }
+    };
+    static constexpr KeyCapSpec kRightHandGridBF[3][5] = {
+      { { L"Y", L"-", L"y", false }, { L"U", L"-", L"u", false }, { L"I", L"-", L"i", false }, { L"O", L"-", L"o", false }, { L"P", L"-", L"p", false } },
+      { { L"H", L".", L"h", false }, { L"J", L",", L"j", false }, { L"K", L"[", L"k", false }, { L"L", L"]", L"l", false }, { nullptr, nullptr, nullptr, false } },
+      { { L"N", L"-", L"n", false }, { L"M", L"-", L"m", false }, { L"ー", L"-", L"-", false }, { nullptr, nullptr, nullptr, false }, { nullptr, nullptr, nullptr, false } }
+    };
+
+    if (mode == Keyboard::InputMode::Number && sCodingEditorLang == 4) {
+      drawKeyGridBlock(hdc, sx, 163, kLeftHandGridBF, mode);
+      SelectObject(hdc, sUiFontSmall);
+      drawTextLine(hdc, sx, 282, sw, 18, RGB(38, 115, 104), L"■右手側 (H-L:命令)");
+      drawKeyGridBlock(hdc, sx, 303, kRightHandGridBF, mode);
+    } else if (mode == Keyboard::InputMode::Number && sCodingEditorLang == 1) {
+      drawKeyGridBlock(hdc, sx, 163, kLeftHandGridPy, mode);
+      SelectObject(hdc, sUiFontSmall);
+      drawTextLine(hdc, sx, 282, sw, 18, RGB(38, 115, 104), L"■右手側 (Y-P/H-L)");
+      drawKeyGridBlock(hdc, sx, 303, kRightHandGridPy, mode);
+    } else if (mode == Keyboard::InputMode::Number && sCodingEditorLang == 2) {
+      drawKeyGridBlock(hdc, sx, 163, kLeftHandGridBasic, mode);
+      SelectObject(hdc, sUiFontSmall);
+      drawTextLine(hdc, sx, 282, sw, 18, RGB(38, 115, 104), L"■右手側 (Y-P/H-L)");
+      drawKeyGridBlock(hdc, sx, 303, kRightHandGridBasic, mode);
+    } else if (mode == Keyboard::InputMode::Number && sCodingEditorLang == 3) {
+      drawKeyGridBlock(hdc, sx, 163, kLeftHandGridLogo, mode);
+      SelectObject(hdc, sUiFontSmall);
+      drawTextLine(hdc, sx, 282, sw, 18, RGB(38, 115, 104), L"■右手側 (Y-P/H-L)");
+      drawKeyGridBlock(hdc, sx, 303, kRightHandGridLogo, mode);
+    } else {
+      drawKeyGridBlock(hdc, sx, 163, kLeftHandGrid, mode);
+      SelectObject(hdc, sUiFontSmall);
+      drawTextLine(hdc, sx, 282, sw, 18, RGB(38, 115, 104), L"■右手側 (Y-P/H-L)");
+      drawKeyGridBlock(hdc, sx, 303, kRightHandGrid, mode);
+    }
   }
 
   // ===========================================================================
@@ -672,7 +748,7 @@ static constexpr int kGuideDialogW = 720;
 static constexpr int kGuideDialogH = 444;
 static constexpr int kGuideDialogX = (kBrainScreenWidth - kGuideDialogW) / 2;  // 40
 static constexpr int kGuideDialogY = (kBrainScreenHeight - kGuideDialogH) / 2; // 18
-static constexpr int kGuideCategoryCount = 4; // 0:3Dグラフ, 1:Python, 2:BASIC, 3:Logo
+static constexpr int kGuideCategoryCount = 5; // 0:3Dグラフ, 1:Python, 2:BASIC, 3:Logo
 static constexpr int kVisibleGuideRows = 8;
 static int sGuideCategory = 0;
 static int sLastGuideCategory = -1;
@@ -1374,11 +1450,66 @@ struct GuideCategoryDef {
   int count;
 };
 
+static constexpr GuideTopic kBrainfuckTopics[4] = {
+  {
+    L"1. 概要と概念",
+    L"1. BrainF*ckの概要とメモリモデル",
+    L"【極小のチューリング完全言語】\n\n"
+    L"1993年にUrban Müller氏によって考案された、世界で最も有名な難解プログラミング言語です。\n\n"
+    L"■ 基本の仕組み:\n"
+    L"・30,000バイトのメモリ配列（マス目）が一列に並んでいます。\n"
+    L"・今指しているマス目を「ポインタ」と呼びます。\n"
+    L"・使える命令はわずか8文字のみ。\n"
+    L"・他の文字（アルファベットや改行など）はすべて無視され、自由にコメントを書くことができます。"
+  },
+  {
+    L"2. 8つの命令一覧",
+    L"2. 8つの基本命令と動作",
+    L"【命令一覧（8種類すべて）】\n\n"
+    L" > : ポインタを右のマスへ進める\n"
+    L" < : ポインタを左のマスへ戻す\n"
+    L" + : 現在のマスの数値を +1 する\n"
+    L" - : 現在のマスの数値を -1 する\n"
+    L" . : 現在のマスの数値を文字として画面に出力（ASCII）\n"
+    L" , : キーボードから1文字入力してマスに格納\n"
+    L" [ : 現在のマスが0なら、対応する ] の次までジャンプ\n"
+    L" ] : 現在のマスが0以外なら、対応する [ の次まで戻る"
+  },
+  {
+    L"3. 出力の仕組み",
+    L"3. 文字出力とASCIIコード・ループ掛け算",
+    L"【文字出力の基本】\n\n"
+    L"コンピュータは文字を番号（ASCIIコード）で管理します。\n"
+    L"例: 65 = 'A',  72 = 'H',  10 = 改行\n\n"
+    L"■ ループによる掛け算テクニック:\n"
+    L"'+' を72回書く代わりに、掛け算を使います。\n"
+    L"8 × 9 = 72 を作るコード:\n"
+    L"  ++++++++         (マス0に 8 を代入)\n"
+    L"  [ > +++++++++ < - ] (マス0が0になるまでマス1に9加算)\n"
+    L"  > .              (マス1へ移動して 72='H' を出力!)\n\n"
+    L"このように [ と ] を使って効率的に文字を作ります。"
+  },
+  {
+    L"4. コード解説",
+    L"4. Hello, World! と入力方法",
+    L"【サンプルコードの解説】\n\n"
+    L"初期サンプル (sample.bf) は定番の 'Hello, World!' を出力します。\n"
+    L"マス0をカウンタにして、マス1・2・3・4に H, e, l, o などの近いコードを並列で準備し、微調整して出力しています。\n\n"
+    L"■ BrainCalcでの快適入力:\n"
+    L"12xモード時、中央キー列に8命令を集中配置!\n"
+    L"  [A]:>   [S]:<   [D]:+   [F]:-\n"
+    L"  [H]:.   [J]:,   [K]:[   [L]:]\n"
+    L"他の文字キーは誤入力を防ぐため無効化されています。\n"
+    L"手軽に超極限のコーディングをお楽しみください!"
+  }
+};
+
 static constexpr GuideCategoryDef kGuideCategories[kGuideCategoryCount] = {
   { L"3Dグラフ", kPlot3DTopics, 14 },
   { L"Python",   kPythonTopics,  8 },
   { L"BASIC",    kBasicTopics,   8 },
   { L"Logo",     kLogoTopics,    8 },
+  { L"BrainF*ck", kBrainfuckTopics, 4 },
 };
 
 static bool sGuidePageDirty = false;
@@ -2163,6 +2294,15 @@ static void openKeyConfigModal() {
 
 static void openLLCubicGuideModal() {
   sModalMode = ModalMode::LLCubicGuide;
+  if (sCodingEditorLang == 4) {
+    sGuideCategory = 4; // BrainF*ck
+  } else if (sCodingEditorLang == 1) {
+    sGuideCategory = 1; // Python
+  } else if (sCodingEditorLang == 2) {
+    sGuideCategory = 2; // BASIC
+  } else if (sCodingEditorLang == 3) {
+    sGuideCategory = 3; // Logo
+  }
   sGuideSelectedIndex = 0;
   sGuideScrollOffset = 0;
   sLastGuideCategory = -1;
@@ -3492,8 +3632,24 @@ void clearCustomHelp() {
 }
 }
 
+extern "C" void BrainSetCodingEditorLang(int lang) {
+  if (sCodingEditorLang != lang) {
+    sCodingEditorLang = lang;
+    Ion::Simulator::Display::markSidebarDirty();
+    Ion::Simulator::Main::setNeedsRefresh();
+  }
+}
+
+extern "C" int BrainGetCodingEditorLang() {
+  return sCodingEditorLang;
+}
+
 extern "C" void BrainNotifyHelpText(const char * mainText, const char * subText) {
   if (!Ion::Simulator::Display::isHelpReady()) {
+    return;
+  }
+  // If custom help is active (e.g. inside Coding views), do not overwrite with generic dictionary text!
+  if (Ion::Simulator::Display::isCustomHelpActive()) {
     return;
   }
   BrainLogText2("BrainNotifyHelpText", mainText ? mainText : "(null)", subText ? subText : "(null)");

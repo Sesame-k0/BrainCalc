@@ -124,7 +124,125 @@ bool isTerminationRequested() {
 }
 
 // KEY-MAPPING.md Section 4: 【数字モード（ON / 12x）時】
+extern "C" int BrainGetCodingEditorLang();
+
 static bool handleNumberModeKey(WPARAM vkCode) {
+  int lang = BrainGetCodingEditorLang();
+  if (lang > 0) {
+    if (lang == 4) { // BrainF*ck (8-op minimal Turing complete)
+      switch (vkCode) {
+        case 'A': pushExternalText(">"); return true;
+        case 'S': pushExternalText("<"); return true;
+        case 'D': pushExternalText("+"); return true;
+        case 'F': pushExternalText("-"); return true;
+        case 'H': pushExternalText("."); return true;
+        case 'J': pushExternalText(","); return true;
+        case 'K': pushExternalText("["); return true;
+        case 'L': pushExternalText("]"); return true;
+        // Disable all other alpha keys in 12x mode for Brainfuck
+        case 'Q': case 'W': case 'E': case 'R': case 'T':
+        case 'Y': case 'U': case 'I': case 'O': case 'P':
+        case 'G': case 'Z': case 'X': case 'C': case 'V':
+        case 'B': case 'N': case 'M': case 0xBD:
+          return true;
+        default: break;
+      }
+    } else if (lang == 1) { // PocketPy
+      switch (vkCode) {
+        case 'Q': pushPendingEvent(Ion::Events::One); return true;
+        case 'W': pushPendingEvent(Ion::Events::Two); return true;
+        case 'E': pushPendingEvent(Ion::Events::Three); return true;
+        case 'R': pushPendingEvent(Ion::Events::Four); return true;
+        case 'T': pushPendingEvent(Ion::Events::Five); return true;
+        case 'Y': pushPendingEvent(Ion::Events::Six); return true;
+        case 'U': pushPendingEvent(Ion::Events::Seven); return true;
+        case 'I': pushPendingEvent(Ion::Events::Eight); return true;
+        case 'O': pushPendingEvent(Ion::Events::Nine); return true;
+        case 'P': pushPendingEvent(Ion::Events::Zero); return true;
+        case 'A': pushPendingEvent(Ion::Events::Plus); return true;
+        case 'S': pushPendingEvent(Ion::Events::Minus); return true;
+        case 'D': pushPendingEvent(Ion::Events::Multiplication); return true;
+        case 'F': pushPendingEvent(Ion::Events::Division); return true;
+        case 'G': pushExternalText("="); return true;
+        case 'H': pushPendingEvent(Ion::Events::LeftParenthesis); return true;
+        case 'J': pushPendingEvent(Ion::Events::RightParenthesis); return true;
+        case 'K': pushExternalText("["); return true;
+        case 'L': pushExternalText("]"); return true;
+        case 'Z': pushPendingEvent(Ion::Events::Colon); return true;
+        case 'X': pushExternalText("\""); return true;
+        case 'C': pushExternalText("'"); return true;
+        case 'V': pushPendingEvent(Ion::Events::Underscore); return true;
+        case 'B': pushPendingEvent(Ion::Events::Percent); return true;
+        case 'N': pushExternalText(","); return true;
+        case 'M': pushPendingEvent(Ion::Events::Dot); return true;
+        case 0xBD: pushExternalText("<"); return true;
+        default: break;
+      }
+    } else if (lang == 2) { // TinyBasic
+      switch (vkCode) {
+        case 'Q': pushPendingEvent(Ion::Events::One); return true;
+        case 'W': pushPendingEvent(Ion::Events::Two); return true;
+        case 'E': pushPendingEvent(Ion::Events::Three); return true;
+        case 'R': pushPendingEvent(Ion::Events::Four); return true;
+        case 'T': pushPendingEvent(Ion::Events::Five); return true;
+        case 'Y': pushPendingEvent(Ion::Events::Six); return true;
+        case 'U': pushPendingEvent(Ion::Events::Seven); return true;
+        case 'I': pushPendingEvent(Ion::Events::Eight); return true;
+        case 'O': pushPendingEvent(Ion::Events::Nine); return true;
+        case 'P': pushPendingEvent(Ion::Events::Zero); return true;
+        case 'A': pushPendingEvent(Ion::Events::Plus); return true;
+        case 'S': pushPendingEvent(Ion::Events::Minus); return true;
+        case 'D': pushPendingEvent(Ion::Events::Multiplication); return true;
+        case 'F': pushPendingEvent(Ion::Events::Division); return true;
+        case 'G': pushExternalText("="); return true;
+        case 'H': pushPendingEvent(Ion::Events::LeftParenthesis); return true;
+        case 'J': pushPendingEvent(Ion::Events::RightParenthesis); return true;
+        case 'K': pushPendingEvent(Ion::Events::SemiColon); return true;
+        case 'L': pushPendingEvent(Ion::Events::Colon); return true;
+        case 'Z': pushExternalText("<"); return true;
+        case 'X': pushExternalText(">"); return true;
+        case 'C': pushExternalText("\""); return true;
+        case 'V': pushExternalText("$"); return true;
+        case 'B': pushPendingEvent(Ion::Events::Percent); return true;
+        case 'N': pushExternalText(","); return true;
+        case 'M': pushPendingEvent(Ion::Events::Dot); return true;
+        case 0xBD: pushPendingEvent(Ion::Events::Question); return true;
+        default: break;
+      }
+    } else if (lang == 3) { // Logo
+      switch (vkCode) {
+        case 'Q': pushPendingEvent(Ion::Events::One); return true;
+        case 'W': pushPendingEvent(Ion::Events::Two); return true;
+        case 'E': pushPendingEvent(Ion::Events::Three); return true;
+        case 'R': pushPendingEvent(Ion::Events::Four); return true;
+        case 'T': pushPendingEvent(Ion::Events::Five); return true;
+        case 'Y': pushPendingEvent(Ion::Events::Six); return true;
+        case 'U': pushPendingEvent(Ion::Events::Seven); return true;
+        case 'I': pushPendingEvent(Ion::Events::Eight); return true;
+        case 'O': pushPendingEvent(Ion::Events::Nine); return true;
+        case 'P': pushPendingEvent(Ion::Events::Zero); return true;
+        case 'A': pushPendingEvent(Ion::Events::Plus); return true;
+        case 'S': pushPendingEvent(Ion::Events::Minus); return true;
+        case 'D': pushPendingEvent(Ion::Events::Multiplication); return true;
+        case 'F': pushPendingEvent(Ion::Events::Division); return true;
+        case 'G': pushExternalText("="); return true;
+        case 'H': pushPendingEvent(Ion::Events::LeftParenthesis); return true;
+        case 'J': pushPendingEvent(Ion::Events::RightParenthesis); return true;
+        case 'K': pushExternalText(">"); return true;
+        case 'L': pushPendingEvent(Ion::Events::Underscore); return true;
+        case 'Z': pushExternalText("["); return true;
+        case 'X': pushExternalText("]"); return true;
+        case 'C': pushExternalText("\""); return true;
+        case 'V': pushPendingEvent(Ion::Events::Colon); return true;
+        case 'B': pushExternalText("<"); return true;
+        case 'N': pushExternalText(","); return true;
+        case 'M': pushPendingEvent(Ion::Events::Dot); return true;
+        case 0xBD: pushExternalText(" "); return true;
+        default: break;
+      }
+    }
+  }
+
   Config::KeyAction action = Config::findActionByVk(static_cast<uint16_t>(vkCode));
   if (action != Config::KeyAction::ActionCount) {
     return Config::executeAction(action);

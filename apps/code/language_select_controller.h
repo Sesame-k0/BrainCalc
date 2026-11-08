@@ -31,8 +31,11 @@ private:
     void drawRect(KDContext * ctx, KDRect rect) const override;
     int selectedIndex() const { return m_selectedIndex; }
     void setSelectedIndex(int index) { m_selectedIndex = index; markRectAsDirty(bounds()); }
+    bool secretMode() const { return m_secretMode; }
+    void setSecretMode(bool secret) { m_secretMode = secret; markRectAsDirty(bounds()); }
   private:
     int m_selectedIndex;
+    bool m_secretMode;
   };
 
   static constexpr int k_numberOfLanguages = 3;

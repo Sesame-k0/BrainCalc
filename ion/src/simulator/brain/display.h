@@ -70,6 +70,8 @@ extern "C" {
 void BrainNotifyHelpText(const char * mainText, const char * subText);
 void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8);
 void BrainClearHelp();
+void BrainSetCodingEditorLang(int lang);
+int BrainGetCodingEditorLang();
 #ifdef __cplusplus
 }
 #endif

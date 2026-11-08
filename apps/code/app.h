@@ -15,6 +15,7 @@
 #include "engines/pocketpy/pocketpy_engine.h"
 #include "engines/tinybasic/tinybasic_engine.h"
 #include "engines/logo/logo_engine.h"
+#include "engines/brainfuck/brainfuck_engine.h"
 
 namespace Code {
 
@@ -82,6 +83,7 @@ public:
   PocketPyEngine * pocketPyEngine() { return &m_pocketPyEngine; }
   TinyBasicEngine * tinyBasicEngine() { return &m_tinyBasicEngine; }
   LogoEngine * logoEngine() { return &m_logoEngine; }
+  BrainfuckEngine * brainfuckEngine() { return &m_brainfuckEngine; }
 
   // Backward compatibility stubs for PythonUser
   bool pythonIsInited() { return true; }
@@ -105,6 +107,7 @@ private:
   PocketPyEngine m_pocketPyEngine;
   TinyBasicEngine m_tinyBasicEngine;
   LogoEngine m_logoEngine;
+  BrainfuckEngine m_brainfuckEngine;
 };
 
 }

@@ -1,2 +1,6 @@
 CodeAppCapital = "CODING"
 ConsolePrompt = ">>> "
+ConsolePython = "Python shell"
+ConsoleBasic = "BASIC shell"
+ConsoleLogo = "Logo console"
+ConsoleBrainfuck = "BrainF*ck REPL"

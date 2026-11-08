@@ -23,6 +23,7 @@ app_code_src = $(addprefix apps/code/,\
   engines/pocketpy/pocketpy_engine.cpp \
   engines/tinybasic/tinybasic_engine.cpp \
   engines/logo/logo_engine.cpp \
+  engines/brainfuck/brainfuck_engine.cpp \
 )
 
 app_code_test_src = $(addprefix apps/code/,\
