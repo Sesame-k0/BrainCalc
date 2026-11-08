@@ -97,3 +97,16 @@ int cpuUsagePercentage() {
 
 }
 }
+
+#if defined(_WIN32_WCE) || defined(UNDER_CE) || defined(__MINGW32CE__)
+#include <time.h>
+extern "C" {
+clock_t clock(void) {
+  return static_cast<clock_t>(GetTickCount());
+}
+int isblank(int c) {
+  return (c == ' ' || c == '\t');
+}
+}
+#endif
+
