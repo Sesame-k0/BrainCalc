@@ -72,6 +72,8 @@ void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8);
 void BrainClearHelp();
 void BrainSetCodingEditorLang(int lang);
 int BrainGetCodingEditorLang();
+void BrainSetBrainfuckModeActive(bool active);
+bool BrainIsBrainfuckModeActive();
 #ifdef __cplusplus
 }
 #endif

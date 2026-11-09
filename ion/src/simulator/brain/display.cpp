@@ -1521,20 +1521,19 @@ static constexpr GuideTopic kPlot3DTopics[14] = {
   }
 };
 
-// --- カテゴリ 3: コード言語 (Coding アプリ統合環境) ---
-static constexpr GuideTopic kCodingTopics[6] = {
+// --- カテゴリ 3: コード言語 (通常時は3言語のみ、Brainfuckは隠し状態) ---
+static constexpr GuideTopic kCodingTopicsNormal[5] = {
   {
     L"1. Coding概要・自動読込",
     L"1. Coding アプリ概要と scripts フォルダ自動読込",
-    L"【4言語を統合したコーディング環境】\n"
-    L"Python, BASIC, Logo, BrainF*ck の4言語を1つのアプリに統合。\n\n"
+    L"【3言語を統合したコーディング環境】\n"
+    L"Python, BASIC, Logo の3言語を1つのアプリに統合。\n\n"
     L"■ scripts フォルダからの自動読み込み:\n"
     L"・アプリと同じ階層の scripts フォルダに PC からファイルを\n"
     L"  ごっちゃに投入するだけで、拡張子に応じて自動仕分け登録!\n"
     L"  - .py  → PocketPy (Python)\n"
     L"  - .bas → TinyBasic\n"
     L"  - .lgo → Logo\n"
-    L"  - .bf  → BrainF*ck\n"
     L"・サブフォルダ (例: scripts/tools/) のファイルも再帰的に全自動検出。\n"
     L"・Windows の UTF-8 BOM や CRLF 改行も自動で正規化されます。"
   },
@@ -1581,17 +1580,83 @@ static constexpr GuideTopic kCodingTopics[6] = {
     L"・正多角形、星型、渦巻き、曼荼羅模様を数行で描けます。"
   },
   {
+    L"5. 12xキー最適化",
+    L"5. 各言語に応じた 12x 記号入力の自動最適化",
+    L"【言語ごとの最適キーマッピング】\n"
+    L"Coding エディタでは、選択中の言語に応じて 12x モード時のキー配置が\n"
+    L"自動的に切り替わります。\n\n"
+    L"・Python: コロン (:), クォート (\"), 等号 (=), カンマ (,), アンダースコア (_)\n"
+    L"・BASIC: 等号 (=), 二重引用符 (\"), セミコロン (;), カンマ (,)\n"
+    L"・Logo: 開き括弧 ([), 閉じ括弧 (]), スペース\n"
+    L"※ 電卓特有の √ や π などの不要記号に邪魔されず快適に入力できます。"
+  }
+};
+
+static constexpr GuideTopic kCodingTopicsSecret[6] = {
+  {
+    L"1. Coding概要・自動読込",
+    L"1. Coding アプリ概要と scripts フォルダ自動読込",
+    L"【統合コーディング環境】\n"
+    L"Python, BASIC, Logo に加え、極限言語 BrainF*ck を搭載。\n\n"
+    L"■ scripts フォルダからの自動読み込み:\n"
+    L"・アプリと同じ階層の scripts フォルダに PC からファイルを\n"
+    L"  投入するだけで、拡張子に応じて自動仕分け登録!\n"
+    L"  - .py  → PocketPy (Python)\n"
+    L"  - .bas → TinyBasic\n"
+    L"  - .lgo → Logo\n"
+    L"  - .bf  → BrainF*ck\n"
+    L"・サブフォルダのファイルも再帰的に全自動検出。\n"
+    L"・Windows の UTF-8 BOM や CRLF 改行も自動で正規化されます。"
+  },
+  {
+    L"2. Python (PocketPy)",
+    L"2. PocketPy (Python 3.11) プログラミング",
+    L"【軽量高速な Python 3 インタプリタ】\n"
+    L"・関数定義 (def)、クラス、内包表記、例外処理をフルサポート。\n"
+    L"・[F1] (Toolbox) から制御構文や関数テンプレートを瞬時に挿入。\n"
+    L"・import math: 三角関数、対数、平方根、math.pi, math.e\n"
+    L"・import kandinsky: 320x240 フルカラー画面描画\n"
+    L"・実行後、[Back / Esc] でエディタに戻ります。"
+  },
+  {
+    L"3. BASIC (TinyBasic)",
+    L"3. TinyBasic (行番号付きクラシックBASIC)",
+    L"【アルファベットと数字で書ける親しみやすい言語】\n"
+    L"・行番号 (10, 20, 30...) を付けてプログラムを記述。\n"
+    L"・主要命令: PRINT, INPUT, LET, IF ... THEN, FOR ... NEXT, \n"
+    L"  GOTO, GOSUB / RETURN, END, REM (コメント)。\n"
+    L"・グラフィックス命令完備: CLS, PSET, LINE, RECT\n"
+    L"・電子辞書のキーボードと非常に相性が良く、手軽に動作します。"
+  },
+  {
+    L"4. Logo (タートル)",
+    L"4. Logo (タートルグラフィックス)",
+    L"【直感的アルファベット命令による幾何学アート】\n"
+    L"・前進 (FD)、回転 (RT)、ループ (REPEAT) だけで幾何学図形を描画。\n"
+    L"・基本コマンド: FD, BK, RT, LT, PU, PD, REPEAT, CS\n"
+    L"・正多角形、星型、渦巻き、曼荼羅模様を数行で描けます。"
+  },
+  {
     L"5. BrainF*ck (極限言語)",
     L"5. BrainF*ck (8命令の極小チューリング完全言語)",
-    L"【PageDown 長押しで出現する裏言語】\n"
-    L"・言語選択画面で PageDown を長押しすると出現 (↑/PgUp で復帰)。\n"
-    L"・30,000バイトのメモリテープとポインタで動作する極限の言語。\n"
+    L"【8文字の命令で記述する難解プログラミング言語】\n"
+    L"・30,000バイトのメモリ配列とポインタを直接操作して動作します。\n"
     L"・8つの命令:\n"
-    L"  > : ポインタを右へ / < : ポインタを左へ\n"
-    L"  + : 値を +1 / - : 値を -1\n"
-    L"  . : 文字出力 (ASCII) / , : 1文字入力\n"
-    L"  [ : 0なら対応する ] の次へ / ] : 0以外なら [ の次へ\n"
-    L"・12xモード時、中央キー A,S,D,F, H,J,K,L に 8命令を集中配置!"
+    L"  > : ポインタを右へ (+1)\n"
+    L"  < : ポインタを左へ (-1)\n"
+    L"  + : ポインタの指す値を +1\n"
+    L"  - : ポインタの指す値を -1\n"
+    L"  . : ポインタの指す値を ASCII 文字として標準出力\n"
+    L"  , : 1文字入力をポインタの指す値に格納\n"
+    L"  [ : ポインタの指す値が 0 なら対応する ] の次へジャンプ\n"
+    L"  ] : ポインタの指す値が 0 以外なら対応する [ の次へジャンプ\n\n"
+    L"【Brain 独自のキー配置】\n"
+    L"・12xモード時、中央キー A,S,D,F, H,J,K,L に 8命令を集中配置!\n"
+    L"  [A]=<  [S]=>  [D]=+  [F]=-\n"
+    L"  [H]=.  [J]=,  [K]=[  [L]=]\n"
+    L"・余計なキーは無効化されているため、8キーだけで快適に入力できます。\n\n"
+    L"【テストコード例】\n"
+    L"・「Hello World!」を出力する最小スクリプトが sample.bf に登録済みです。"
   },
   {
     L"6. 12xキー最適化",
@@ -1685,9 +1750,23 @@ static constexpr GuideCategoryDef kGuideCategories[kGuideCategoryCount] = {
   { L"逆引き計算", kMathSolveTopics,    12 },
   { L"基本アプリ", kAppFeaturesTopics,  8 },
   { L"3Dグラフ",   kPlot3DTopics,        14 },
-  { L"コード言語", kCodingTopics,        6 },
+  { L"コード言語", kCodingTopicsNormal,  5 },
   { L"操作＆キー", kKeyboardTopics,      5 },
 };
+
+static int getGuideTopicCount(int cat) {
+  if (cat == 3) {
+    return BrainIsBrainfuckModeActive() ? 6 : 5;
+  }
+  return kGuideCategories[cat].count;
+}
+
+static const GuideTopic * getGuideTopics(int cat) {
+  if (cat == 3) {
+    return BrainIsBrainfuckModeActive() ? kCodingTopicsSecret : kCodingTopicsNormal;
+  }
+  return kGuideCategories[cat].topics;
+}
 
 static bool sGuidePageDirty = false;
 static constexpr int kGuideTabY = kGuideDialogY + 44;
@@ -1728,8 +1807,8 @@ static void renderLLCubicGuideTocBase(HDC hdc) {
   drawBox(hdc, kGuideTocX - 2, kGuideTocY - 2, kGuideTocW + 18, kGuidePaneH + 4,
           RGB(246, 248, 252), RGB(246, 248, 252));
 
-  int topicCount = kGuideCategories[sGuideCategory].count;
-  const GuideTopic * topics = kGuideCategories[sGuideCategory].topics;
+  int topicCount = getGuideTopicCount(sGuideCategory);
+  const GuideTopic * topics = getGuideTopics(sGuideCategory);
 
   SelectObject(hdc, sUiFontBold);
   for (int r = 0; r < kVisibleGuideRows; r++) {
@@ -1793,8 +1872,8 @@ static void renderLLCubicGuideOverlay(HDC hdc) {
   // タブの現在選択状態
   renderLLCubicGuideTabs(hdc);
 
-  int topicCount = kGuideCategories[sGuideCategory].count;
-  const GuideTopic * topics = kGuideCategories[sGuideCategory].topics;
+  int topicCount = getGuideTopicCount(sGuideCategory);
+  const GuideTopic * topics = getGuideTopics(sGuideCategory);
 
   int visRow = sGuideSelectedIndex - sGuideScrollOffset;
   if (visRow >= 0 && visRow < kVisibleGuideRows && sGuideSelectedIndex < topicCount) {
@@ -2471,7 +2550,7 @@ static void openKeyConfigModal() {
 
 static void openLLCubicGuideModal() {
   sModalMode = ModalMode::LLCubicGuide;
-  if (sCodingEditorLang == 4) {
+  if (BrainIsBrainfuckModeActive()) {
     sGuideCategory = 3; // コード言語
     sGuideSelectedIndex = 4; // BrainF*ck
   } else if (sCodingEditorLang == 1) {
@@ -2673,7 +2752,7 @@ bool handleModalKey(WPARAM vkCode) {
           }
           return true;
         case VK_DOWN: {
-          int maxTopics = kGuideCategories[sGuideCategory].count;
+          int maxTopics = getGuideTopicCount(sGuideCategory);
           if (sGuideSelectedIndex < maxTopics - 1) {
             sGuideSelectedIndex++;
             if (sGuideSelectedIndex >= sGuideScrollOffset + kVisibleGuideRows) {
@@ -2699,7 +2778,7 @@ bool handleModalKey(WPARAM vkCode) {
           }
           return true;
         case VK_NEXT: {
-          int maxTopics = kGuideCategories[sGuideCategory].count;
+          int maxTopics = getGuideTopicCount(sGuideCategory);
           if (sGuideSelectedIndex < maxTopics - 1) {
             int oldOff = sGuideScrollOffset;
             sGuideSelectedIndex += kVisibleGuideRows;
@@ -3046,7 +3125,7 @@ bool handleModalClick(int x, int y) {
     }
 
     // 2. 目次項目クリック
-    int topicCount = kGuideCategories[sGuideCategory].count;
+    int topicCount = getGuideTopicCount(sGuideCategory);
     for (int r = 0; r < kVisibleGuideRows; r++) {
       int idx = sGuideScrollOffset + r;
       if (idx >= topicCount) break;
@@ -3814,6 +3893,16 @@ void clearCustomHelp() {
 
 }
 }
+}
+
+static bool sBrainfuckModeActive = false;
+
+extern "C" void BrainSetBrainfuckModeActive(bool active) {
+  sBrainfuckModeActive = active;
+}
+
+extern "C" bool BrainIsBrainfuckModeActive() {
+  return sBrainfuckModeActive || (sCodingEditorLang == 4);
 }
 
 extern "C" void BrainSetCodingEditorLang(int lang) {

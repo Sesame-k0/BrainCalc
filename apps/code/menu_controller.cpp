@@ -10,6 +10,7 @@
 #include <ion/unicode/utf8_decoder.h>
 
 extern "C" void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8);
+extern "C" void BrainSetBrainfuckModeActive(bool active);
 
 namespace Code {
 
@@ -150,12 +151,16 @@ void MenuController::viewWillAppear() {
   LanguageType lang = LanguageSelectController::currentLanguage();
   if (lang == LanguageType::Python) {
     m_consoleButton.setMessage(I18n::Message::ConsolePython);
+    BrainSetBrainfuckModeActive(false);
   } else if (lang == LanguageType::Basic) {
     m_consoleButton.setMessage(I18n::Message::ConsoleBasic);
+    BrainSetBrainfuckModeActive(false);
   } else if (lang == LanguageType::Logo) {
     m_consoleButton.setMessage(I18n::Message::ConsoleLogo);
+    BrainSetBrainfuckModeActive(false);
   } else if (lang == LanguageType::Brainfuck) {
     m_consoleButton.setMessage(I18n::Message::ConsoleBrainfuck);
+    BrainSetBrainfuckModeActive(true);
   }
   ScriptStore::loadScriptsFromDirectory();
   updateScriptMenuHelp();

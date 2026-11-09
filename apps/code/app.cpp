@@ -6,6 +6,7 @@
 #include <apps/apps_container.h>
 
 extern "C" void BrainClearCustomHelp();
+extern "C" void BrainSetBrainfuckModeActive(bool active);
 
 namespace Code {
 
@@ -100,6 +101,10 @@ App::App(Snapshot * snapshot) :
 
 App::~App() {
   BrainClearCustomHelp();
+  BrainSetBrainfuckModeActive(false);
+  if (LanguageSelectController::currentLanguage() == LanguageType::Brainfuck) {
+    LanguageSelectController::setCurrentLanguage(LanguageType::Python);
+  }
   assert(!m_consoleController.inputRunLoopActive());
   Clipboard::sharedClipboard()->exitPython();
 }

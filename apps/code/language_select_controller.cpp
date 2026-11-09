@@ -7,6 +7,7 @@
 #include <string.h>
 
 extern "C" void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8);
+extern "C" void BrainSetBrainfuckModeActive(bool active);
 
 namespace Code {
 
@@ -21,7 +22,6 @@ static void updateLanguageHelp(int langIndex) {
       "・行頭インデントはスペース2個または4個\n"
       "・[Enter]: コード編集\n"
       "・[→]: ファイル設定・実行\n"
-      "・[PgDn]: 秘密の言語出現\n"
       "・[F12]: マニュアル表示"
     );
   } else if (langIndex == 1) {
@@ -177,10 +177,12 @@ void LanguageSelectController::viewWillAppear() {
     m_contentView.setSecretMode(true);
     m_contentView.setSelectedIndex(3);
     updateLanguageHelp(3);
+    BrainSetBrainfuckModeActive(true);
   } else {
     m_contentView.setSecretMode(false);
     m_contentView.setSelectedIndex((int)s_currentLanguage);
     updateLanguageHelp((int)s_currentLanguage);
+    BrainSetBrainfuckModeActive(false);
   }
 }
 
@@ -194,10 +196,12 @@ bool LanguageSelectController::handleEvent(Ion::Events::Event event) {
       m_contentView.setSelectedIndex(0);
       s_currentLanguage = LanguageType::Python;
       updateLanguageHelp(0);
+      BrainSetBrainfuckModeActive(false);
       return true;
     }
     if (event == Ion::Events::OK || event == Ion::Events::EXE || event == Ion::Events::Four) {
       s_currentLanguage = LanguageType::Brainfuck;
+      BrainSetBrainfuckModeActive(true);
       ScriptStore store;
       store.initDefaultSamples();
       if (m_nextController) stackViewController()->push(m_nextController);
@@ -211,6 +215,7 @@ bool LanguageSelectController::handleEvent(Ion::Events::Event event) {
     m_contentView.setSelectedIndex(3);
     s_currentLanguage = LanguageType::Brainfuck;
     updateLanguageHelp(3);
+    BrainSetBrainfuckModeActive(true);
     return true;
   }
 
@@ -232,6 +237,7 @@ bool LanguageSelectController::handleEvent(Ion::Events::Event event) {
   }
   if (event == Ion::Events::OK || event == Ion::Events::EXE) {
     s_currentLanguage = (LanguageType)m_contentView.selectedIndex();
+    BrainSetBrainfuckModeActive(false);
     ScriptStore store;
     store.initDefaultSamples();
     if (m_nextController) {
@@ -242,6 +248,7 @@ bool LanguageSelectController::handleEvent(Ion::Events::Event event) {
   if (event == Ion::Events::One) {
     m_contentView.setSelectedIndex(0);
     s_currentLanguage = LanguageType::Python;
+    BrainSetBrainfuckModeActive(false);
     ScriptStore store;
     store.initDefaultSamples();
     if (m_nextController) stackViewController()->push(m_nextController);
@@ -250,6 +257,7 @@ bool LanguageSelectController::handleEvent(Ion::Events::Event event) {
   if (event == Ion::Events::Two) {
     m_contentView.setSelectedIndex(1);
     s_currentLanguage = LanguageType::Basic;
+    BrainSetBrainfuckModeActive(false);
     ScriptStore store;
     store.initDefaultSamples();
     if (m_nextController) stackViewController()->push(m_nextController);
@@ -258,16 +266,10 @@ bool LanguageSelectController::handleEvent(Ion::Events::Event event) {
   if (event == Ion::Events::Three) {
     m_contentView.setSelectedIndex(2);
     s_currentLanguage = LanguageType::Logo;
+    BrainSetBrainfuckModeActive(false);
     ScriptStore store;
     store.initDefaultSamples();
     if (m_nextController) stackViewController()->push(m_nextController);
-    return true;
-  }
-  if (event == Ion::Events::Four) {
-    m_contentView.setSecretMode(true);
-    m_contentView.setSelectedIndex(3);
-    s_currentLanguage = LanguageType::Brainfuck;
-    updateLanguageHelp(3);
     return true;
   }
   return false;
