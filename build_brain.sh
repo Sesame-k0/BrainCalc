@@ -114,6 +114,9 @@ else
   echo "[WARN] bundled font source not found; skipping font bundle copy."
 fi
 
+# Ensure scripts directory exists in bundle
+mkdir -p "${DIST_DIR}/scripts"
+
 echo "=============================================================================="
 echo "[SUCCESS] Build completed!"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then

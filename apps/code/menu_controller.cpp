@@ -157,6 +157,7 @@ void MenuController::viewWillAppear() {
   } else if (lang == LanguageType::Brainfuck) {
     m_consoleButton.setMessage(I18n::Message::ConsoleBrainfuck);
   }
+  ScriptStore::loadScriptsFromDirectory();
   updateScriptMenuHelp();
   updateAddScriptRowDisplay();
   m_selectableTableView.reloadData();

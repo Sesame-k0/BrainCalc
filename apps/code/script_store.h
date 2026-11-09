@@ -28,6 +28,7 @@ public:
 
   Ion::Storage::Record::ErrorStatus addScriptFromTemplate(const ScriptTemplate * scriptTemplate);
   void initDefaultSamples();
+  static void loadScriptsFromDirectory();
 
 private:
   static constexpr int k_fullFreeSpaceSizeLimit = sizeof(Ion::Storage::record_size_t) + Script::k_defaultScriptNameMaxSize + 4 + 1 + 20 + 10;

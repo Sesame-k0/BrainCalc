@@ -56,7 +56,7 @@ $hWnd = [Win32HelperHome]::FindLiliumHwnd($proc.Id)
 Write-Host "Found Lilium HWND: $hWnd"
 Start-Sleep -Milliseconds 500
 
-$artifactDir = "C:\Users\takan\.gemini\antigravity\brain\13890e2a-562c-4ed0-b208-da5a26778346"
+$artifactDir = "C:\Users\takan\.gemini\antigravity\brain\90946f9e-7a76-4960-9378-6ce82d13b1b0"
 
 function Capture-Screen($name) {
     try {
