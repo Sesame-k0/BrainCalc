@@ -20,7 +20,8 @@ struct Plot3DConfigRecord {
   uint8_t selectedTab;
   uint8_t objectCount;
   uint8_t showOriginAxes;
-  uint8_t reserved[3];
+  uint8_t overflowMode;
+  uint8_t reserved[2];
   int32_t scale;
   float xMin, xMax;
   float yMin, yMax;
@@ -53,6 +54,7 @@ Snapshot::Snapshot() :
   m_azimuth(25),              // ~35° (対角重なりを防ぐ立体的な俯瞰角)
   m_elevation(21),            // 30°
   m_showOriginAxes(true),     // 中央 X,Y,Z 原点軸を既定で ON
+  m_overflowMode(0),          // はみ出し許容: 初期値は 0% (厳密クリッピング)
   m_scale(fix_from_int(55)),  // 55px スケール
   m_xMin(-2.0f), m_xMax(2.0f),
   m_yMin(-2.0f), m_yMax(2.0f),
@@ -138,6 +140,7 @@ void Snapshot::saveToStorage() {
   record.selectedTab = static_cast<uint8_t>(selectedTab());
   record.objectCount = static_cast<uint8_t>(s_objectCount);
   record.showOriginAxes = m_showOriginAxes ? 1 : 0;
+  record.overflowMode = m_overflowMode;
   record.scale = m_scale;
   record.xMin = m_xMin;
   record.xMax = m_xMax;
@@ -174,6 +177,7 @@ void Snapshot::loadFromStorage() {
   m_azimuth = record->azimuth;
   m_elevation = record->elevation;
   m_showOriginAxes = (record->showOriginAxes != 0);
+  m_overflowMode = (record->overflowMode <= 3) ? record->overflowMode : 0;
   if (record->scale > fix_from_int(10) && record->scale < fix_from_int(500)) {
     m_scale = record->scale;
   }

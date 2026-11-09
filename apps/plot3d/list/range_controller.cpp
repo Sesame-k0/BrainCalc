@@ -43,7 +43,9 @@ void RangeController::notifyHelpForRow(int row) {
     BrainNotifyHelpText("Plot3D_Range_Preset", nullptr);
   } else if (row == 1) {
     BrainNotifyHelpText("Plot3D_OriginAxes", nullptr);
-  } else if (row == 8) {
+  } else if (row == 2) {
+    BrainNotifyHelpText("Plot3D_Range_Overflow", nullptr);
+  } else if (row == 9) {
     BrainNotifyHelpText("Plot3D_Range_Reset", nullptr);
   } else {
     BrainNotifyHelpText("Plot3D_Range", nullptr);
@@ -103,31 +105,42 @@ void RangeController::willDisplayCellForIndex(HighlightCell * cell, int index) {
       snprintf(buf, sizeof(buf), "Origin XYZ Axes:  %s  (< >)", m_snapshot->showOriginAxes() ? "ON" : "OFF");
       myCell->setTextColor(m_snapshot->showOriginAxes() ? KDColor::RGB24(0x059669) : KDColor::RGB24(0x64748B));
       break;
-    case 2:
+    case 2: {
+      static const char * const k_overflowModes[4] = {
+        "0%", "20%", "50%", "No Limit (Unsafe)"
+      };
+      snprintf(buf, sizeof(buf), "Overflow:  %s  (< >)", k_overflowModes[m_snapshot->overflowMode() % 4]);
+      if (m_snapshot->overflowMode() == 0) myCell->setTextColor(KDColorBlack);
+      else if (m_snapshot->overflowMode() == 1) myCell->setTextColor(KDColor::RGB24(0x0284C7));
+      else if (m_snapshot->overflowMode() == 2) myCell->setTextColor(KDColor::RGB24(0xD97706));
+      else myCell->setTextColor(KDColorRed);
+      break;
+    }
+    case 3:
       snprintf(buf, sizeof(buf), "  X min:   %+.1f", m_snapshot->xMin());
       myCell->setTextColor(KDColorBlack);
       break;
-    case 3:
+    case 4:
       snprintf(buf, sizeof(buf), "  X max:   %+.1f", m_snapshot->xMax());
       myCell->setTextColor(KDColorBlack);
       break;
-    case 4:
+    case 5:
       snprintf(buf, sizeof(buf), "  Y min:   %+.1f", m_snapshot->yMin());
       myCell->setTextColor(KDColorBlack);
       break;
-    case 5:
+    case 6:
       snprintf(buf, sizeof(buf), "  Y max:   %+.1f", m_snapshot->yMax());
       myCell->setTextColor(KDColorBlack);
       break;
-    case 6:
+    case 7:
       snprintf(buf, sizeof(buf), "  Z min:   %+.1f", m_snapshot->zMin());
       myCell->setTextColor(KDColorBlack);
       break;
-    case 7:
+    case 8:
       snprintf(buf, sizeof(buf), "  Z max:   %+.1f", m_snapshot->zMax());
       myCell->setTextColor(KDColorBlack);
       break;
-    case 8:
+    case 9:
       snprintf(buf, sizeof(buf), "[ Reset Range to Default ]");
       myCell->setTextColor(KDColor::RGB24(0x475569));
       break;
@@ -162,40 +175,44 @@ bool RangeController::handleEvent(Ion::Events::Event event) {
       case 1: // Origin XYZ Axes
         m_snapshot->toggleOriginAxes();
         break;
-      case 2: // X min
+      case 2: // Overflow Mode (0%, 20%, 50%, 制限なし)
+        m_snapshot->cycleOverflowMode(event != Ion::Events::Left);
+        break;
+      case 3: // X min
         if (m_snapshot->xMin() + delta < m_snapshot->xMax() - 0.4f) {
           m_snapshot->setXRange(m_snapshot->xMin() + delta, m_snapshot->xMax());
         }
         break;
-      case 3: // X max
+      case 4: // X max
         if (m_snapshot->xMax() + delta > m_snapshot->xMin() + 0.4f) {
           m_snapshot->setXRange(m_snapshot->xMin(), m_snapshot->xMax() + delta);
         }
         break;
-      case 4: // Y min
+      case 5: // Y min
         if (m_snapshot->yMin() + delta < m_snapshot->yMax() - 0.4f) {
           m_snapshot->setYRange(m_snapshot->yMin() + delta, m_snapshot->yMax());
         }
         break;
-      case 5: // Y max
+      case 6: // Y max
         if (m_snapshot->yMax() + delta > m_snapshot->yMin() + 0.4f) {
           m_snapshot->setYRange(m_snapshot->yMin(), m_snapshot->yMax() + delta);
         }
         break;
-      case 6: // Z min
+      case 7: // Z min
         if (m_snapshot->zMin() + delta < m_snapshot->zMax() - 0.4f) {
           m_snapshot->setZRange(m_snapshot->zMin() + delta, m_snapshot->zMax());
         }
         break;
-      case 7: // Z max
+      case 8: // Z max
         if (m_snapshot->zMax() + delta > m_snapshot->zMin() + 0.4f) {
           m_snapshot->setZRange(m_snapshot->zMin(), m_snapshot->zMax() + delta);
         }
         break;
-      case 8: // Reset
+      case 9: // Reset
         if (event == Ion::Events::OK || event == Ion::Events::EXE) {
           applyPreset(0);
           m_snapshot->setShowOriginAxes(true);
+          m_snapshot->setOverflowMode(0);
         }
         break;
       default:

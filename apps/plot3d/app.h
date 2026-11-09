@@ -39,6 +39,29 @@ public:
   void setShowOriginAxes(bool show) { m_showOriginAxes = show; }
   void toggleOriginAxes() { m_showOriginAxes = !m_showOriginAxes; }
 
+  // 描画枠はみ出し許容設定 (0: 0% / 1: 20% / 2: 50% / 3: 制限なし(非推奨))
+  uint8_t overflowMode() const { return m_overflowMode; }
+  void setOverflowMode(uint8_t mode) { m_overflowMode = mode % 4; }
+  void cycleOverflowMode(bool forward) {
+    m_overflowMode = forward ? ((m_overflowMode + 1) % 4) : ((m_overflowMode + 3) % 4);
+  }
+  float overflowRatio() const {
+    switch (m_overflowMode) {
+      case 0: return 0.0f;   // 0% (枠線で厳密クリップ)
+      case 1: return 0.20f;  // 20% (標準)
+      case 2: return 0.50f;  // 50% (広域)
+      default: return 0.50f; // 制限なし(非推奨: サンプリングは50%でクリップ完全開放)
+    }
+  }
+  fixed_t boxClipLimit() const {
+    switch (m_overflowMode) {
+      case 0: return 65664;                   // 1.00195 (0% 厳密)
+      case 1: return 78643;                   // 1.20 (20% 拡張)
+      case 2: return 98304;                   // 1.50 (50% 拡張)
+      default: return fix_from_float(15.0f);  // 制限なし (非推奨: クリップ完全無効化)
+    }
+  }
+
   // 表示範囲
   float xMin() const { return m_xMin; }
   float xMax() const { return m_xMax; }
@@ -71,6 +94,7 @@ private:
   uint8_t m_azimuth;
   uint8_t m_elevation;
   bool m_showOriginAxes;
+  uint8_t m_overflowMode; // 0: 0%, 1: 20%, 2: 50%, 3: 制限なし(非推奨)
   fixed_t m_scale;
 
   float m_xMin, m_xMax;

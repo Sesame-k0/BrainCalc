@@ -39,7 +39,7 @@ public:
   void willDisplayCellForIndex(HighlightCell * cell, int index) override;
 
 private:
-  static constexpr int k_rowCount = 9;
+  static constexpr int k_rowCount = 10;
   Snapshot * m_snapshot;
   CleanSelectableTableView m_selectableTableView;
   EvenOddBufferTextCell m_cells[k_rowCount];

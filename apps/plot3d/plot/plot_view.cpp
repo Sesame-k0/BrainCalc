@@ -19,13 +19,14 @@ static Vec3Fix s_worldVerts[(32 + 1) * (32 + 1)];
 static float s_distField[(32 + 1) * (32 + 1)];
 
 // オブジェクト毎の世界座標メッシュ＆正規化ボックス座標キャッシュ（回転・ズーム時の数式再評価をゼロ化）
-static constexpr fixed_t k_boxClipLimit = 78643; // 1.20 in 16.16 fixed-point (20%拡張 / エリア辺の長さの1/5はみ出し許容)
+static fixed_t s_activeClipLimit = 65664; // 動的クリップ限界 (0%: 65664, 20%: 78643, 50%: 98304, 制限なし: 広域)
 
 struct CachedObjectMesh {
   bool valid;
   Object3D objCopy;
   int nu;
   int nv;
+  uint8_t overflowMode;
   float xMin, xMax;
   float yMin, yMax;
   float zMin, zMax;
@@ -40,23 +41,23 @@ static CachedObjectMesh s_meshCache[k_maxObjects];
 
 static inline uint8_t computeBoxOutcode(const Vec3Fix & p) {
   uint8_t code = 0;
-  if (p.x < -k_boxClipLimit) code |= 1;
-  else if (p.x > k_boxClipLimit) code |= 2;
-  if (p.y < -k_boxClipLimit) code |= 4;
-  else if (p.y > k_boxClipLimit) code |= 8;
-  if (p.z < -k_boxClipLimit) code |= 16;
-  else if (p.z > k_boxClipLimit) code |= 32;
+  if (p.x < -s_activeClipLimit) code |= 1;
+  else if (p.x > s_activeClipLimit) code |= 2;
+  if (p.y < -s_activeClipLimit) code |= 4;
+  else if (p.y > s_activeClipLimit) code |= 8;
+  if (p.z < -s_activeClipLimit) code |= 16;
+  else if (p.z > s_activeClipLimit) code |= 32;
   return code;
 }
 
 static inline fixed_t planeInsideDist(const Vec3Fix & p, int plane) {
   switch (plane) {
-    case 0: return p.x + k_boxClipLimit;
-    case 1: return k_boxClipLimit - p.x;
-    case 2: return p.y + k_boxClipLimit;
-    case 3: return k_boxClipLimit - p.y;
-    case 4: return p.z + k_boxClipLimit;
-    default: return k_boxClipLimit - p.z;
+    case 0: return p.x + s_activeClipLimit;
+    case 1: return s_activeClipLimit - p.x;
+    case 2: return p.y + s_activeClipLimit;
+    case 3: return s_activeClipLimit - p.y;
+    case 4: return p.z + s_activeClipLimit;
+    default: return s_activeClipLimit - p.z;
   }
 }
 
@@ -127,12 +128,12 @@ static bool clipSegmentToBox(Vec3Fix & p0, Vec3Fix & p1) {
     fixed_t d0 = planeInsideDist(p0, plane);
     fixed_t d1 = planeInsideDist(p1, plane);
     Vec3Fix pt = intersectPlaneEdge(p0, d0, p1, d1);
-    if (plane == 0) pt.x = -k_boxClipLimit;
-    else if (plane == 1) pt.x = k_boxClipLimit;
-    else if (plane == 2) pt.y = -k_boxClipLimit;
-    else if (plane == 3) pt.y = k_boxClipLimit;
-    else if (plane == 4) pt.z = -k_boxClipLimit;
-    else pt.z = k_boxClipLimit;
+    if (plane == 0) pt.x = -s_activeClipLimit;
+    else if (plane == 1) pt.x = s_activeClipLimit;
+    else if (plane == 2) pt.y = -s_activeClipLimit;
+    else if (plane == 3) pt.y = s_activeClipLimit;
+    else if (plane == 4) pt.z = -s_activeClipLimit;
+    else pt.z = s_activeClipLimit;
     if (cOut == c0) {
       p0 = pt;
       c0 = computeBoxOutcode(p0);
@@ -235,8 +236,11 @@ static const CachedObjectMesh & ensureObjectMeshCached(int oIdx, const Object3D 
   float yMin = snapshot->yMin(), yMax = snapshot->yMax();
   float zMin = snapshot->zMin(), zMax = snapshot->zMax();
 
+  s_activeClipLimit = snapshot->boxClipLimit();
+
   if (slot.valid &&
       slot.nu == Nu && slot.nv == Nv &&
+      slot.overflowMode == snapshot->overflowMode() &&
       slot.xMin == xMin && slot.xMax == xMax &&
       slot.yMin == yMin && slot.yMax == yMax &&
       slot.zMin == zMin && slot.zMax == zMax &&
@@ -248,14 +252,16 @@ static const CachedObjectMesh & ensureObjectMeshCached(int oIdx, const Object3D 
   slot.objCopy = obj;
   slot.nu = Nu;
   slot.nv = Nv;
+  slot.overflowMode = snapshot->overflowMode();
   slot.xMin = xMin; slot.xMax = xMax;
   slot.yMin = yMin; slot.yMax = yMax;
   slot.zMin = zMin; slot.zMax = zMax;
 
-  // 描画範囲のはみ出し許容 (エリアの辺の長さ×1/5 = 20% ずつ拡張してサンプリング)
-  float xPad = (xMax - xMin) * 0.20f;
-  float yPad = (yMax - yMin) * 0.20f;
-  float zPad = (zMax - zMin) * 0.20f;
+  // 描画範囲のはみ出し許容 (0%, 20%, 50%, 制限なし に連動)
+  float ratio = snapshot->overflowRatio();
+  float xPad = (xMax - xMin) * ratio;
+  float yPad = (yMax - yMin) * ratio;
+  float zPad = (zMax - zMin) * ratio;
   Shapes::evaluateObjectGrid(obj, Nu, Nv,
                              xMin - xPad, xMax + xPad,
                              yMin - yPad, yMax + yPad,
@@ -430,6 +436,7 @@ void PlotView::drawOriginAxesOverlay(KDContext * ctx, const Mat3Fix & rot, fixed
 }
 
 void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
+  s_activeClipLimit = m_snapshot->boxClipLimit();
   if (m_section2DMode && m_sliceAxis != SliceAxis::None) {
     drawSection2DView(ctx);
     return;
@@ -559,12 +566,12 @@ void PlotView::drawRect(KDContext * ctx, KDRect rect) const {
           for (int k = 0; k < pCount; ++k) {
             int kn = (k + 1) % pCount;
             bool onCutFace =
-              (fix_abs(poly[k].z + k_boxClipLimit) <= 32 && fix_abs(poly[kn].z + k_boxClipLimit) <= 32) ||
-              (fix_abs(poly[k].z - k_boxClipLimit) <= 32 && fix_abs(poly[kn].z - k_boxClipLimit) <= 32) ||
-              (fix_abs(poly[k].x + k_boxClipLimit) <= 32 && fix_abs(poly[kn].x + k_boxClipLimit) <= 32) ||
-              (fix_abs(poly[k].x - k_boxClipLimit) <= 32 && fix_abs(poly[kn].x - k_boxClipLimit) <= 32) ||
-              (fix_abs(poly[k].y + k_boxClipLimit) <= 32 && fix_abs(poly[kn].y + k_boxClipLimit) <= 32) ||
-              (fix_abs(poly[k].y - k_boxClipLimit) <= 32 && fix_abs(poly[kn].y - k_boxClipLimit) <= 32);
+              (fix_abs(poly[k].z + s_activeClipLimit) <= 32 && fix_abs(poly[kn].z + s_activeClipLimit) <= 32) ||
+              (fix_abs(poly[k].z - s_activeClipLimit) <= 32 && fix_abs(poly[kn].z - s_activeClipLimit) <= 32) ||
+              (fix_abs(poly[k].x + s_activeClipLimit) <= 32 && fix_abs(poly[kn].x + s_activeClipLimit) <= 32) ||
+              (fix_abs(poly[k].x - s_activeClipLimit) <= 32 && fix_abs(poly[kn].x - s_activeClipLimit) <= 32) ||
+              (fix_abs(poly[k].y + s_activeClipLimit) <= 32 && fix_abs(poly[kn].y + s_activeClipLimit) <= 32) ||
+              (fix_abs(poly[k].y - s_activeClipLimit) <= 32 && fix_abs(poly[kn].y - s_activeClipLimit) <= 32);
             if (onCutFace) {
               uint16_t z0 = (sv[k].z > 16) ? (sv[k].z - 16) : 0;
               uint16_t z1 = (sv[kn].z > 16) ? (sv[kn].z - 16) : 0;
