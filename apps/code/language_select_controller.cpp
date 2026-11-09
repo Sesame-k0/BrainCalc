@@ -86,7 +86,7 @@ void LanguageSelectController::ContentView::drawRect(KDContext * ctx, KDRect rec
     ctx->drawString(title, KDPoint(16, 8), KDFont::LargeFont, KDColor::RGB24(0xC43B3B), KDColorWhite);
 
     // Single card in center
-    KDRect cardRect(12, 82, 296, 52);
+    KDRect cardRect(12, 48, 296, 44);
     ctx->fillRect(cardRect, cardSelectedBg);
 
     // 2px green border
@@ -96,11 +96,11 @@ void LanguageSelectController::ContentView::drawRect(KDContext * ctx, KDRect rec
     ctx->fillRect(KDRect(cardRect.right() - 2, cardRect.y(), 2, cardRect.height()), liliumGreen);
 
     ctx->drawString("4. BrainF*ck", KDPoint(cardRect.x() + 10, cardRect.y() + 6), KDFont::LargeFont, liliumGreen, cardSelectedBg);
-    ctx->drawString("[.bf]", KDPoint(cardRect.right() - 52, cardRect.y() + 7), KDFont::SmallFont, liliumGreen, cardSelectedBg);
-    ctx->drawString("Minimal Turing-Complete 8-Op Language", KDPoint(cardRect.x() + 12, cardRect.y() + 29), KDFont::SmallFont, KDColor::RGB24(0x2B4F4A), cardSelectedBg);
+    ctx->drawString("[.bf]", KDPoint(cardRect.right() - 48, cardRect.y() + 7), KDFont::SmallFont, liliumGreen, cardSelectedBg);
+    ctx->drawString("Minimal Turing-Complete 8-Op Language", KDPoint(cardRect.x() + 12, cardRect.y() + 24), KDFont::SmallFont, KDColor::RGB24(0x2B4F4A), cardSelectedBg);
 
-    const char * footer = "[OK/EXE]:Confirm  [Up/PgUp]:Normal  [F12]:Manual";
-    ctx->drawString(footer, KDPoint(16, 194), KDFont::SmallFont, KDColor::RGB24(0x777777), KDColorWhite);
+    const char * footer = "[Enter] OK  [Up/PgUp] Normal  [F12] Help";
+    ctx->drawString(footer, KDPoint(16, 146), KDFont::SmallFont, KDColor::RGB24(0x70777F), KDColorWhite);
     return;
   }
 
@@ -121,8 +121,8 @@ void LanguageSelectController::ContentView::drawRect(KDContext * ctx, KDRect rec
   };
 
   for (int i = 0; i < 3; i++) {
-    int y = 30 + i * 52;
-    KDRect cardRect(12, y, 296, 48);
+    int y = 26 + i * 39;
+    KDRect cardRect(12, y, 296, 33);
     bool isSel = (i == m_selectedIndex);
 
     KDColor bg = isSel ? cardSelectedBg : cardBg;
@@ -146,17 +146,17 @@ void LanguageSelectController::ContentView::drawRect(KDContext * ctx, KDRect rec
     // Name & Tag
     KDColor nameColor = isSel ? liliumGreen : KDColor::RGB24(0x242A30);
     KDColor tagColor = isSel ? liliumGreen : KDColor::RGB24(0x888888);
-    ctx->drawString(items[i].name, KDPoint(cardRect.x() + 10, cardRect.y() + 6), KDFont::LargeFont, nameColor, bg);
-    ctx->drawString(items[i].tag, KDPoint(cardRect.right() - 52, cardRect.y() + 7), KDFont::SmallFont, tagColor, bg);
+    ctx->drawString(items[i].name, KDPoint(cardRect.x() + 10, cardRect.y() + 4), KDFont::LargeFont, nameColor, bg);
+    ctx->drawString(items[i].tag, KDPoint(cardRect.right() - 48, cardRect.y() + 5), KDFont::SmallFont, tagColor, bg);
 
     // Description
     KDColor descColor = isSel ? KDColor::RGB24(0x2B4F4A) : KDColor::RGB24(0x666666);
-    ctx->drawString(items[i].desc, KDPoint(cardRect.x() + 12, cardRect.y() + 27), KDFont::SmallFont, descColor, bg);
+    ctx->drawString(items[i].desc, KDPoint(cardRect.x() + 12, cardRect.y() + 18), KDFont::SmallFont, descColor, bg);
   }
 
-  // Footer instructions
-  const char * footer = "[Up/Down]:Select  [OK]:Confirm  [F12]:Manual";
-  ctx->drawString(footer, KDPoint(16, 194), KDFont::SmallFont, KDColor::RGB24(0x777777), KDColorWhite);
+  // Footer instructions (comfortably placed at y=198 with 24px bottom clearance)
+  const char * footer = "[Up/Dn] Select  [Enter] OK  [F12] Help";
+  ctx->drawString(footer, KDPoint(16, 148), KDFont::SmallFont, KDColor::RGB24(0x70777F), KDColorWhite);
 }
 
 LanguageSelectController::LanguageSelectController(Responder * parentResponder, ViewController * nextController) :
@@ -172,6 +172,7 @@ StackViewController * LanguageSelectController::stackViewController() {
 
 void LanguageSelectController::viewWillAppear() {
   ViewController::viewWillAppear();
+  AppsContainer::sharedAppsContainer()->reloadTitleBarView();
   AppsContainer::sharedAppsContainer()->redrawWindow(true);
   if (s_currentLanguage == LanguageType::Brainfuck) {
     m_contentView.setSecretMode(true);

@@ -59,7 +59,7 @@ void PythonTextArea::ContentView::drawLine(KDContext * ctx, int line, const char
   drawStringAt(
       ctx,
       line,
-      fromColumn,
+      0,
       text,
       byteLength,
       Palette::CodeText,

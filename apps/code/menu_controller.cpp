@@ -147,6 +147,7 @@ void MenuController::didBecomeFirstResponder() {
 
 void MenuController::viewWillAppear() {
   ViewController::viewWillAppear();
+  AppsContainer::sharedAppsContainer()->reloadTitleBarView();
   AppsContainer::sharedAppsContainer()->redrawWindow(true);
   LanguageType lang = LanguageSelectController::currentLanguage();
   if (lang == LanguageType::Python) {
@@ -222,23 +223,33 @@ bool MenuController::handleEvent(Ion::Events::Event event) {
 }
 
 void MenuController::renameSelectedScript() {
-  assert(m_selectableTableView.selectedRow() >= 0);
-  assert(m_selectableTableView.selectedRow() < m_scriptStore->numberOfScripts());
-  AppsContainer::sharedAppsContainer()->setShiftAlphaStatus(Ion::Events::ShiftAlphaStatus::AlphaLock);
-  m_selectableTableView.selectCellAtLocation(0, (m_selectableTableView.selectedRow()));
+  int row = m_selectableTableView.selectedRow();
+  assert(row >= 0 && row < m_scriptStore->numberOfScripts());
+  AppsContainer::sharedAppsContainer()->setShiftAlphaStatus(Ion::Events::ShiftAlphaStatus::Default);
+  m_selectableTableView.selectCellAtLocation(0, row);
   ScriptNameCell * myCell = static_cast<ScriptNameCell *>(m_selectableTableView.selectedCell());
   Container::activeApp()->setFirstResponder(myCell);
   myCell->setHighlighted(false);
   TextField * tf = myCell->textField();
-  const char * previousText = tf->text();
+  Script s = m_scriptStore->scriptAtIndex(row);
+  const char * fullName = s.fullName();
   tf->setEditing(true);
-  tf->setText(previousText);
-  const char * dot = strrchr(previousText, '.');
+  tf->setText(fullName);
+  const char * edited = tf->text();
+  const char * dot = strrchr(edited, '.');
   if (dot) {
     tf->setCursorLocation(dot);
   } else {
-    tf->setCursorLocation(tf->text() + strlen(previousText));
+    tf->setCursorLocation(edited + strlen(edited));
   }
+  BrainNotifyCustomHelp(
+    "ファイル名変更",
+    "スクリプトの名前を変更します。\n\n"
+    "・アルファベットと数字で入力\n"
+    "・拡張子は自動で維持されます\n"
+    "・[Enter]: 確定\n"
+    "・[Esc/Back]: キャンセル"
+  );
 }
 
 void MenuController::renameScript(Script script) {
@@ -254,6 +265,10 @@ void MenuController::renameScript(Script script) {
   }
   if (index >= 0 && index < m_scriptStore->numberOfScripts()) {
     m_selectableTableView.selectCellAtLocation(0, index);
+    ScriptNameCell * cell = static_cast<ScriptNameCell *>(m_selectableTableView.selectedCell());
+    if (cell) {
+      cell->textField()->setText(script.fullName());
+    }
     renameSelectedScript();
   }
 }
@@ -466,6 +481,7 @@ bool MenuController::textFieldDidFinishEditing(TextField * textField, const char
     reloadConsole();
     Container::activeApp()->setFirstResponder(&m_selectableTableView);
     AppsContainer::sharedAppsContainer()->setShiftAlphaStatus(Ion::Events::ShiftAlphaStatus::Default);
+    updateScriptMenuHelp();
     return true;
   } else if (error == Script::ErrorStatus::NameTaken) {
     Container::activeApp()->displayWarning(I18n::Message::NameTaken);
@@ -479,9 +495,10 @@ bool MenuController::textFieldDidFinishEditing(TextField * textField, const char
 }
 
 bool MenuController::textFieldDidHandleEvent(TextField * textField, bool returnValue, bool textSizeDidChange) {
-  int scriptExtensionLength = 1 + strlen(ScriptStore::currentScriptExtension());
   if (textField->isEditing()) {
-    const char * maxPointerLocation = textField->text() + textField->draftTextLength() - scriptExtensionLength;
+    const char * current = textField->text();
+    const char * dot = strrchr(current, '.');
+    const char * maxPointerLocation = dot ? dot : (current + textField->draftTextLength());
     if (textField->cursorLocation() > maxPointerLocation) {
       textField->setCursorLocation(maxPointerLocation);
     }
@@ -554,6 +571,7 @@ bool MenuController::privateTextFieldDidAbortEditing(TextField * textField, bool
     Container::activeApp()->setFirstResponder(&m_selectableTableView);
   }
   AppsContainer::sharedAppsContainer()->setShiftAlphaStatus(Ion::Events::ShiftAlphaStatus::Default);
+  updateScriptMenuHelp();
   return true;
 }
 

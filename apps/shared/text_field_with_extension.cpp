@@ -3,9 +3,12 @@
 namespace Shared {
 
 void TextFieldWithExtension::willSetCursorLocation(const char * * location) {
-  size_t textLength = strlen(text());
-  assert(textLength >= m_extensionLength);
-  const char * maxLocation = m_contentView.editedText() + (textLength - m_extensionLength);
+  const char * current = text();
+  const char * dot = strrchr(current, '.');
+  const char * maxLocation = dot ? dot : (m_contentView.editedText() + strlen(current));
+  if (*location < m_contentView.editedText()) {
+    *location = m_contentView.editedText();
+  }
   if (*location > maxLocation) {
     *location = maxLocation;
   }
@@ -22,10 +25,12 @@ void TextFieldWithExtension::removeWholeText() {
 
 bool TextFieldWithExtension::removeTextBeforeExtension(bool whole) {
   assert(isEditing());
-  const char * extension = m_contentView.editedText() + (strlen(text()) - m_extensionLength);
-  assert(extension >= m_contentView.editedText() && extension < m_contentView.editedText() + (ContentView::k_maxBufferSize - m_extensionLength));
+  const char * current = text();
+  const char * dot = strrchr(current, '.');
+  const char * extension = dot ? dot : (m_contentView.editedText() + strlen(current));
+  assert(extension >= m_contentView.editedText() && extension < m_contentView.editedText() + ContentView::k_maxBufferSize);
   char * destination = const_cast<char *>(whole ? m_contentView.editedText() : cursorLocation());
-  if (destination == extension) {
+  if (destination >= extension) {
     return false;
   }
   assert(destination >= m_contentView.editedText());

@@ -76,8 +76,9 @@ mkdir -p "$DIST_DIR"
 
 # アプリ本体 (epsilon.exe) を DIST_DIR/AppMain_.exe として出力 (SHARP Brain PW-SB4 必須仕様)
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
-  # PCホスト検証用 (--host) の場合は AppMain.exe として出力
-  cp -f "${OUT_DIR}/epsilon.exe" "${DIST_DIR}/AppMain.exe"
+  # PCホスト検証用 (--host) の場合は AppMain.exe および Lilium.exe として出力
+  cp -f "${OUT_DIR}/epsilon.exe" "${DIST_DIR}/AppMain.exe" 2>/dev/null || true
+  cp -f "${OUT_DIR}/epsilon.exe" "${DIST_DIR}/Lilium.exe" 2>/dev/null || true
 else
   # Brain実機向けの場合は AppMain_.exe として出力
   cp -f "${OUT_DIR}/epsilon.exe" "${DIST_DIR}/AppMain_.exe"

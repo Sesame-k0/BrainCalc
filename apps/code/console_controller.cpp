@@ -91,6 +91,8 @@ void ConsoleController::runAndPrintForCommand(const char * command) {
 
   flushOutputAccumulationBufferToStore();
   m_consoleStore.deleteLastLineIfEmpty();
+  AppsContainer::sharedAppsContainer()->reloadTitleBarView();
+  AppsContainer::sharedAppsContainer()->redrawWindow(true);
 }
 
 void ConsoleController::terminateInputLoop() {
@@ -215,6 +217,7 @@ bool ConsoleController::isInterrupted() const {
 
 void ConsoleController::viewWillAppear() {
   ViewController::viewWillAppear();
+  AppsContainer::sharedAppsContainer()->reloadTitleBarView();
   AppsContainer::sharedAppsContainer()->redrawWindow(true);
   m_interrupted = false;
   BrainNotifyCustomHelp(
@@ -335,6 +338,8 @@ void ConsoleController::displayViewController(ViewController * controller) {
 void ConsoleController::hideAnyDisplayedViewController() {
   if (isDisplayingViewController()) {
     stackViewController()->pop();
+    AppsContainer::sharedAppsContainer()->reloadTitleBarView();
+    AppsContainer::sharedAppsContainer()->redrawWindow(true);
   }
 }
 
@@ -390,6 +395,7 @@ void ConsoleController::autoImportScript(Script script, bool force) {
       engine->runScript(script.content());
     }
     flushOutputAccumulationBufferToStore();
+    AppsContainer::sharedAppsContainer()->reloadTitleBarView();
     AppsContainer::sharedAppsContainer()->redrawWindow(true);
   }
   if (!isDisplayingViewController() && force) {
