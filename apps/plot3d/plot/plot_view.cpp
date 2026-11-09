@@ -19,7 +19,7 @@ static Vec3Fix s_worldVerts[(32 + 1) * (32 + 1)];
 static float s_distField[(32 + 1) * (32 + 1)];
 
 // オブジェクト毎の世界座標メッシュ＆正規化ボックス座標キャッシュ（回転・ズーム時の数式再評価をゼロ化）
-static constexpr fixed_t k_boxClipLimit = 65664; // 1.00195 in 16.16 fixed-point
+static constexpr fixed_t k_boxClipLimit = 78643; // 1.20 in 16.16 fixed-point (20%拡張 / エリア辺の長さの1/5はみ出し許容)
 
 struct CachedObjectMesh {
   bool valid;
@@ -252,7 +252,14 @@ static const CachedObjectMesh & ensureObjectMeshCached(int oIdx, const Object3D 
   slot.yMin = yMin; slot.yMax = yMax;
   slot.zMin = zMin; slot.zMax = zMax;
 
-  Shapes::evaluateObjectGrid(obj, Nu, Nv, xMin, xMax, yMin, yMax, zMin, zMax,
+  // 描画範囲のはみ出し許容 (エリアの辺の長さ×1/5 = 20% ずつ拡張してサンプリング)
+  float xPad = (xMax - xMin) * 0.20f;
+  float yPad = (yMax - yMin) * 0.20f;
+  float zPad = (zMax - zMin) * 0.20f;
+  Shapes::evaluateObjectGrid(obj, Nu, Nv,
+                             xMin - xPad, xMax + xPad,
+                             yMin - yPad, yMax + yPad,
+                             zMin - zPad, zMax + zPad,
                              slot.wx, slot.wy, slot.wz, slot.worldNorm);
 
   float xHalf = (xMax - xMin) * 0.5f; if (xHalf < 0.05f) xHalf = 0.05f;

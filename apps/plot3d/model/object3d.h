@@ -57,6 +57,9 @@ struct ParametricParams {
   fixed_t majorR;       // 大半径 R
   fixed_t minorR;       // 小半径 r
   fixed_t pitch;        // 螺旋ピッチ c
+  fixed_t x0;           // 中心 X (Torus等)
+  fixed_t y0;           // 中心 Y
+  fixed_t z0;           // 中心 Z
   char exprX[64];       // X(u, v) 式 (例: "cos(u)*cos(v)")
   char exprY[64];       // Y(u, v) 式 (例: "sin(u)*cos(v)")
   char exprZ[64];       // Z(u, v) 式 (例: "sin(v)")
@@ -161,6 +164,9 @@ struct Object3D {
     params.parametric.majorR = rMajor;
     params.parametric.minorR = rMinor;
     params.parametric.pitch = pitch;
+    params.parametric.x0 = 0;
+    params.parametric.y0 = 0;
+    params.parametric.z0 = 0;
     strlcpy(params.parametric.exprX, "1.8*cos(u)*cos(v)", sizeof(params.parametric.exprX));
     strlcpy(params.parametric.exprY, "1.8*sin(u)*cos(v)", sizeof(params.parametric.exprY));
     strlcpy(params.parametric.exprZ, "1.8*sin(v)", sizeof(params.parametric.exprZ));
@@ -175,6 +181,9 @@ struct Object3D {
     params.parametric.majorR = fix_from_float(1.8f);
     params.parametric.minorR = fix_from_float(0.6f);
     params.parametric.pitch = fix_from_float(0.5f);
+    params.parametric.x0 = 0;
+    params.parametric.y0 = 0;
+    params.parametric.z0 = 0;
     strlcpy(params.parametric.exprX, xExpr, sizeof(params.parametric.exprX));
     strlcpy(params.parametric.exprY, yExpr, sizeof(params.parametric.exprY));
     strlcpy(params.parametric.exprZ, zExpr, sizeof(params.parametric.exprZ));

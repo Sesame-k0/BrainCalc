@@ -344,9 +344,9 @@ public:
           float r = fix_to_float(p.minorR);
           float ct = cosf(theta), st = sinf(theta);
           float cp = cosf(phi), sp = sinf(phi);
-          outX = (R + r * cp) * ct;
-          outY = (R + r * cp) * st;
-          outZ = r * sp;
+          outX = fix_to_float(p.x0) + (R + r * cp) * ct;
+          outY = fix_to_float(p.y0) + (R + r * cp) * st;
+          outZ = fix_to_float(p.z0) + r * sp;
           outNx = cp * ct; outNy = cp * st; outNz = sp;
           return true;
         } else {
@@ -465,14 +465,17 @@ public:
         if (p.preset == 1) { // Torus
           float R = fix_to_float(p.majorR);
           float r = fix_to_float(p.minorR);
-          float rxy = sqrtf(px * px + py * py);
+          float dx = px - fix_to_float(p.x0);
+          float dy = py - fix_to_float(p.y0);
+          float dz = pz - fix_to_float(p.z0);
+          float rxy = sqrtf(dx * dx + dy * dy);
           float qx = rxy - R;
-          float dTorus = sqrtf(qx * qx + pz * pz);
+          float dTorus = sqrtf(qx * qx + dz * dz);
           dist = dTorus - r;
           if (dTorus > 1e-5f && rxy > 1e-5f) {
-            gx = (qx / dTorus) * (px / rxy);
-            gy = (qx / dTorus) * (py / rxy);
-            gz = pz / dTorus;
+            gx = (qx / dTorus) * (dx / rxy);
+            gy = (qx / dTorus) * (dy / rxy);
+            gz = dz / dTorus;
           }
         } else {
           // 汎用メッシュ最近傍距離
@@ -1157,9 +1160,9 @@ private:
       fixed_t cosTheta = fix_cos(thetaIdx), sinTheta = fix_sin(thetaIdx);
       fixed_t cosPhi = fix_cos(phiIdx), sinPhi = fix_sin(phiIdx);
       fixed_t distFromZ = p.majorR + fix_mul(p.minorR, cosPhi);
-      x = fix_mul(distFromZ, cosTheta);
-      y = fix_mul(distFromZ, sinTheta);
-      z = fix_mul(p.minorR, sinPhi);
+      x = p.x0 + fix_mul(distFromZ, cosTheta);
+      y = p.y0 + fix_mul(distFromZ, sinTheta);
+      z = p.z0 + fix_mul(p.minorR, sinPhi);
       nx = fix_mul(cosPhi, cosTheta);
       ny = fix_mul(cosPhi, sinTheta);
       nz = sinPhi;

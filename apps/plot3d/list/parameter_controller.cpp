@@ -126,7 +126,10 @@ int ParameterController::numberOfRows() const {
     case ObjectType::Plane:            return 6; // Color, a, b, c, d, Delete
     case ObjectType::RevolutionX:
     case ObjectType::RevolutionY:      return 7; // Color, preset, axis, coeffA, min, max, Delete
-    case ObjectType::Parametric:       return (obj->params.parametric.preset == 0) ? 6 : 5; // X, Y, Z, Preset, Color, Delete OR Color, Preset, majorR, minorR, Delete
+    case ObjectType::Parametric:
+      if (obj->params.parametric.preset == 0) return 6; // X, Y, Z, Preset, Color, Delete
+      if (obj->params.parametric.preset == 1) return 8; // Color, Preset, Major R, Minor r, Center X, Center Y, Center Z, Delete
+      return 5; // Helicoid / Mobius: Color, Preset, majorR, minorR/pitch, Delete
     case ObjectType::ExplicitFunction: return 4; // z=f(x,y), Preset, Color, Delete
     default:                           return 2;
   }
@@ -349,6 +352,10 @@ void ParameterController::willDisplayCellForIndex(HighlightCell * cell, int inde
         } else {
           snprintf(buf, sizeof(buf), "Minor r:  %.2f", fix_to_float(obj->params.parametric.minorR));
         }
+      } else if (obj->params.parametric.preset == 1) {
+        if (index == 4) snprintf(buf, sizeof(buf), "Center X: %.2f", fix_to_float(obj->params.parametric.x0));
+        else if (index == 5) snprintf(buf, sizeof(buf), "Center Y: %.2f", fix_to_float(obj->params.parametric.y0));
+        else if (index == 6) snprintf(buf, sizeof(buf), "Center Z: %.2f", fix_to_float(obj->params.parametric.z0));
       }
       break;
     }
@@ -637,6 +644,15 @@ bool ParameterController::handleEvent(Ion::Events::Event event) {
           obj->params.parametric.minorR += delta;
           if (obj->params.parametric.minorR < fix_from_float(0.1f)) obj->params.parametric.minorR = fix_from_float(0.1f);
         }
+        changed = true;
+      } else if (row == 4 && obj->params.parametric.preset == 1) {
+        obj->params.parametric.x0 += delta;
+        changed = true;
+      } else if (row == 5 && obj->params.parametric.preset == 1) {
+        obj->params.parametric.y0 += delta;
+        changed = true;
+      } else if (row == 6 && obj->params.parametric.preset == 1) {
+        obj->params.parametric.z0 += delta;
         changed = true;
       }
       break;
