@@ -1057,7 +1057,334 @@ struct GuideTopic {
   const wchar_t * body;
 };
 
-// --- カテゴリ 0: 3D立体グラフ (LLCubic) ---
+// --- カテゴリ 0: 逆引き計算 (高校・大学数学シーン別) ---
+static constexpr GuideTopic kMathSolveTopics[12] = {
+  {
+    L"1. 方程式・連立方程式",
+    L"1. 方程式・連立方程式の解法 (根の算出)",
+    L"【使うアプリ】Equations / Calculation\n\n"
+    L"【こんな計算のときに!】\n"
+    L"・2次方程式の解の公式・判別式・虚数解の計算\n"
+    L"・3次方程式の3解 (実数解・複素数解) の特定\n"
+    L"・2元〜6元の連立1次方程式 (係数行列) の高速求解\n"
+    L"・三角関数や指数対数を含む方程式 f(x) = 0 の数値解\n\n"
+    L"【具体的な操作手順】\n"
+    L"■ 2次・3次方程式 (Equations)\n"
+    L"  1. Equations を開き [Add an equation]\n"
+    L"  2. Degree 2 (2次) または Degree 3 (3次) を選択\n"
+    L"  3. 係数 a, b, c, d を入力し [Solve equation]\n"
+    L"  → 実数解・虚数解(i)と判別式Δが一瞬で表示されます!\n"
+    L"■ 連立1次方程式 (Equations)\n"
+    L"  1. [Add an equation] > Linear System を選択\n"
+    L"  2. 未知数の数 (2〜6) を選び、係数グリッドに入力\n"
+    L"  → 解ベクトル (x, y, z...) を瞬時に算出します。\n"
+    L"■ 一般の方程式 (Solver)\n"
+    L"  f(x) = 0 の形を入力し、探索範囲を指定して数値求解。"
+  },
+  {
+    L"2. 微分係数・接線・増減",
+    L"2. 微分・導関数・接線・関数の増減と極値",
+    L"【使うアプリ】Calculation / Functions\n\n"
+    L"【こんな計算のときに!】\n"
+    L"・微分係数 f'(a) の値や、積・商・合成関数の微分検算\n"
+    L"・増減表を書く問題で、極大値・極小値の座標を調べたいとき\n"
+    L"・曲線上の点における接線の方程式 y = ax + b の算出\n\n"
+    L"【具体的な操作手順】\n"
+    L"■ 微分係数 f'(a) の算出 (Calculation)\n"
+    L"  Toolbox (F1) > 解析 > 微分係数 (または diff(f(x), x, a))\n"
+    L"  例: diff(x^3 - 3*x, x, 2) → 9 (x=2 での接線の傾き)\n"
+    L"■ グラフ解析による極値・接線 (Functions)\n"
+    L"  1. f(x) を入力して Graph タブを表示\n"
+    L"  2. [OK] キーを押して「解析 (Analysis)」メニューを開く\n"
+    L"  ・Extremum (極値) : 極大・極小の座標 (x, y) へ自動吸着\n"
+    L"  ・Tangent (接線) : 任意座標を指定し、接線と直線の式を表示\n"
+    L"  ・Zero (ゼロ点) : x軸との交点 (方程式の根) を自動特定"
+  },
+  {
+    L"3. 定積分と面積・体積",
+    L"3. 定積分・曲線で囲まれた面積の計算",
+    L"【使うアプリ】Calculation / Functions\n\n"
+    L"【こんな計算のときに!】\n"
+    L"・定積分 ∫[a,b] f(x)dx の正確な数値計算と検算\n"
+    L"・放物線と直線、または2曲線で囲まれた図形の面積計算\n"
+    L"・回転体の体積計算の積分検算\n\n"
+    L"【具体的な操作手順】\n"
+    L"■ 定積分の直接計算 (Calculation)\n"
+    L"  Toolbox (F1) > 解析 > 定積分 (または int(f(x), x, a, b))\n"
+    L"  例: int(x^2, x, 0, 3) → 9\n"
+    L"  ※ 分数や三角関数、指数関数も正確に積分評価します。\n"
+    L"■ グラフ上での面積可視化 (Functions)\n"
+    L"  1. 関数 f(x) を入力して Graph タブを表示\n"
+    L"  2. [OK] >「解析 (Analysis)」>「Integral (積分)」を選択\n"
+    L"  3. 積分区間の下端 a と上端 b を矢印キーまたは数値入力\n"
+    L"  → 対象領域が美しく塗りつぶされ、面積値が表示されます!"
+  },
+  {
+    L"4. 分数・根号・真値計算",
+    L"4. 2D自然表示エディタと有理数・無理数真値計算",
+    L"【使うアプリ】Calculation (高機能2D自然表示電卓)\n\n"
+    L"【こんな計算のときに!】\n"
+    L"・分数や平方根を小数に直さず、教科書通りの形で正確に計算\n"
+    L"・複雑な繁分数や、根号の有理化・整理の検算\n"
+    L"・π (円周率) や e (自然対数) を含んだ記号計算\n\n"
+    L"【具体的な操作手順】\n"
+    L"■ 2D自然表示での入力\n"
+    L"  ・分数 : [ / ] キーを押すと上下2段の枠が出現\n"
+    L"  ・累乗 : [ ^ ] キーで指数部へジャンプ\n"
+    L"  ・平方根 : [ √ ] キーで根号枠が出現\n"
+    L"  ・矢印キー [→] または [Tab] で枠から脱出\n"
+    L"■ 真値と近似値のトグル\n"
+    L"  計算結果が出た後、結果行にカーソルを合わせて [EXE] を\n"
+    L"  押すと、真値 (例: 3/7, √2) と小数近似値 (0.42857...) の\n"
+    L"  詳細カードが表示されます。"
+  },
+  {
+    L"5. 行列・線形代数",
+    L"5. 行列の演算・行列式・逆行列・ベクトル",
+    L"【使うアプリ】Calculation (Toolbox > 行列・ベクトル)\n\n"
+    L"【こんな計算のときに!】\n"
+    L"・行列の積 A*B、和 A+B、スカラー倍の計算\n"
+    L"・正方行列の行列式 det(A)、逆行列 A^(-1)、転置 A^T\n"
+    L"・ベクトルの内積・大きさ (ノルム)・外積の計算\n\n"
+    L"【具体的な操作手順】\n"
+    L"■ 行列の入力方法\n"
+    L"  Toolbox (F1) > 行列 > 新規行列 (または [[1,2],[3,4]] と入力)\n"
+    L"■ 主な行列・ベクトル関数\n"
+    L"  ・det(M) : 行列式 (行列が正則かどうかの判定)\n"
+    L"  ・inverse(M) または M^(-1) : 逆行列の計算\n"
+    L"  ・transpose(M) : 転置行列\n"
+    L"  ・dot(u, v) : ベクトル u, v の内積\n"
+    L"  ・norm(u) : ベクトルの長さ・ノルム\n"
+    L"  ・ref(M) / rref(M) : 行基本変形による階段行列化"
+  },
+  {
+    L"6. 複素数と複素平面",
+    L"6. 複素数の四則演算・極形式・共役・偏角",
+    L"【使うアプリ】Calculation / Settings\n\n"
+    L"【こんな計算のときに!】\n"
+    L"・虚数単位 i を使った複素数の四則演算 (3+2i)*(1-4i)\n"
+    L"・極形式 r*e^(iθ) や r*(cosθ + i*sinθ) の変換\n"
+    L"・ド・モアブルの定理の検算、複素数の絶対値と偏角 arg(z)\n\n"
+    L"【具体的な操作手順】\n"
+    L"■ 複素数の入力\n"
+    L"  キーボードの [ i ] キーを押して虚数単位を入力します。\n"
+    L"■ 複素数関数の活用 (Toolbox > 複素数)\n"
+    L"  ・abs(z) : 複素数の絶対値 |z| = √(a^2 + b^2)\n"
+    L"  ・arg(z) : 偏角 θ (ラジアンまたは度)\n"
+    L"  ・conj(z) : 共役複素数 a - bi\n"
+    L"  ・re(z) / im(z) : 実部 Re(z) / 虚部 Im(z)\n"
+    L"■ 直交座標 / 極形式の表示切替\n"
+    L"  Settings > Complex format で a+bi と r*e^(iθ) を選択可能。"
+  },
+  {
+    L"7. 数列・漸化式・和",
+    L"7. 等差・等比・漸化式 (フィボナッチ) と総和",
+    L"【使うアプリ】Sequences / Calculation\n\n"
+    L"【こんな計算のときに!】\n"
+    L"・漸化式 a(n+1) = p*a(n) + q や a(n+2) = a(n+1) + a(n)\n"
+    L"・数列の第 n 項の値を一発で求めたいとき、表で見たいとき\n"
+    L"・総和 Σ[k=1, n] a_k の計算\n\n"
+    L"【具体的な操作手順】\n"
+    L"■ 漸化式の定義 (Sequences)\n"
+    L"  1. Sequences アプリを開き [Add a sequence]\n"
+    L"  2. 形式を選択: a(n) 一般項 / a(n+1) 1階 / a(n+2) 2階\n"
+    L"  3. 漸化式と初期項 a(0) または a(1) を入力\n"
+    L"  4. Table タブで各項の値一覧を瞬時に確認!\n"
+    L"  5. Plot タブで収束・発散の様子を視覚化できます。\n"
+    L"■ 総和 Σ の計算 (Calculation)\n"
+    L"  Toolbox (F1) > 解析 > 総和 (または sum(式, k, 1, n))\n"
+    L"  例: sum(k^2, k, 1, 10) → 385"
+  },
+  {
+    L"8. 統計・箱ひげ・正規分布",
+    L"8. 1変数統計・箱ひげ図・2変数回帰・確率分布",
+    L"【使うアプリ】Statistics / Regression / Probability\n\n"
+    L"【こんな計算のときに!】\n"
+    L"・データの平均値、分散、標準偏差、中央値、四分位範囲\n"
+    L"・高校数学Iの「データの分析」(箱ひげ図・ヒストグラム)\n"
+    L"・2変数の散布図と相関係数 r、回帰直線 y = ax + b\n"
+    L"・大学統計の正規分布・二項分布・信頼区間・仮説検定\n\n"
+    L"【具体的な操作手順】\n"
+    L"■ 1変数データ分析 (Statistics)\n"
+    L"  1. Data タブに測定値を縦に入力\n"
+    L"  2. Stats タブで平均値・分散・標準偏差・Q1・Q3 を一括確認\n"
+    L"  3. Graph タブで「箱ひげ図」や「ヒストグラム」を描画\n"
+    L"■ 回帰直線 (Regression)\n"
+    L"  X と Y のペアデータを入力し、相関係数 r と回帰式を算出。\n"
+    L"■ 確率分布 (Probability)\n"
+    L"  Normal (正規分布) を選び平均μと標準偏差σから区間確率を算出。"
+  },
+  {
+    L"9. 媒介変数・極座標",
+    L"9. サイクロイド・リサージュ・カージオイド描画",
+    L"【使うアプリ】Functions (2D関数グラフ)\n\n"
+    L"【こんな計算のときに!】\n"
+    L"・サイクロイド、楕円、アステロイドなどの媒介変数曲線\n"
+    L"・カージオイド (心臓形)、レムニスケートなどの極方程式\n"
+    L"・t や θ の変化に伴う曲線の軌跡を観察したいとき\n\n"
+    L"【具体的な操作手順】\n"
+    L"■ 媒介変数表示 (x(t), y(t)) の描画\n"
+    L"  1. Functions で [Add an element] を選択\n"
+    L"  2. [Parametric] を選択\n"
+    L"  3. x(t) と y(t) の2つの式を入力 (例: x=cos(t), y=sin(t))\n"
+    L"  4. t の範囲 (t_min, t_max) を指定して Graph タブへ!\n"
+    L"■ 極座標表示 (r(θ)) の描画\n"
+    L"  1. [Add an element] > [Polar] を選択\n"
+    L"  2. r(θ) の式を入力 (例: 2*(1 - cos(θ)) でカージオイド)\n"
+    L"  3. Graph タブで美しい極座標プロットを描画します。"
+  },
+  {
+    L"10. 空間図形・3D解析",
+    L"10. 3D空間の平面・球・曲面・交線・断面解析",
+    L"【使うアプリ】LLCubic (3D立体グラフ)\n\n"
+    L"【こんな計算のときに!】\n"
+    L"・空間座標系における平面の方程式 ax + by + cz + d = 0\n"
+    L"・球面と平面の距離・交円の中心と半径・接点\n"
+    L"・2平面の交線の方程式やなす角、円柱・円錐の立体視\n\n"
+    L"【具体的な操作手順】\n"
+    L"■ 立体の追加と描画 (Expressions)\n"
+    L"  1. LLCubic を開き [Add Object] を選択\n"
+    L"  2. Plane (平面), Sphere (球), Cylinder (円柱), \n"
+    L"     Cone (円錐), または z = f(x,y) / Parametric を選択\n"
+    L"  3. 係数や数式を入力して 3D Plot タブへ移動!\n"
+    L"■ 幾何解析と交線 (3D Plot 画面)\n"
+    L"  ・上部バー [Solve] (9キー): 2立体の位置関係と交線を解析\n"
+    L"  ・上部バー [Slice] (7キー): X/Y/Z 垂直平面での断面を観察\n"
+    L"  ・上部バー [Trace] (6キー): 空間交線に自動磁気吸着!"
+  },
+  {
+    L"11. 物理定数と単位換算",
+    L"11. 自然科学定数の呼び出しとSI単位換算",
+    L"【使うアプリ】Calculation (Toolbox > 科学定数・単位)\n\n"
+    L"【こんな計算のときに!】\n"
+    L"・物理や化学の計算で、光速 c やアボガドロ数を正確に入力\n"
+    L"・力学の重力加速度 g、電磁気学の電気素量 e、プランク定数 h\n"
+    L"・長さ・質量・エネルギーなどの単位換算 (km→m, eV→J)\n\n"
+    L"【具体的な操作手順】\n"
+    L"■ 科学定数の挿入 (Calculation)\n"
+    L"  Toolbox (F1) > 科学定数 を開くと、以下の定数が即座に入力可能:\n"
+    L"  ・_c : 光速 (299,792,458 m/s)\n"
+    L"  ・_NA : アボガドロ定数 (6.02214076e23 mol^-1)\n"
+    L"  ・_e : 電気素量 (1.602176634e-19 C)\n"
+    L"  ・_h : プランク定数 (6.62607015e-34 J・s)\n"
+    L"  ・_G : 万有引力定数 (6.67430e-11 m^3/(kg・s^2))\n"
+    L"■ 単位付き計算\n"
+    L"  5_km + 300_m → 5300_m のように単位を考慮して自動計算。"
+  },
+  {
+    L"12. アルゴリズム・数値実験",
+    L"12. プログラミングを用いた数値解法・シミュレーション",
+    L"【使うアプリ】Coding (PocketPy / TinyBasic)\n\n"
+    L"【こんな計算のときに!】\n"
+    L"・手計算では解けない複雑な方程式の数値解 (ニュートン法)\n"
+    L"・微分方程式の数値シミュレーション (オイラー法)\n"
+    L"・モンテカルロ法による円周率πの近似計算\n"
+    L"・フラクタル図形や再帰アルゴリズムの視覚化\n\n"
+    L"【具体的な操作手順】\n"
+    L"■ コーディング環境の起動\n"
+    L"  1. ホームから Coding アプリを起動\n"
+    L"  2. PocketPy (Python) または TinyBasic を選択\n"
+    L"  3. scripts フォルダに入れた独自の .py や .bas も自動認識!\n"
+    L"■ Python での高速プログラミング\n"
+    L"  ・import math で高度な数学ライブラリを利用\n"
+    L"  ・import kandinsky で 320x240 カラーグラフィック描画\n"
+    L"  ・アルゴリズムの挙動を実機上でリアルタイム実験できます。"
+  }
+};
+
+// --- カテゴリ 1: 基本アプリ (Lilium 標準アプリ全集) ---
+static constexpr GuideTopic kAppFeaturesTopics[8] = {
+  {
+    L"1. Calculation (計算)",
+    L"1. Calculation - 2D自然表示関数電卓",
+    L"【アプリの概要】\n"
+    L"日常の計算から高度な大学数学までをカバーする中核アプリです。\n\n"
+    L"・教科書通りの分数、平方根、べき乗、三角関数、指数対数を自然表示。\n"
+    L"・履歴の再利用: 上矢印で過去の計算式や結果を現在の式へ引用可能。\n"
+    L"・Ans キー: 直前の計算結果を変数として利用。\n"
+    L"・変数ストア: [STO→] で計算結果を英字変数 (A〜Z) に保存。\n"
+    L"・[F1] (Toolbox): 微分、積分、極限、Σ総和、複素数、行列、確率、科学定数などの全数学関数を一発挿入。"
+  },
+  {
+    L"2. Functions (2Dグラフ)",
+    L"2. Functions - 2D関数グラフと曲線解析",
+    L"【アプリの概要】\n"
+    L"複数の関数を同時にプロットし、幾何学的性質を解析するアプリです。\n\n"
+    L"・Functions タブ: y=f(x)、不等式、媒介変数、極座標を最大複数登録。\n"
+    L"・Graph タブ: 定義した関数のグラフを描画。矢印キーでトレース移動。\n"
+    L"・Table タブ: x の値に応じた計算結果一覧を生成 (刻み幅変更可能)。\n"
+    L"・[OK] Analysis (解析):\n"
+    L"  - Zero (根), Extremum (極値), Intersection (交点)\n"
+    L"  - Tangent (接線の方程式描画), Integral (定積分・面積計算)"
+  },
+  {
+    L"3. Equations (方程式)",
+    L"3. Equations - 多項式・連立1次方程式ソルバー",
+    L"【アプリの概要】\n"
+    L"代数方程式の厳密解や連立方程式の解を自動算出するアプリです。\n\n"
+    L"・2次方程式 (Degree 2): ax^2 + bx + c = 0 の解と判別式Δ。\n"
+    L"  重解や虚数解 (a ± bi) も教科書通りの正確な根号・分数で表示。\n"
+    L"・3次方程式 (Degree 3): カルダノの解法による実数解・複素数解。\n"
+    L"・連立1次方程式 (Linear System): 2元〜6元の係数行列を入力。\n"
+    L"・一般方程式 (Solver): 三角関数等を含む f(x)=0 の数値解を探索。"
+  },
+  {
+    L"4. Sequences (数列)",
+    L"4. Sequences - 数列・漸化式・蜘蛛の巣図",
+    L"【アプリの概要】\n"
+    L"等差数列・等比数列から複雑な漸化式までを視覚化するアプリです。\n\n"
+    L"・一般項 a(n): n に依存する式の定義。\n"
+    L"・1階漸化式 a(n+1) = f(a(n)): 前の項から次の項を決める関係式。\n"
+    L"・2階漸化式 a(n+2) = f(a(n+1), a(n)): フィボナッチ数列など。\n"
+    L"・Table タブ: 初期項からの各項の数値を一覧表で確認。\n"
+    L"・Plot タブ: 散布図および蜘蛛の巣図 (Web diagram) で収束を観察。"
+  },
+  {
+    L"5. Statistics (統計)",
+    L"5. Statistics - 1変数データ分析と箱ひげ図",
+    L"【アプリの概要】\n"
+    L"データの統計的特性を一括計算し、グラフで視覚化するアプリです。\n\n"
+    L"・Data タブ: 測定データ V1 とその度数 N1 を入力 (複数系列 V2, V3 対応)。\n"
+    L"・Stats タブ: 平均値 x̄、合計値 Σx、平方和 Σx^2、分散 σ^2、\n"
+    L"  標準偏差 σ、サンプル標準偏差 s、データ数 n、最小値 Min、\n"
+    L"  第1四分位数 Q1、中央値 Med、第3四分位数 Q3、最大値 Max。\n"
+    L"・Graph タブ: 箱ひげ図 (Box plot) やヒストグラムを自動生成。"
+  },
+  {
+    L"6. Probability (確率分布)",
+    L"6. Probability - 連続・離散確率分布と信頼区間",
+    L"【アプリの概要】\n"
+    L"統計学・データ分析で頻出する主要な確率分布を網羅したアプリです。\n\n"
+    L"・サポート分布: Normal (正規分布), Binomial (二項分布), \n"
+    L"  Poisson (ポアソン分布), Geometric (幾何分布), \n"
+    L"  Student's t分布, Chi-square (カイ二乗分布), F分布, etc.\n"
+    L"・区間確率計算: P(X ≤ a), P(a ≤ X ≤ b), P(X ≥ b) を指定して確率を算出。\n"
+    L"・逆累積計算: 与えられた有意水準 α (例: 5%, 1%) から棄却限界値を算出。"
+  },
+  {
+    L"7. Periodic (元素周期表)",
+    L"7. Periodic - 元素周期表と詳細物性データ",
+    L"【アプリの概要】\n"
+    L"化学・物理学習に欠かせない全118元素のデータベースです。\n\n"
+    L"・周期表全体を直感的にカーソル移動して元素を選択。\n"
+    L"・詳細情報表示: 原子番号、元素記号、原子量、日本語名、\n"
+    L"  電子配置、族・周期、ブロック (s, p, d, f)、\n"
+    L"  融点、沸点、密度、電気陰性度、イオン化エネルギー。\n"
+    L"・化学計算時の原子量参照や、物質の性質の確認に最適です。"
+  },
+  {
+    L"8. RPN (逆ポーランド記法)",
+    L"8. RPN - 逆ポーランド記法電卓",
+    L"【アプリの概要】\n"
+    L"括弧を使わずに最小の打鍵数で計算を行う技術者向けモードです。\n\n"
+    L"・数値を入れて [Enter] でスタックにプッシュ (積載)。\n"
+    L"・演算子 (+, -, *, /) を押すとスタックの末尾2つの数値を演算。\n"
+    L"・スタック操作: Swap (入替), Drop (削除), Roll (回転)。\n"
+    L"・理工系・プログラミングの数式評価アルゴリズムの理解にも役立ちます。"
+  }
+};
+
+// --- カテゴリ 2: 3D立体グラフ (LLCubic) ---
 static constexpr GuideTopic kPlot3DTopics[14] = {
   {
     L"1. LLCubic の概要",
@@ -1194,253 +1521,157 @@ static constexpr GuideTopic kPlot3DTopics[14] = {
   }
 };
 
-// --- カテゴリ 1: Python (PocketPy) ---
-static constexpr GuideTopic kPythonTopics[8] = {
+// --- カテゴリ 3: コード言語 (Coding アプリ統合環境) ---
+static constexpr GuideTopic kCodingTopics[6] = {
   {
-    L"1. PocketPy の概要",
-    L"1. Python (PocketPy) プログラミング",
-    L"【組み込み向け超軽量 Python 3】\n"
-    L"BrainCalc に内蔵されたモダンな Python 3 インタプリタです。\n\n"
-    L"・関数定義、クラス、内包表記、例外処理などの標準構文を完全サポート。\n"
-    L"・[F1] (Toolbox) から構文テンプレートや関数を一発入力できます。\n"
-    L"・12xモード時はコロン (:) やクォート (\")、等号 (=) がキーボードから素早く打てます。"
+    L"1. Coding概要・自動読込",
+    L"1. Coding アプリ概要と scripts フォルダ自動読込",
+    L"【4言語を統合したコーディング環境】\n"
+    L"Python, BASIC, Logo, BrainF*ck の4言語を1つのアプリに統合。\n\n"
+    L"■ scripts フォルダからの自動読み込み:\n"
+    L"・アプリと同じ階層の scripts フォルダに PC からファイルを\n"
+    L"  ごっちゃに投入するだけで、拡張子に応じて自動仕分け登録!\n"
+    L"  - .py  → PocketPy (Python)\n"
+    L"  - .bas → TinyBasic\n"
+    L"  - .lgo → Logo\n"
+    L"  - .bf  → BrainF*ck\n"
+    L"・サブフォルダ (例: scripts/tools/) のファイルも再帰的に全自動検出。\n"
+    L"・Windows の UTF-8 BOM や CRLF 改行も自動で正規化されます。"
   },
   {
-    L"2. 変数と基本データ型",
-    L"2. 変数・数値・文字列・リスト・辞書",
-    L"【基本データ型の記述例】\n"
-    L"x = 10\n"
-    L"name = \"Lilium\"\n"
-    L"nums = [1, 2, 3, 4, 5]\n"
-    L"point = {\"x\": 100, \"y\": 50}\n\n"
-    L"・リスト要素追加: nums.append(6)\n"
-    L"・長さ取得: len(nums)\n"
-    L"・インデックス: nums[0], point[\"x\"]"
-  },
-  {
-    L"3. 条件分岐 (if 文)",
-    L"3. 条件分岐 if / elif / else",
-    L"【コロンとインデントによるブロック】\n"
-    L"score = 85\n\n"
-    L"if score >= 90:\n"
-    L"    print(\"Excellent!\")\n"
-    L"elif score >= 60:\n"
-    L"    print(\"Pass\")\n"
-    L"else:\n"
-    L"    print(\"Try Again\")\n\n"
-    L"※ [Tab] キーで4文字インデントが自動挿入されます。"
-  },
-  {
-    L"4. 繰り返しと内包表記",
-    L"4. 繰り返し (for / while) と内包表記",
-    L"【for ループとリスト内包】\n"
-    L"for i in range(5):\n"
-    L"    print(i * 10)\n\n"
-    L"# リスト内包表記 (平方数のリスト)\n"
-    L"sq = [x**2 for x in range(1, 11)]\n"
-    L"print(sq)\n\n"
-    L"・break でループ中断、continue で次へ進みます。"
-  },
-  {
-    L"5. 関数定義 (def)",
-    L"5. 関数定義 (def) とラムダ式",
-    L"【処理の関数化】\n"
-    L"def gcd(a, b):\n"
-    L"    while b != 0:\n"
-    L"        a, b = b, a % b\n"
-    L"    return a\n\n"
-    L"print(gcd(48, 18))  # 結果: 6\n\n"
-    L"・ラムダ式: f = lambda x, y: x + y"
-  },
-  {
-    L"6. 数学関数 (math)",
-    L"6. 数学モジュール (import math)",
-    L"【三角関数・対数・平方根】\n"
-    L"import math\n\n"
-    L"rad = math.radians(45)\n"
-    L"s = math.sin(rad)\n"
-    L"c = math.cos(rad)\n"
-    L"d = math.sqrt(3**2 + 4**2)\n\n"
-    L"・math.pi (円周率)、math.e (ネイピア数) も利用可能です。"
-  },
-  {
-    L"7. 画面描画 (kandinsky)",
-    L"7. グラフィックス描画 (kandinsky)",
-    L"【320x240 フルカラー描画】\n"
-    L"import kandinsky as kd\n\n"
-    L"kd.clear_screen((255, 255, 255))\n"
-    L"kd.set_pixel(160, 120, (255, 0, 0))\n"
-    L"kd.fill_rect(50, 40, 100, 60, (79, 191, 175))\n"
-    L"kd.draw_string(\"Hello\", 60, 50, (0,0,0), (79,191,175))\n\n"
+    L"2. Python (PocketPy)",
+    L"2. PocketPy (Python 3.11) プログラミング",
+    L"【軽量高速な Python 3 インタプリタ】\n"
+    L"・関数定義 (def)、クラス、内包表記、例外処理をフルサポート。\n"
+    L"・[F1] (Toolbox) から制御構文や関数テンプレートを瞬時に挿入。\n"
+    L"・import math: 三角関数、対数、平方根、math.pi, math.e\n"
+    L"・import kandinsky: 320x240 フルカラー画面描画\n"
+    L"  - kd.set_pixel(x, y, color)\n"
+    L"  - kd.fill_rect(x, y, w, h, color)\n"
+    L"  - kd.draw_string(text, x, y, fg, bg)\n"
     L"・実行後、[Back / Esc] でエディタに戻ります。"
   },
   {
-    L"8. サンプルプログラム",
-    L"8. サンプル (フラクタル樹木 / 数式グラフ)",
-    L"【付属のサンプルコード】\n"
-    L"Code アプリ内の \"sample.py\" を開いて [EXE / 決定] を押すと、再帰関数による美しいフラクタル樹木の描画デモが実行されます。\n\n"
-    L"・独自の数式プロットや数値計算に自由に改造してみましょう。"
+    L"3. BASIC (TinyBasic)",
+    L"3. TinyBasic (行番号付きクラシックBASIC)",
+    L"【アルファベットと数字で書ける親しみやすい言語】\n"
+    L"・行番号 (10, 20, 30...) を付けてプログラムを記述。\n"
+    L"・主要命令: PRINT, INPUT, LET, IF ... THEN, FOR ... NEXT, \n"
+    L"  GOTO, GOSUB / RETURN, END, REM (コメント)。\n"
+    L"・グラフィックス命令完備:\n"
+    L"  - CLS : 画面消去\n"
+    L"  - PSET(x, y), color : 点描画\n"
+    L"  - LINE(x1, y1, x2, y2), color : 直線描画\n"
+    L"  - RECT(x, y, w, h), color : 矩形描画\n"
+    L"・電子辞書のキーボードと非常に相性が良く、手軽に動作します。"
+  },
+  {
+    L"4. Logo (タートル)",
+    L"4. Logo (タートルグラフィックス)",
+    L"【直感的アルファベット命令による幾何学アート】\n"
+    L"・前進 (FD)、回転 (RT)、ループ (REPEAT) だけで幾何学図形を描画。\n"
+    L"・基本コマンド:\n"
+    L"  - FORWARD n (FD n) : 前進\n"
+    L"  - BACK n (BK n) : 後退\n"
+    L"  - RIGHT deg (RT deg) : 時計回り回転\n"
+    L"  - LEFT deg (LT deg) : 反時計回り回転\n"
+    L"  - PENUP (PU) / PENDOWN (PD) : ペン上げ / 下げ\n"
+    L"  - REPEAT n [ ... ] : n 回繰り返しループ\n"
+    L"  - CLEARSCREEN (CS) : 画面クリアと初期位置復帰\n"
+    L"・正多角形、星型、渦巻き、曼荼羅模様を数行で描けます。"
+  },
+  {
+    L"5. BrainF*ck (極限言語)",
+    L"5. BrainF*ck (8命令の極小チューリング完全言語)",
+    L"【PageDown 長押しで出現する裏言語】\n"
+    L"・言語選択画面で PageDown を長押しすると出現 (↑/PgUp で復帰)。\n"
+    L"・30,000バイトのメモリテープとポインタで動作する極限の言語。\n"
+    L"・8つの命令:\n"
+    L"  > : ポインタを右へ / < : ポインタを左へ\n"
+    L"  + : 値を +1 / - : 値を -1\n"
+    L"  . : 文字出力 (ASCII) / , : 1文字入力\n"
+    L"  [ : 0なら対応する ] の次へ / ] : 0以外なら [ の次へ\n"
+    L"・12xモード時、中央キー A,S,D,F, H,J,K,L に 8命令を集中配置!"
+  },
+  {
+    L"6. 12xキー最適化",
+    L"6. 各言語に応じた 12x 記号入力の自動最適化",
+    L"【言語ごとの最適キーマッピング】\n"
+    L"Coding エディタでは、選択中の言語に応じて 12x モード時のキー配置が\n"
+    L"自動的に切り替わります。\n\n"
+    L"・Python: コロン (:), クォート (\"), 等号 (=), カンマ (,), アンダースコア (_)\n"
+    L"・BASIC: 等号 (=), 二重引用符 (\"), セミコロン (;), カンマ (,)\n"
+    L"・Logo: 開き括弧 ([), 閉じ括弧 (]), スペース\n"
+    L"・Brainfuck: 8命令 (> < + - . , [ ]) のみを集中配置し他を無効化\n"
+    L"※ 電卓特有の √ や π などの不要記号に邪魔されず快適に入力できます。"
   }
 };
 
-// --- カテゴリ 2: BASIC (TinyBasic) ---
-static constexpr GuideTopic kBasicTopics[8] = {
+// --- カテゴリ 4: 操作＆キー (Brain 電卓操作体系) ---
+static constexpr GuideTopic kKeyboardTopics[5] = {
   {
-    L"1. TinyBasic の概要",
-    L"1. TinyBasic の基本構文",
-    L"【行番号による親しみやすい BASIC】\n"
-    L"古典的な行番号付きBASICで直感的にコーディングできます。\n\n"
-    L"・行番号 (10, 20, 30...) を付けてプログラムを入力。\n"
-    L"・RUN でプログラムを実行、LIST でプログラム一覧表示。\n"
-    L"・アルファベットと数字、最小限の記号だけで書けるため、電子辞書と相性抜群です。"
+    L"1. キーボード基本操作",
+    L"1. キーボード基本操作と 12x / abc 切替",
+    L"【SHARP Brain での快適な入力操作】\n"
+    L"Lilium は電子辞書の QWERTY キーボードを最大限に活用します。\n\n"
+    L"・[F2] キー (切替):\n"
+    L"  - 12x モード : 数字 (0〜9)、四則演算 (+, -, *, /)、べき乗 (^)、\n"
+    L"    主要記号をホームポジション周辺で素早く入力。\n"
+    L"  - abc モード : 英字 (A〜Z) を通常通りタイプして変数や関数名を入力。\n"
+    L"・右サイドバー:\n"
+    L"  画面右側に現在のモードとキー配置チートシートが常時表示。\n"
+    L"  今どのキーを押せば何が入力できるか一目で分かります。"
   },
   {
-    L"2. PRINT と INPUT",
-    L"2. 画面入出力 (PRINT / INPUT)",
-    L"【文字と数値の入出力】\n"
-    L"10 PRINT \"=== BASIC DEMO ===\"\n"
-    L"20 INPUT \"ANATA NO NAMAO WA? \", N$\n"
-    L"30 PRINT \"KONNICHIWA, \"; N$\n\n"
-    L"・セミコロン (;) で区切ると改行せずに続けて表示します。\n"
-    L"・カンマ (,) で区切るとタブ間隔で表示します。"
+    L"2. ファンクションキー一覧",
+    L"2. ファンクションキー (F1〜F12) 機能一覧",
+    L"【上部キーによるワンタッチ機能呼出】\n"
+    L"・[F1] : 関数ツールボックス (Toolbox) - 数学関数・構文を挿入\n"
+    L"・[F2] : 12x / abc 入力モード切替\n"
+    L"・[F3] : OK / 決定キー\n"
+    L"・[F4] : クリア / BackSpace (文字削除)\n"
+    L"・[F9] : 変数メニュー (var) - 定義済み変数・関数の一覧\n"
+    L"・[F10] : HOME キー - ホームランチャーへ一発復帰\n"
+    L"・[F11] : < > 統合キー (通常で '<'、Shift+F11 で '>')\n"
+    L"・[F12] : Lilium 総合電子辞書マニュアル (本画面) の開閉"
   },
   {
-    L"3. 代入と計算 (LET)",
-    L"3. 変数代入と四則演算 (LET)",
-    L"【数値の計算】\n"
-    L"10 LET A = 100\n"
-    L"20 B = 25  (LET は省略可能)\n"
-    L"30 C = (A + B) * 2 - 50 / 5\n"
-    L"40 PRINT \"RESULT=\"; C\n\n"
-    L"・算術演算子: + - * /\n"
-    L"・関数: SIN(X), COS(X), SQR(X), ABS(X), RND(N)"
+    L"3. 特殊記号と< >統合キー",
+    L"3. < > 統合キーと各種記号の入力方法",
+    L"【不等号とプログラミング記号】\n"
+    L"・[ < > ] 統合キー (F11):\n"
+    L"  - そのまま押す: 小なり '<'\n"
+    L"  - [Shift] + F11: 大なり '>'\n"
+    L"  キー配置設定画面でも 1つのキーとして自由に別キーへ再割当可能。\n"
+    L"・[XNT] キー (Cキー):\n"
+    L"  数式編集時に独立変数 (x, t, θ, u) を文脈に応じて一発入力。\n"
+    L"・[Ans] キー (Kキー):\n"
+    L"  直前の計算結果変数を挿入。"
   },
   {
-    L"4. 条件分岐 (IF) と GOTO",
-    L"4. 条件分岐 (IF ... THEN) と GOTO",
-    L"【判定とプログラムのジャンプ】\n"
-    L"10 INPUT \"TENSU (0-100)= \"; S\n"
-    L"20 IF S >= 60 THEN GOTO 50\n"
-    L"30 PRINT \"MOU SUKOSHI! GANBARE\"\n"
-    L"40 GOTO 60\n"
-    L"50 PRINT \"GOUKAKU! OMEDETOU\"\n"
-    L"60 END"
+    L"4. キー配置カスタマイズ",
+    L"4. キーボード操作設定 (物理キー全機能の自由割当)",
+    L"【全62機能を自由に変更可能】\n"
+    L"・設定への入り方:\n"
+    L"  HOME 画面で [終了/設定] ボタンを押すか、Lilium 設定ダイアログから\n"
+    L"  「■ キーボード操作設定」を選択。\n"
+    L"・カテゴリ別タブ:\n"
+    L"  [すべて] [数字・演算] [関数・定数] [括弧・記号] [編集・他] から選択。\n"
+    L"・割り当て手順:\n"
+    L"  変更したい機能を選んで [Enter] → 割り当てたい Brain のキーを押す。\n"
+    L"  [未割当にする] ボタンでキー解除も可能です。"
   },
   {
-    L"5. 繰り返し (FOR ... NEXT)",
-    L"5. 繰り返しループ (FOR ... NEXT)",
-    L"【指定回数の繰り返し】\n"
-    L"10 FOR I = 1 TO 10 STEP 2\n"
-    L"20   PRINT I; \" NO 2-JOU WA \"; I * I\n"
-    L"30 NEXT I\n\n"
-    L"・STEP で増分を指定できます（省略時は 1）。\n"
-    L"・マイナス方向 (STEP -1) にも対応しています。"
-  },
-  {
-    L"6. BASICグラフィックス",
-    L"6. 図形描画 (CLS / PSET / LINE)",
-    L"【画面座標系とグラフィックス命令】\n"
-    L"10 CLS\n"
-    L"20 FOR X = 0 TO 319\n"
-    L"30   Y = 120 + 50 * SIN(X * 0.05)\n"
-    L"40   PSET(X, Y), 1\n"
-    L"50 NEXT X\n"
-    L"60 LINE(0, 120, 319, 120), 2\n\n"
-    L"・CLS: 画面クリア\n"
-    L"・PSET(X,Y): 点描画\n"
-    L"・LINE(X1,Y1,X2,Y2): 線描画"
-  },
-  {
-    L"7. サブルーチン (GOSUB)",
-    L"7. サブルーチン呼び出し (GOSUB / RETURN)",
-    L"【構造化された処理】\n"
-    L"10 PRINT \"MAIN PROGRAM START\"\n"
-    L"20 GOSUB 100\n"
-    L"30 PRINT \"MAIN PROGRAM END\"\n"
-    L"40 END\n"
-    L"100 PRINT \">> SUBROUTINE EXECUTED\"\n"
-    L"110 RETURN"
-  },
-  {
-    L"8. サンプルプログラム",
-    L"8. サンプル (数当てゲーム / 正弦波)",
-    L"【付属のサンプルコード】\n"
-    L"Code アプリ内の \"sample.bas\" には、コンピュータが考えた 1〜100 の数を当てる数当てゲームと、美しい波動グラフィックスデモが収録されています。"
-  }
-};
-
-// --- カテゴリ 3: Logo (Turtle) ---
-static constexpr GuideTopic kLogoTopics[8] = {
-  {
-    L"1. Logo の概要",
-    L"1. タートルグラフィックス (Logo)",
-    L"【画面上の亀に指示を出して描画】\n"
-    L"アルファベットの簡単な命令だけで、幾何学模様を美しく描ける教育用プログラミング言語です。\n\n"
-    L"・前進 (FD)、回転 (RT)、ループ (REPEAT) だけで多彩な図形が描けます。\n"
-    L"・難しい記号がほとんど不要で、電子辞書での入力に最適です。"
-  },
-  {
-    L"2. 前進と後退 (FD / BK)",
-    L"2. 直進移動 (FORWARD / BACK)",
-    L"【タートルを歩かせる】\n"
-    L"FORWARD 100 (短縮: FD 100)\n"
-    L"BACK 50    (短縮: BK 50)\n\n"
-    L"・現在の向きに向かって指定ピクセル分進み、軌跡に線を引きます。\n"
-    L"・初期位置は画面中央 (160, 120)、向きは真上 (北) です。"
-  },
-  {
-    L"3. 回転 (RT / LT)",
-    L"3. 回転 (RIGHT / LEFT)",
-    L"【タートルの向きを変える】\n"
-    L"RIGHT 90 (短縮: RT 90)\n"
-    L"LEFT 45  (短縮: LT 45)\n\n"
-    L"・RIGHT は時計回り、LEFT は反時計回りに指定角度（度数法）だけ回頭します。\n"
-    L"・正三角形なら RT 120、正五角形なら RT 72、正六角形なら RT 60 です。"
-  },
-  {
-    L"4. ペン操作と画面クリア",
-    L"4. ペン操作 (PU / PD) とクリア (CS)",
-    L"【線を描かずに移動する】\n"
-    L"PENUP   (短縮: PU) : ペンを上げる（移動しても線を描かない）\n"
-    L"PENDOWN (短縮: PD) : ペンを下げる（移動で線を描く）\n"
-    L"CLEARSCREEN (短縮: CS) : 画面を消去し、タートルを中央に戻す"
-  },
-  {
-    L"5. 繰り返し (REPEAT)",
-    L"5. 繰り返しブロック (REPEAT [ ... ])",
-    L"【多角形のワンライナー描画】\n"
-    L"正方形を描く:\n"
-    L"REPEAT 4 [ FD 80 RT 90 ]\n\n"
-    L"正五角形を描く:\n"
-    L"REPEAT 5 [ FD 60 RT 72 ]\n\n"
-    L"円を描く:\n"
-    L"REPEAT 36 [ FD 10 RT 10 ]"
-  },
-  {
-    L"6. 星型多角形の描き方",
-    L"6. 星型多角形 (Star) の作図",
-    L"【線の交差する神秘的な図形】\n"
-    L"五芒星 (五つ星):\n"
-    L"REPEAT 5 [ FD 100 RT 144 ]\n\n"
-    L"七芒星:\n"
-    L"REPEAT 7 [ FD 100 RT 154.28 ]\n\n"
-    L"八芒星:\n"
-    L"REPEAT 8 [ FD 100 RT 135 ]"
-  },
-  {
-    L"7. 渦巻きと幾何学アート",
-    L"7. 渦巻きと複合幾何学パターン",
-    L"【多重ループによる幾何学模様】\n"
-    L"花の模様を描く:\n"
-    L"REPEAT 12 [ REPEAT 4 [ FD 50 RT 90 ] RT 30 ]\n\n"
-    L"円を回転させて広がる曼荼羅模様:\n"
-    L"REPEAT 36 [ REPEAT 36 [ FD 5 RT 10 ] RT 10 ]"
-  },
-  {
-    L"8. サンプルプログラム",
-    L"8. サンプル (華麗な幾何学タートルアート)",
-    L"【付属のサンプルコード】\n"
-    L"Code アプリ内の \"sample.lgo\" を開いて実行すると、星型多角形と渦巻きが組み合わさった華麗な幾何学タートルアートが描画されます。"
+    L"5. 自動保存とバックアップ",
+    L"5. 状態の自動保存 (brain_state.bin) と復元",
+    L"【電源を切ってもデータが消えない安心設計】\n"
+    L"・自動永続化機構:\n"
+    L"  ユーザーが登録した関数、計算履歴、変数、統計データ、作成したコード、\n"
+    L"  角度単位 (DEG/RAD) や複素数設定などは、アプリ終了時に\n"
+    L"  \"brain_state.bin\" にバイナリとして完全自動保存されます。\n"
+    L"・次回起動時の復元:\n"
+    L"  次回 Lilium を起動した際、前回終了時の状態を瞬時に復元。\n"
+    L"  電池切れや誤終了でも大切なデータが失われません。"
   }
 };
 
@@ -1450,66 +1681,12 @@ struct GuideCategoryDef {
   int count;
 };
 
-static constexpr GuideTopic kBrainfuckTopics[4] = {
-  {
-    L"1. 概要と概念",
-    L"1. BrainF*ckの概要とメモリモデル",
-    L"【極小のチューリング完全言語】\n\n"
-    L"1993年にUrban Müller氏によって考案された、世界で最も有名な難解プログラミング言語です。\n\n"
-    L"■ 基本の仕組み:\n"
-    L"・30,000バイトのメモリ配列（マス目）が一列に並んでいます。\n"
-    L"・今指しているマス目を「ポインタ」と呼びます。\n"
-    L"・使える命令はわずか8文字のみ。\n"
-    L"・他の文字（アルファベットや改行など）はすべて無視され、自由にコメントを書くことができます。"
-  },
-  {
-    L"2. 8つの命令一覧",
-    L"2. 8つの基本命令と動作",
-    L"【命令一覧（8種類すべて）】\n\n"
-    L" > : ポインタを右のマスへ進める\n"
-    L" < : ポインタを左のマスへ戻す\n"
-    L" + : 現在のマスの数値を +1 する\n"
-    L" - : 現在のマスの数値を -1 する\n"
-    L" . : 現在のマスの数値を文字として画面に出力（ASCII）\n"
-    L" , : キーボードから1文字入力してマスに格納\n"
-    L" [ : 現在のマスが0なら、対応する ] の次までジャンプ\n"
-    L" ] : 現在のマスが0以外なら、対応する [ の次まで戻る"
-  },
-  {
-    L"3. 出力の仕組み",
-    L"3. 文字出力とASCIIコード・ループ掛け算",
-    L"【文字出力の基本】\n\n"
-    L"コンピュータは文字を番号（ASCIIコード）で管理します。\n"
-    L"例: 65 = 'A',  72 = 'H',  10 = 改行\n\n"
-    L"■ ループによる掛け算テクニック:\n"
-    L"'+' を72回書く代わりに、掛け算を使います。\n"
-    L"8 × 9 = 72 を作るコード:\n"
-    L"  ++++++++         (マス0に 8 を代入)\n"
-    L"  [ > +++++++++ < - ] (マス0が0になるまでマス1に9加算)\n"
-    L"  > .              (マス1へ移動して 72='H' を出力!)\n\n"
-    L"このように [ と ] を使って効率的に文字を作ります。"
-  },
-  {
-    L"4. コード解説",
-    L"4. Hello, World! と入力方法",
-    L"【サンプルコードの解説】\n\n"
-    L"初期サンプル (sample.bf) は定番の 'Hello, World!' を出力します。\n"
-    L"マス0をカウンタにして、マス1・2・3・4に H, e, l, o などの近いコードを並列で準備し、微調整して出力しています。\n\n"
-    L"■ BrainCalcでの快適入力:\n"
-    L"12xモード時、中央キー列に8命令を集中配置!\n"
-    L"  [A]:>   [S]:<   [D]:+   [F]:-\n"
-    L"  [H]:.   [J]:,   [K]:[   [L]:]\n"
-    L"他の文字キーは誤入力を防ぐため無効化されています。\n"
-    L"手軽に超極限のコーディングをお楽しみください!"
-  }
-};
-
 static constexpr GuideCategoryDef kGuideCategories[kGuideCategoryCount] = {
-  { L"3Dグラフ", kPlot3DTopics, 14 },
-  { L"Python",   kPythonTopics,  8 },
-  { L"BASIC",    kBasicTopics,   8 },
-  { L"Logo",     kLogoTopics,    8 },
-  { L"BrainF*ck", kBrainfuckTopics, 4 },
+  { L"逆引き計算", kMathSolveTopics,    12 },
+  { L"基本アプリ", kAppFeaturesTopics,  8 },
+  { L"3Dグラフ",   kPlot3DTopics,        14 },
+  { L"コード言語", kCodingTopics,        6 },
+  { L"操作＆キー", kKeyboardTopics,      5 },
 };
 
 static bool sGuidePageDirty = false;
@@ -1525,10 +1702,10 @@ static constexpr int kGuidePaneW = 426;
 static constexpr int kGuidePaneH = kVisibleGuideRows * kGuideRowH; // 296
 
 static void renderLLCubicGuideTabs(HDC hdc) {
-  const int tabW = 150;
+  const int tabW = 132;
   const int tabH = kGuideTabH;
   const int gap = 8;
-  const int startX = kGuideDialogX + 48;
+  const int startX = kGuideDialogX + 14;
   const int tabY = kGuideTabY;
 
   SelectObject(hdc, sUiFontBold);
@@ -1604,7 +1781,7 @@ static void renderLLCubicGuideBase(HDC hdc) {
           RGB(242, 246, 248), RGB(216, 224, 232));
   SelectObject(hdc, sUiFontTiny);
   drawTextLine(hdc, kGuideDialogX + 24, footY + 15, 530, 18, RGB(70, 82, 96),
-               L"[←/→]: 言語切替   [↑/↓]: トピック選択   [Esc/戻る/F12]: 閉じる");
+               L"[←/→]: カテゴリ切替   [↑/↓]: 項目選択   [Esc/戻る/F12]: 閉じる");
 
   SelectObject(hdc, sUiFontBold);
   drawBox(hdc, kGuideDialogX + 576, footY + 7, 130, 34, RGB(79, 191, 175), RGB(40, 150, 135));
@@ -2295,15 +2472,21 @@ static void openKeyConfigModal() {
 static void openLLCubicGuideModal() {
   sModalMode = ModalMode::LLCubicGuide;
   if (sCodingEditorLang == 4) {
-    sGuideCategory = 4; // BrainF*ck
+    sGuideCategory = 3; // コード言語
+    sGuideSelectedIndex = 4; // BrainF*ck
   } else if (sCodingEditorLang == 1) {
-    sGuideCategory = 1; // Python
+    sGuideCategory = 3; // コード言語
+    sGuideSelectedIndex = 1; // Python
   } else if (sCodingEditorLang == 2) {
-    sGuideCategory = 2; // BASIC
+    sGuideCategory = 3; // コード言語
+    sGuideSelectedIndex = 2; // BASIC
   } else if (sCodingEditorLang == 3) {
-    sGuideCategory = 3; // Logo
+    sGuideCategory = 3; // コード言語
+    sGuideSelectedIndex = 3; // Logo
+  } else {
+    sGuideCategory = 0; // 逆引き計算
+    sGuideSelectedIndex = 0;
   }
-  sGuideSelectedIndex = 0;
   sGuideScrollOffset = 0;
   sLastGuideCategory = -1;
   sLastGuideSelectedIndex = -1;
@@ -2844,9 +3027,9 @@ bool handleModalClick(int x, int y) {
   if (sModalMode == ModalMode::LLCubicGuide) {
     // 1. カテゴリタブクリック
     if (y >= kGuideTabY && y < kGuideTabY + kGuideTabH) {
-      const int tabW = 150;
+      const int tabW = 132;
       const int gap = 8;
-      const int startX = kGuideDialogX + 48;
+      const int startX = kGuideDialogX + 14;
       for (int c = 0; c < kGuideCategoryCount; c++) {
         int tx = startX + c * (tabW + gap);
         if (x >= tx && x < tx + tabW) {
@@ -3420,6 +3603,7 @@ void draw() {
       // タブ切替・スクロール発生時のみ、リスト＆タブ領域の下地だけ部分再構築
       renderKeyConfigListAndTabsBase(sBackdropDC);
     } else if (sModalMode == ModalMode::LLCubicGuide && sGuidePageDirty) {
+      renderLLCubicGuideTabs(sBackdropDC);
       renderLLCubicGuideTocBase(sBackdropDC);
     }
 
