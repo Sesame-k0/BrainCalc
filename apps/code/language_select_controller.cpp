@@ -83,30 +83,34 @@ void LanguageSelectController::ContentView::drawRect(KDContext * ctx, KDRect rec
   if (m_secretMode) {
     // Secret BrainF*ck Mode
     const char * title = "=== SECRET LANGUAGE ===";
-    ctx->drawString(title, KDPoint(16, 8), KDFont::LargeFont, KDColor::RGB24(0xC43B3B), KDColorWhite);
+    KDCoordinate titleX = (bounds().width() - KDFont::LargeFont->stringSize(title).width()) / 2;
+    ctx->drawString(title, KDPoint(titleX, 8), KDFont::LargeFont, KDColor::RGB24(0xC43B3B), KDColorWhite);
 
-    // Single card in center
-    KDRect cardRect(12, 48, 296, 44);
+    // Single card in center (comfortable height 56px, vertical centering)
+    KDRect cardRect(12, 74, 296, 56);
     ctx->fillRect(cardRect, cardSelectedBg);
 
-    // 2px green border
-    ctx->fillRect(KDRect(cardRect.x(), cardRect.y(), cardRect.width(), 2), liliumGreen);
-    ctx->fillRect(KDRect(cardRect.x(), cardRect.bottom() - 2, cardRect.width(), 2), liliumGreen);
-    ctx->fillRect(KDRect(cardRect.x(), cardRect.y(), 2, cardRect.height()), liliumGreen);
-    ctx->fillRect(KDRect(cardRect.right() - 2, cardRect.y(), 2, cardRect.height()), liliumGreen);
+    // Content first
+    ctx->drawString("4. BrainF*ck", KDPoint(cardRect.x() + 10, cardRect.y() + 8), KDFont::LargeFont, liliumGreen, cardSelectedBg);
+    ctx->drawString("[.bf]", KDPoint(cardRect.right() - 48, cardRect.y() + 10), KDFont::SmallFont, liliumGreen, cardSelectedBg);
+    ctx->drawString("Minimal Turing-Complete 8-Op Language", KDPoint(cardRect.x() + 12, cardRect.y() + 30), KDFont::SmallFont, KDColor::RGB24(0x2B4F4A), cardSelectedBg);
 
-    ctx->drawString("4. BrainF*ck", KDPoint(cardRect.x() + 10, cardRect.y() + 6), KDFont::LargeFont, liliumGreen, cardSelectedBg);
-    ctx->drawString("[.bf]", KDPoint(cardRect.right() - 48, cardRect.y() + 7), KDFont::SmallFont, liliumGreen, cardSelectedBg);
-    ctx->drawString("Minimal Turing-Complete 8-Op Language", KDPoint(cardRect.x() + 12, cardRect.y() + 24), KDFont::SmallFont, KDColor::RGB24(0x2B4F4A), cardSelectedBg);
+    // 2px green border drawn over background
+    ctx->fillRect(KDRect(cardRect.x(), cardRect.y(), cardRect.width(), 2), liliumGreen);
+    ctx->fillRect(KDRect(cardRect.x(), cardRect.bottom() - 1, cardRect.width(), 2), liliumGreen);
+    ctx->fillRect(KDRect(cardRect.x(), cardRect.y(), 2, cardRect.height()), liliumGreen);
+    ctx->fillRect(KDRect(cardRect.right() - 1, cardRect.y(), 2, cardRect.height()), liliumGreen);
 
     const char * footer = "[Enter] OK  [Up/PgUp] Normal  [F12] Help";
-    ctx->drawString(footer, KDPoint(16, 146), KDFont::SmallFont, KDColor::RGB24(0x70777F), KDColorWhite);
+    KDCoordinate footerX = (bounds().width() - KDFont::SmallFont->stringSize(footer).width()) / 2;
+    ctx->drawString(footer, KDPoint(footerX, 196), KDFont::SmallFont, KDColor::RGB24(0x70777F), KDColorWhite);
     return;
   }
 
   // Normal 3-item mode
   const char * title = "=== SELECT LANGUAGE ===";
-  ctx->drawString(title, KDPoint(16, 8), KDFont::LargeFont, liliumGreen, KDColorWhite);
+  KDCoordinate titleX = (bounds().width() - KDFont::LargeFont->stringSize(title).width()) / 2;
+  ctx->drawString(title, KDPoint(titleX, 8), KDFont::LargeFont, liliumGreen, KDColorWhite);
 
   struct LangItem {
     const char * name;
@@ -121,42 +125,44 @@ void LanguageSelectController::ContentView::drawRect(KDContext * ctx, KDRect rec
   };
 
   for (int i = 0; i < 3; i++) {
-    int y = 26 + i * 39;
-    KDRect cardRect(12, y, 296, 33);
+    int y = 30 + i * 54;
+    KDRect cardRect(12, y, 296, 46);
     bool isSel = (i == m_selectedIndex);
 
     KDColor bg = isSel ? cardSelectedBg : cardBg;
     ctx->fillRect(cardRect, bg);
 
+    // Name & Tag
+    KDColor nameColor = isSel ? liliumGreen : KDColor::RGB24(0x242A30);
+    KDColor tagColor = isSel ? liliumGreen : KDColor::RGB24(0x888888);
+    ctx->drawString(items[i].name, KDPoint(cardRect.x() + 10, cardRect.y() + 5), KDFont::LargeFont, nameColor, bg);
+    ctx->drawString(items[i].tag, KDPoint(cardRect.right() - 48, cardRect.y() + 7), KDFont::SmallFont, tagColor, bg);
+
+    // Description
+    KDColor descColor = isSel ? KDColor::RGB24(0x2B4F4A) : KDColor::RGB24(0x666666);
+    ctx->drawString(items[i].desc, KDPoint(cardRect.x() + 12, cardRect.y() + 25), KDFont::SmallFont, descColor, bg);
+
+    // Draw borders AFTER text to ensure clean crisp edges
     if (isSel) {
       // 2px green border
       ctx->fillRect(KDRect(cardRect.x(), cardRect.y(), cardRect.width(), 2), liliumGreen);
-      ctx->fillRect(KDRect(cardRect.x(), cardRect.bottom() - 2, cardRect.width(), 2), liliumGreen);
+      ctx->fillRect(KDRect(cardRect.x(), cardRect.bottom() - 1, cardRect.width(), 2), liliumGreen);
       ctx->fillRect(KDRect(cardRect.x(), cardRect.y(), 2, cardRect.height()), liliumGreen);
-      ctx->fillRect(KDRect(cardRect.right() - 2, cardRect.y(), 2, cardRect.height()), liliumGreen);
+      ctx->fillRect(KDRect(cardRect.right() - 1, cardRect.y(), 2, cardRect.height()), liliumGreen);
     } else {
       // 1px subtle gray border
       KDColor border = KDColor::RGB24(0xD0D7DE);
       ctx->fillRect(KDRect(cardRect.x(), cardRect.y(), cardRect.width(), 1), border);
-      ctx->fillRect(KDRect(cardRect.x(), cardRect.bottom() - 1, cardRect.width(), 1), border);
+      ctx->fillRect(KDRect(cardRect.x(), cardRect.bottom(), cardRect.width(), 1), border);
       ctx->fillRect(KDRect(cardRect.x(), cardRect.y(), 1, cardRect.height()), border);
-      ctx->fillRect(KDRect(cardRect.right() - 1, cardRect.y(), 1, cardRect.height()), border);
+      ctx->fillRect(KDRect(cardRect.right(), cardRect.y(), 1, cardRect.height()), border);
     }
-
-    // Name & Tag
-    KDColor nameColor = isSel ? liliumGreen : KDColor::RGB24(0x242A30);
-    KDColor tagColor = isSel ? liliumGreen : KDColor::RGB24(0x888888);
-    ctx->drawString(items[i].name, KDPoint(cardRect.x() + 10, cardRect.y() + 4), KDFont::LargeFont, nameColor, bg);
-    ctx->drawString(items[i].tag, KDPoint(cardRect.right() - 48, cardRect.y() + 5), KDFont::SmallFont, tagColor, bg);
-
-    // Description
-    KDColor descColor = isSel ? KDColor::RGB24(0x2B4F4A) : KDColor::RGB24(0x666666);
-    ctx->drawString(items[i].desc, KDPoint(cardRect.x() + 12, cardRect.y() + 18), KDFont::SmallFont, descColor, bg);
   }
 
-  // Footer instructions (comfortably placed at y=198 with 24px bottom clearance)
+  // Footer instructions (comfortably placed at y=196, perfectly centered with ample margins)
   const char * footer = "[Up/Dn] Select  [Enter] OK  [F12] Help";
-  ctx->drawString(footer, KDPoint(16, 148), KDFont::SmallFont, KDColor::RGB24(0x70777F), KDColorWhite);
+  KDCoordinate footerX = (bounds().width() - KDFont::SmallFont->stringSize(footer).width()) / 2;
+  ctx->drawString(footer, KDPoint(footerX, 196), KDFont::SmallFont, KDColor::RGB24(0x70777F), KDColorWhite);
 }
 
 LanguageSelectController::LanguageSelectController(Responder * parentResponder, ViewController * nextController) :
