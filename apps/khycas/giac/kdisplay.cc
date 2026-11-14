@@ -1998,9 +1998,7 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
     return "";
   }
 
-#if 0 // def NUMWORKS
 #define MENUITEM_MALLOC
-#endif
 
   // 0 on exit, 1 on success
   int doCatalogMenu(char* insertText, const char* title, int category,GIAC_CONTEXT) {
@@ -2105,12 +2103,12 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
 	if (sres==KEY_CTRL_F4 && category!=CAT_CATEGORY_ALL){
 	  break;
 	}
-	if(sres == MENU_RETURN_EXIT){
+	if(sres == MENU_RETURN_EXIT || sres == KEY_SHUTDOWN){
 	  reset_kbd();
 #ifdef MENUITEM_MALLOC
 	  free(menuitems);
 #endif
-	  return sres;
+	  return 0;
 	}
 	int index=menuitems[menu.selection-1].isfolder;
 	if(sres == KEY_CTRL_CATALOG || sres==KEY_BOOK) {
@@ -10311,11 +10309,9 @@ namespace xcas {
       gr.must_redraw=true;
       gr.precision=saveprec;
       if (!hp){
-#ifdef NUMWORKS
-	os_draw_string(0,LCD_HEIGHT_PX-STATUS_AREA_PX-17,COLOR_BLACK,COLOR_WHITE,"home: cfg");
-#else
-	os_draw_string(0,LCD_HEIGHT_PX-STATUS_AREA_PX-17,COLOR_BLACK,COLOR_WHITE,"doc: cfg");
-#endif
+	drawRectangle(0, 222 - 14, LCD_WIDTH_PX, 14, COLOR_WHITE);
+	os_draw_string_small(2, 222 - 13, COLOR_BLACK, COLOR_WHITE,
+			     "Arrows:pan +-:zoom F1:cfg EXE/ESC:quit", false);
       }
       int key=-1;
       GetKey(&key);
@@ -10690,7 +10686,7 @@ namespace xcas {
 	continue;
       }      
 
-      if (key==KEY_CTRL_MENU || key==KEY_CTRL_F6){
+      if (key==KEY_CTRL_MENU || key==KEY_CTRL_F6 || (!hp && key==KEY_CTRL_CATALOG)){
 	char menu_xmin[32],menu_xmax[32],menu_ymin[32],menu_ymax[32],menu_zmin[32],menu_zmax[32],menu_depth[32];
 	for (;;){
 	  string s;
@@ -10878,7 +10874,7 @@ namespace xcas {
 	update_g();
 	continue;
       }
-      if (key==KEY_CTRL_EXIT || key==KEY_CTRL_OK){
+      if (key==KEY_CTRL_EXIT || key==KEY_CTRL_OK || (!hp && key==KEY_CTRL_EXE)){
 	os_hide_graph();
 	return key;
       }
@@ -11342,7 +11338,7 @@ namespace xcas {
       if (key==KEY_SHUTDOWN)
 	return undef;
       bool alph=alphawasactive(&key);
-      if (key==KEY_CTRL_OK || key==KEY_CTRL_MENU){
+      if (key==KEY_CTRL_OK || key==KEY_CTRL_MENU || (!editable && key==KEY_CTRL_EXE)){
 	os_hide_graph();
 	if (edited && xcas::do_select(eq.data,true,value) && value.type==_EQW){
 	  //cout << "ok " << value._EQWptr->g << endl;
@@ -16940,61 +16936,15 @@ namespace xcas {
     }
 #endif
     if (!load_console_state_smem(filename.c_str(),contextptr)){
-#ifdef NUMWORKS
-      if (confirm("OK: Francais, Back: English","set_language(1|0)")==KEY_CTRL_F6)
-	lang=0;
+      lang = 0;
+      xcas_python_eval = 0;
+      python_compat(1,contextptr);
+      // fake lexer required to initialize color syntax
+      gen g("abs",contextptr);
       Bdisp_AllClr_VRAM();
-#endif
-      int x=0,y=0;
-      PrintMini(x,y,"KhiCAS 1.6 (c) 2020 B. Parisse",TEXT_MODE_NORMAL, COLOR_BLACK, COLOR_WHITE);
-      y +=18;
-      PrintMini(x,y,"et al, License GPL 2",TEXT_MODE_NORMAL,COLOR_BLACK, COLOR_WHITE);
-      y += 18;
-#ifdef NSPIRE_NEWLIB
-      PrintMini(x,y,((lang==1)?"Taper menu plusieurs fois":"Type menu several times"),TEXT_MODE_NORMAL,COLOR_BLACK, COLOR_WHITE);
-#else
-      PrintMini(x,y,((lang==1)?"Taper HOME plusieurs fois":"Type HOME several times"),TEXT_MODE_NORMAL,COLOR_BLACK, COLOR_WHITE);
-#endif
-      y += 18;
-      PrintMini(x,y,((lang==1)?"pour quitter KhiCAS.":"to leave KhiCAS."),TEXT_MODE_NORMAL,COLOR_BLACK, COLOR_WHITE);
-      y += 18;
-      PrintMini(x,y,(lang==1)?"Si le calcul formel est interdit":"If CAS is forbidden!",TEXT_MODE_NORMAL, COLOR_RED, COLOR_WHITE);
-      y += 18;
-#ifdef NSPIRE_NEWLIB
-      PrintMini(x,y,(lang==1)?"quittez Khicas (doc doc doc)":"Leave Khicas (doc doc doc)",TEXT_MODE_NORMAL, COLOR_RED, COLOR_WHITE);
-      if (confirm("Interpreter? enter: Xcas, esc: MicroPython",(lang==1?"Peut se modifier depuis menu configuration":"May be changed later from menu configuration"),false,130)==KEY_CTRL_F6){
-	python_compat(4,contextptr);
-	xcas_python_eval=1;
-	*logptr(contextptr) << "Micropython interpreter\n";
-	Console_FMenu_Init(contextptr);
-      }
-      else {
-	python_compat(1,contextptr);
-	*logptr(contextptr) << "Xcas interpreter, Python compatible mode\n";
-      }
-#else
-      PrintMini(x,y,(lang==1)?"quittez Khicas (HOME HOME HOME)":"Leave Khicas (HOME HOME HOME)",TEXT_MODE_NORMAL, COLOR_RED, COLOR_WHITE);
-      if (confirm("Interpreter? OK: Xcas, Back: MicroPython",(lang==1?"Peut se modifier depuis menu configuration":"May be changed later from menu configuration"),false,130)==KEY_CTRL_F6){
-	python_compat(4,contextptr);
-	xcas_python_eval=1;
-	*logptr(contextptr) << "Micropython interpreter\n";
-	Console_FMenu_Init(contextptr);
-      }
-      else {
-	python_compat(1,contextptr);
-	// fake lexer required to initialize color syntax
-	gen g("abs",contextptr);
-	*logptr(contextptr) << "Xcas interpreter, Python compatible mode\n";
-      }
-#endif
-      Bdisp_AllClr_VRAM();
-#if defined GIAC_SHOWTIME || defined NSPIRE_NEWLIB
-      Console_Output("Reglage de l'heure, exemple");
-      Console_NewLine(LINE_TYPE_OUTPUT, 1);          
-      Console_Output("12,37=>,");
+      Console_Output("KhiCAS: factor(x^2-1) [EXE]");
       Console_NewLine(LINE_TYPE_OUTPUT, 1);
-#endif
-      //menu_about();
+      Console_Disp(1,contextptr);
       return 0;
     }
     return 1;
@@ -17706,13 +17656,16 @@ namespace xcas {
       }
       if (key == KEY_CTRL_EXIT){
 	if (Last_Line==Current_Line){
-	  if (!edptr)
-	    edit_script((char *)(giac::remove_extension(session_filename)+".py").c_str(),contextptr);
-	  else {
-	    edptr->y=0;
-	    doTextArea(edptr,contextptr);
+	  if (Edit_Line && Edit_Line[0] != '\0'){
+	    Edit_Line[0] = '\0';
+	    Line[Current_Line].start_col = 0;
+	    Line[Current_Line].type = LINE_TYPE_INPUT;
+	    Line[Current_Line].disp_len = 0;
+	    Cursor.x = 0;
+	    Console_Disp(1,contextptr);
+	    return CONSOLE_SUCCEEDED;
 	  }
-	  Console_Disp(1,contextptr);
+	  return KEY_SHUTDOWN;
 	}
 	else {
 	  move_line = Last_Line - Current_Line;
@@ -17978,7 +17931,7 @@ namespace xcas {
       PrintMini(3+position_x+quick_len*4,box.bottom-7*selector, entries[selector], 4);
       GetKey(&input_key);
       if (input_key==KEY_PRGM_ACON) Console_Disp(1,0);
-      if (input_key == KEY_CTRL_EXIT || input_key==KEY_CTRL_AC) return 0;
+      if (input_key == KEY_CTRL_EXIT || input_key==KEY_CTRL_AC || input_key == KEY_SHUTDOWN) return 0;
       if (input_key == KEY_CTRL_UP && selector < nb_entries-1) selector++;	
       if (input_key == KEY_CTRL_DOWN && selector > 0) selector--;
       
@@ -18459,21 +18412,10 @@ namespace xcas {
     if ((redraw_mode & 1)==1){
       for (; (i < LINE_DISP_MAX) ; i++)
 	drawRectangle(0,i*vfontsize,LCD_WIDTH_PX,vfontsize,_WHITE);
-#if 0 // def NUMWORKS
-      string menu("shift-Ans help|1 ");
-#else
-      string menu("shift-1 ");
-#endif
-      menu += string(menu_f1);
-      menu += "|2 ";
-      menu += string(menu_f2);
-      menu += "|3 ";
-      menu += string(menu_f3);
-      menu += xcas_python_eval==1?"|4 edt|5 2d|6 logo|7 lin|8 matr|9arit|0 plt":"|4 edt|5 2d|6 regr|7 matr|8 cplx|9 arit|0 rand";
       int xcas_color=65055,python_color=52832,js_color=63048;
       int interp_color=xcas_python_eval==-1?js_color:(xcas_python_eval==1?python_color:xcas_color);
       drawRectangle(0,205,LCD_WIDTH_PX,17,interp_color);
-      PrintMiniMini(0,205,menu.c_str(),0,giac::_BLACK,interp_color);
+      os_draw_string_small(2, 207, _BLACK, interp_color, "F1:Cmds  F9:Vars  F4:Clear  HOME/ESC:Exit", false);
     }
   
     // status, clock,

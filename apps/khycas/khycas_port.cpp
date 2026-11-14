@@ -10,6 +10,24 @@
 #include <ion/timing.h>
 #include <kandinsky/ion_context.h>
 #include <kandinsky/font.h>
+#include <escher/palette.h>
+
+namespace Ion {
+namespace Simulator {
+namespace Main { void refresh(); }
+namespace Keyboard {
+  bool isTerminationRequested();
+  void requestTermination();
+}
+}
+}
+
+static inline KDContext * resetContext() {
+  KDContext * ctx = KDIonContext::sharedContext();
+  ctx->setOrigin(KDPointZero);
+  ctx->setClippingRect(KDRect(0, 0, Ion::Display::Width, Ion::Display::Height));
+  return ctx;
+}
 
 extern "C" {
 
@@ -23,6 +41,7 @@ bool inexammode() {
 }
 
 void sync_screen() {
+  Ion::Simulator::Main::refresh();
 }
 
 double millis() {
@@ -55,7 +74,7 @@ bool write_file(const char * filename, const char * content, size_t len) {
 int numworks_draw_string(int x, int y, int c, int bg, const char * text, bool fake) {
   if (!text) return x;
   if (!fake) {
-    KDIonContext::sharedContext()->drawString(
+    resetContext()->drawString(
       text,
       KDPoint(x, y + 18),
       KDFont::LargeFont,
@@ -69,7 +88,7 @@ int numworks_draw_string(int x, int y, int c, int bg, const char * text, bool fa
 int numworks_draw_string_small(int x, int y, int c, int bg, const char * text, bool fake) {
   if (!text) return x;
   if (!fake) {
-    KDIonContext::sharedContext()->drawString(
+    resetContext()->drawString(
       text,
       KDPoint(x, y + 18),
       KDFont::SmallFont,
@@ -88,7 +107,7 @@ void numworks_set_pixel(int x, int y, int color) {
   if (x < 0 || x >= Ion::Display::Width || y < 0 || y >= Ion::Display::Height - 18) {
     return;
   }
-  KDIonContext::sharedContext()->setPixel(KDPoint(x, y + 18), KDColor::RGB16((uint16_t)color));
+  resetContext()->setPixel(KDPoint(x, y + 18), KDColor::RGB16((uint16_t)color));
 }
 
 void numworks_fill_rect(int x, int y, int w, int h, int c) {
@@ -109,7 +128,7 @@ void numworks_fill_rect(int x, int y, int w, int h, int c) {
   if (h <= 0 || w <= 0) {
     return;
   }
-  KDIonContext::sharedContext()->fillRect(KDRect(x, y + 18, w, h), KDColor::RGB16((uint16_t)c));
+  resetContext()->fillRect(KDRect(x, y + 18, w, h), KDColor::RGB16((uint16_t)c));
 }
 
 int numworks_get_pixel(int x, int y) {
@@ -117,7 +136,7 @@ int numworks_get_pixel(int x, int y) {
     return 0;
   }
   KDColor pixel = KDColorBlack;
-  KDIonContext::sharedContext()->getPixel(KDPoint(x, y), &pixel);
+  resetContext()->getPixel(KDPoint(x, y), &pixel);
   return (uint16_t)pixel;
 }
 
@@ -162,15 +181,17 @@ void numworks_show_graph() {
 
 void statuslinemsg(const char * msg) {
   if (!msg) return;
-  KDColor headerBg = KDColor::RGB24(0x005577);
-  KDIonContext::sharedContext()->fillRect(KDRect(0, 0, Ion::Display::Width, 18), headerBg);
-  KDIonContext::sharedContext()->drawString(
+  KDContext * ctx = resetContext();
+  KDColor headerBg = Palette::Toolbar;
+  ctx->fillRect(KDRect(0, 0, Ion::Display::Width, 18), headerBg);
+  ctx->drawString(
     msg,
     KDPoint(2, 2),
     KDFont::SmallFont,
-    KDColorWhite,
+    Palette::ToolbarText,
     headerBg
   );
+  sync_screen();
 }
 
 void statusline(int mode) {
@@ -236,29 +257,54 @@ void khycas_request_exit() {
 }
 
 int getkey(int allow_suspend) {
-  if (s_khycas_should_exit) {
-    s_khycas_should_exit = false;
-    return KEY_CTRL_EXIT;
-  }
-  int timeout = 1000;
-  Ion::Events::Event e = Ion::Events::getEvent(&timeout);
-  if (e == Ion::Events::None) {
-    return 0;
-  }
-  if (e == Ion::Events::Home) {
-    return KEY_CTRL_EXIT;
-  }
-  uint8_t id = (uint8_t)e;
-  if (id >= sizeof(translated_keys) / sizeof(translated_keys[0])) {
-    return 0;
-  }
-  // Workaround to make shift-number work (from main.cpp)
-  if (id >= 30 && id <= 52) { // seven to exe
-    if (Ion::Keyboard::scan().keyDown(Ion::Keyboard::Key::Shift)) {
-      id += 54;
+  while (true) {
+    if (Ion::Simulator::Keyboard::isTerminationRequested()) {
+      shutdown_state = 1;
+      return KEY_SHUTDOWN;
     }
+    if (s_khycas_should_exit) {
+      s_khycas_should_exit = false;
+      shutdown_state = 1;
+      return KEY_SHUTDOWN;
+    }
+    int timeout = 1000;
+    Ion::Events::Event e = Ion::Events::getEvent(&timeout);
+    if (e == Ion::Events::Termination || Ion::Simulator::Keyboard::isTerminationRequested()) {
+      shutdown_state = 1;
+      return KEY_SHUTDOWN;
+    }
+    if (e == Ion::Events::Home || s_khycas_should_exit) {
+      s_khycas_should_exit = false;
+      shutdown_state = 1;
+      return KEY_SHUTDOWN;
+    }
+    if (e == Ion::Events::None) {
+      return 0;
+    }
+    if (e == Ion::Events::ExternalText) {
+      const char * t = e.text();
+      if (t) {
+        if (strcmp(t, "\xe2\x84\xaf") == 0) {
+          return KEY_CHAR_EXP;
+        }
+        if (t[0] != '\0' && t[1] == '\0') {
+          return (unsigned char)t[0];
+        }
+      }
+      continue;
+    }
+    uint8_t id = (uint8_t)e;
+    if (id >= sizeof(translated_keys) / sizeof(translated_keys[0])) {
+      return 0;
+    }
+    // Workaround to make shift-number work (from main.cpp)
+    if (id >= 30 && id <= 52) { // seven to exe
+      if (Ion::Keyboard::scan().keyDown(Ion::Keyboard::Key::Shift)) {
+        id += 54;
+      }
+    }
+    return translated_keys[id];
   }
-  return translated_keys[id];
 }
 
 void GetKey(int * key) {

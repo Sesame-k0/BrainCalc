@@ -6,6 +6,15 @@ extern "C" int ext_main();
 extern "C" void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8);
 extern "C" void BrainLog(const char * step);
 extern "C" void BrainLogText(const char * step, const char * detail);
+extern "C" short int shutdown_state;
+
+namespace Ion {
+namespace Simulator {
+namespace Keyboard {
+  bool isTerminationRequested();
+}
+}
+}
 
 namespace Khycas {
 
@@ -51,12 +60,22 @@ void KhycasController::viewWillAppear() {
 }
 
 bool KhycasController::handleEvent(Ion::Events::Event event) {
-  if (event == Ion::Events::Back) {
-    return false; // propagate to exit app
+  if (event == Ion::Events::Back || event == Ion::Events::Home) {
+    AppsContainer * container = AppsContainer::sharedAppsContainer();
+    container->switchTo(container->appSnapshotAtIndex(0));
+    container->redrawWindow(true);
+    return true;
   }
   if (event == Ion::Events::OK || event == Ion::Events::EXE) {
+    shutdown_state = 0;
     ext_main();
-    viewWillAppear();
+    shutdown_state = 0;
+    if (Ion::Simulator::Keyboard::isTerminationRequested()) {
+      return false;
+    }
+    AppsContainer * container = AppsContainer::sharedAppsContainer();
+    container->switchTo(container->appSnapshotAtIndex(0));
+    container->redrawWindow(true);
     return true;
   }
   return false;

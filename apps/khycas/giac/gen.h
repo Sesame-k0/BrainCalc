@@ -911,11 +911,12 @@ namespace giac {
 
 
 #ifdef SMARTPTR64
-#define define_alias_gen(name,type,subtype,ptr) alias_gen name={(ulonglong(ptr) << 16) | (subtype << 8) | type };
-#define define_alias_ref_symbolic(name,sommet,type,subtype,ptr) alias_ref_symbolic name={-1,(unary_function_eval *)sommet,(ulonglong(ptr) << 16) | (subtype << 8) | type};
-#define define_alias_ref_fraction(name,numtype,numsubtype,numptr,dentype,densubtype,denptr) alias_ref_fraction name={-1,{(ulonglong(numptr) << 16) | (numsubtype << 8) | numtype },{(ulonglong(denptr) << 16) | (densubtype << 8) | dentype }};
-#define define_alias_ref_complex(name,retype,resubtype,reptr,imtype,imsubtype,imptr) alias_ref_complex name={-1,0,{(ulonglong(reptr) << 16) | (resubtype << 8) | retype },{(ulonglong(imptr) << 16) | (imsubtype << 8) | imtype }};
-#define define_tab2_alias_gen(name,retype,resubtype,reptr,imtype,imsubtype,imptr) alias_gen name[]={{(ulonglong(reptr) << 16) | (resubtype << 8) | retype },{(ulonglong(imptr) << 16) | (imsubtype << 8) | imtype }};
+#define pack_alias_gen(type,subtype,ptr) (((type)==_INT_ ? (ulonglong((unsigned int)(int)(longlong)(ptr)) << 32) : (ulonglong(ptr) << 16)) | (ulonglong((unsigned char)(subtype)) << 8) | ulonglong((unsigned char)(type)))
+#define define_alias_gen(name,type,subtype,ptr) alias_gen name={pack_alias_gen(type,subtype,ptr)};
+#define define_alias_ref_symbolic(name,sommet,type,subtype,ptr) alias_ref_symbolic name={-1,(unary_function_eval *)sommet,pack_alias_gen(type,subtype,ptr)};
+#define define_alias_ref_fraction(name,numtype,numsubtype,numptr,dentype,densubtype,denptr) alias_ref_fraction name={-1,{pack_alias_gen(numtype,numsubtype,numptr)},{pack_alias_gen(dentype,densubtype,denptr)}};
+#define define_alias_ref_complex(name,retype,resubtype,reptr,imtype,imsubtype,imptr) alias_ref_complex name={-1,0,{pack_alias_gen(retype,resubtype,reptr)},{pack_alias_gen(imtype,imsubtype,imptr)}};
+#define define_tab2_alias_gen(name,retype,resubtype,reptr,imtype,imsubtype,imptr) alias_gen name[]={{pack_alias_gen(retype,resubtype,reptr)},{pack_alias_gen(imtype,imsubtype,imptr)}};
 #else // SMARTPTR64
 #ifdef DOUBLEVAL
 #define define_alias_gen(name,type,subtype,ptr) alias_gen name={type,subtype,0,ulonglong(ptr)};
