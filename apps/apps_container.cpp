@@ -15,6 +15,7 @@ extern "C" {
 void BrainLog(const char * step);
 void BrainLogText(const char * step, const char * detail);
 void BrainLogInt(const char * step, int value);
+void BrainClearCustomHelp();
 }
 
 using namespace Poincare;
@@ -327,6 +328,8 @@ bool AppsContainer::switchTo(App::Snapshot * snapshot) {
   }
   if (s_activeApp && snapshot != s_activeApp->snapshot()) {
     resetShiftAlphaStatus();
+    // Clear any app-specific sidebar custom help before switching apps
+    BrainClearCustomHelp();
   }
   if (snapshot == hardwareTestAppSnapshot() || snapshot == onBoardingAppSnapshot()) {
     m_window.hideTitleBarView(true);

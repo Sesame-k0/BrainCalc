@@ -1293,7 +1293,7 @@ static constexpr GuideTopic kMathSolveTopics[12] = {
 };
 
 // --- カテゴリ 1: 基本アプリ (Lilium 標準アプリ全集) ---
-static constexpr GuideTopic kAppFeaturesTopics[9] = {
+static constexpr GuideTopic kAppFeaturesTopics[10] = {
   {
     L"1. Calculation (計算)",
     L"1. Calculation - 2D自然表示関数電卓",
@@ -1383,23 +1383,35 @@ static constexpr GuideTopic kAppFeaturesTopics[9] = {
     L"・理工系・プログラミングの数式評価アルゴリズムの理解にも役立ちます。"
   },
   {
-    L"9. KhyCAS (数式処理CAS)",
-    L"9. KhyCAS - Giac/Xcas 記号数式処理エンジン",
-    L"【アプリの概要】\n"
-    L"世界最高峰のオープンソース数式処理系 Giac/Xcas を移植した CAS アプリです。\n"
-    L"数値近似ではなく、文字 x, y, a を含んだまま厳密な式変形を行います。\n\n"
-    L"【頻出コマンド一覧 (対話シェル内で入力)】\n"
+    L"9. KhyCAS (操作ガイド)",
+    L"9. KhyCAS - 操作・キー入力ガイド",
+    L"【アプリの概要と起動】\n"
+    L"記号数式処理系 Giac/Xcas を移植した CAS アプリです。\n"
+    L"起動画面で [Enter / F3] を押すと対話シェルを開始。\n\n"
+    L"【シェル内のキー操作】\n"
+    L"・[F2]: 12x(数式) / abc(英字) / ABC 入力切替\n"
+    L"・[F1]: Cmds (関数メニュー)  [F9]: Vars (変数)\n"
+    L"・[F4]: Clear (消去)  [PgUp/PgDn]: ( / )\n"
+    L"・[Enter/F3]: 式評価・実行 (履歴再編集/EQW)\n"
+    L"・[ESC/戻る]: 入力消去 / 空行でホームへ戻る\n"
+    L"・[F10/HOME]: いつでもホーム画面へ戻る\n"
+    L"※ [12x]標準配列で ^, x, √, e, i, π, log, =, () 入力可"
+  },
+  {
+    L"10. KhyCAS (コマンド)",
+    L"10. KhyCAS - 頻出 CAS コマンド一覧",
+    L"【数式変形・代数・方程式】\n"
     L"・factor(x^4-1) : 因数分解 → (x-1)*(x+1)*(x^2+1)\n"
-    L"・expand((x+y)^3) : 展開 → x^3+3*x^2*y+3*x*y^2+y^3\n"
+    L"・expand((x+y)^3) : 多項式・三角関数の展開\n"
     L"・partfrac(1/(x^2-1)) : 部分分数分解\n"
-    L"・solve(x^2-a*x+2=0, x) : 記号係数を含む方程式の厳密解\n"
-    L"・diff(sin(x)*exp(x), x) : 導関数 (記号微分)\n"
-    L"・int(1/(x^2+1), x) : 不定積分 → atan(x) (定積分は int(式,x,a,b))\n"
-    L"・limit(sin(x)/x, x, 0) : 極限値計算 → 1\n"
-    L"・series(sin(x), x=0, 5) : テイラー展開・マクローリン展開\n"
-    L"・desolve(y'+2*y=exp(x), x, y) : 微分方程式の一般解・特殊解\n"
-    L"・plot(sin(x), x) / plot3d(x^2-y^2, [x,y]) : 2D / 3D グラフ描画\n"
-    L"・det(A), inv(A), egv(A), egvl(A) : 行列式・逆行列・固有ベクトル・固有値"
+    L"・solve(x^2-a*x+2=0, x) : 記号係数方程式の解\n\n"
+    L"【微分・積分・極限・級数・グラフ・行列】\n"
+    L"・diff(sin(x)*exp(x), x) : 記号微分 (導関数)\n"
+    L"・int(1/(x^2+1), x) : 積分 (定積分は x,a,b)\n"
+    L"・limit(sin(x)/x, x, 0) : 極限計算 → 1\n"
+    L"・series(sin(x), x=0, 5) : テイラー展開\n"
+    L"・desolve(y'+2*y=exp(x), x, y) : 微分方程式\n"
+    L"・plot(sin(x),x) / plot3d / det, inv, egvl"
   }
 };
 
@@ -1770,7 +1782,7 @@ struct GuideCategoryDef {
 
 static constexpr GuideCategoryDef kGuideCategories[kGuideCategoryCount] = {
   { L"逆引き計算", kMathSolveTopics,    12 },
-  { L"基本アプリ", kAppFeaturesTopics,  9 },
+  { L"基本アプリ", kAppFeaturesTopics,  10 },
   { L"3Dグラフ",   kPlot3DTopics,        14 },
   { L"コード言語", kCodingTopicsNormal,  5 },
   { L"操作＆キー", kKeyboardTopics,      5 },
@@ -3910,7 +3922,11 @@ void setCustomHelp(const char * titleUtf8, const char * descUtf8) {
 }
 
 void clearCustomHelp() {
-  sHasCustomHelp = false;
+  if (sHasCustomHelp) {
+    sHasCustomHelp = false;
+    sSidebarDirty = true;
+    Simulator::Main::setNeedsRefresh();
+  }
 }
 
 }

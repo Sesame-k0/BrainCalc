@@ -3,7 +3,8 @@
 
 extern "C" const char * caseval(const char *);
 extern "C" int ext_main();
-extern "C" void BrainNotifyCustomHelp(const char * titleUtf8, const char * descUtf8);
+extern "C" void BrainClearCustomHelp();
+extern "C" void khycas_reset_status_cache();
 extern "C" void BrainLog(const char * step);
 extern "C" void BrainLogText(const char * step, const char * detail);
 extern "C" short int shutdown_state;
@@ -40,22 +41,9 @@ void KhycasController::viewWillAppear() {
   AppsContainer::sharedAppsContainer()->redrawWindow(true);
   BrainLog("KhycasController::viewWillAppear redraw done");
 
-  // Notify Japanese help sidebar
-  BrainNotifyCustomHelp(
-    "KhyCAS (数式処理CAS)",
-    "Giac/Xcas 数式処理エンジン。\n"
-    "【主要コマンド】\n"
-    "・factor(式) : 因数分解\n"
-    "・expand(式) : 式の展開\n"
-    "・solve(式=0,x) : 方程式求解\n"
-    "・diff(式,x) : 導関数(微分)\n"
-    "・int(式,x) : 不定・定積分\n"
-    "・limit(式,x,a) : 極限計算\n"
-    "・desolve(微分方程式,y) : 常微分\n"
-    "・plot(式,x) / plot3d(式) : 描画\n"
-    "【OK/Enter】対話CASシェル起動\n"
-    "【F1】関数カタログ 【Back】戻る"
-  );
+  // Keep standard keyboard layout guide visible in the right sidebar (KhyCAS help is in F12 manual)
+  BrainClearCustomHelp();
+  khycas_reset_status_cache();
   BrainLog("KhycasController::viewWillAppear complete");
 }
 

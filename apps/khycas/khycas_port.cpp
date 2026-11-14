@@ -18,6 +18,7 @@ namespace Main { void refresh(); }
 namespace Keyboard {
   bool isTerminationRequested();
   void requestTermination();
+  bool hasPendingEvent();
 }
 }
 }
@@ -41,7 +42,10 @@ bool inexammode() {
 }
 
 void sync_screen() {
-  Ion::Simulator::Main::refresh();
+  // Coalesce screen blits when another input event is already queued
+  if (!Ion::Simulator::Keyboard::hasPendingEvent()) {
+    Ion::Simulator::Main::refresh();
+  }
 }
 
 double millis() {
@@ -179,8 +183,23 @@ void numworks_hide_graph() {
 void numworks_show_graph() {
 }
 
+static char s_last_status_msg[160] = "";
+static bool s_status_valid = false;
+
+void khycas_reset_status_cache() {
+  s_last_status_msg[0] = '\0';
+  s_status_valid = false;
+}
+
 void statuslinemsg(const char * msg) {
   if (!msg) return;
+  if (s_status_valid && strncmp(msg, s_last_status_msg, sizeof(s_last_status_msg) - 1) == 0) {
+    return;
+  }
+  strncpy(s_last_status_msg, msg, sizeof(s_last_status_msg) - 1);
+  s_last_status_msg[sizeof(s_last_status_msg) - 1] = '\0';
+  s_status_valid = true;
+
   KDContext * ctx = resetContext();
   KDColor headerBg = Palette::Toolbar;
   ctx->fillRect(KDRect(0, 0, Ion::Display::Width, 18), headerBg);
@@ -254,9 +273,21 @@ static bool s_khycas_should_exit = false;
 
 void khycas_request_exit() {
   s_khycas_should_exit = true;
+  khycas_reset_status_cache();
 }
 
 int getkey(int allow_suspend) {
+  // Handle iskeydown(key) bitmask calls cleanly without blocking or returning KEY_CTRL_LEFT (0)
+  if ((static_cast<uint32_t>(allow_suspend) & 0x80000000u) != 0) {
+    int queryKey = allow_suspend & 0x7fffffff;
+    Ion::Keyboard::State scan = Ion::Keyboard::scan();
+    if (queryKey == KEY_CTRL_LEFT)  return scan.keyDown(Ion::Keyboard::Key::Left) ? 1 : 0;
+    if (queryKey == KEY_CTRL_RIGHT) return scan.keyDown(Ion::Keyboard::Key::Right) ? 1 : 0;
+    if (queryKey == KEY_CTRL_UP)    return scan.keyDown(Ion::Keyboard::Key::Up) ? 1 : 0;
+    if (queryKey == KEY_CTRL_DOWN)  return scan.keyDown(Ion::Keyboard::Key::Down) ? 1 : 0;
+    return 0;
+  }
+
   while (true) {
     if (Ion::Simulator::Keyboard::isTerminationRequested()) {
       shutdown_state = 1;
@@ -278,8 +309,12 @@ int getkey(int allow_suspend) {
       shutdown_state = 1;
       return KEY_SHUTDOWN;
     }
+    // Never return 0 on idle timeout: KEY_CTRL_LEFT is defined as 0 in k_defs.h
     if (e == Ion::Events::None) {
-      return 0;
+      if (allow_suspend == 0) {
+        return -1;
+      }
+      continue;
     }
     if (e == Ion::Events::ExternalText) {
       const char * t = e.text();
@@ -295,7 +330,7 @@ int getkey(int allow_suspend) {
     }
     uint8_t id = (uint8_t)e;
     if (id >= sizeof(translated_keys) / sizeof(translated_keys[0])) {
-      return 0;
+      continue;
     }
     // Workaround to make shift-number work (from main.cpp)
     if (id >= 30 && id <= 52) { // seven to exe
@@ -303,7 +338,11 @@ int getkey(int allow_suspend) {
         id += 54;
       }
     }
-    return translated_keys[id];
+    int mapped = translated_keys[id];
+    if (mapped < 0) {
+      continue;
+    }
+    return mapped;
   }
 }
 

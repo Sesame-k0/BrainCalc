@@ -17271,7 +17271,7 @@ namespace xcas {
       if (key==KEY_CHAR_ACCOLADES || key==KEY_CHAR_CROCHETS){
 	Console_Input(key==KEY_CHAR_ACCOLADES?"{}":"[]");
 	Console_MoveCursor(CURSOR_LEFT);
-	Console_Disp(1,contextptr);
+	Console_Disp(keytooltip?1:0,contextptr);
 	continue;	
       }
       if ( (key >= ' ' && key <= '~' )
@@ -17280,7 +17280,7 @@ namespace xcas {
 	tmp_str[0] = key;
 	tmp_str[1] = '\0';
 	Console_Input(tmp_str);
-	Console_Disp(1,contextptr);
+	Console_Disp(keytooltip?1:0,contextptr);
 	// tooltip
 	keytooltip=Console_tooltip(contextptr);
 	continue;
@@ -17726,8 +17726,9 @@ namespace xcas {
 	  }
       }
       if (key == KEY_CTRL_DEL){
+	bool full_redraw = keytooltip || (Current_Line < Last_Line);
 	Console_Backspace(contextptr);
-	Console_Disp(1,contextptr);
+	Console_Disp(full_redraw?1:0,contextptr);
 	keytooltip=Console_tooltip(contextptr);
 	continue;	
       }
@@ -17759,7 +17760,7 @@ namespace xcas {
       const char * ptr=keytostring(key,keyflag,0,contextptr);
       if (ptr){
 	Console_Input((const char *)ptr);
-	Console_Disp(1,contextptr);
+	Console_Disp(keytooltip?1:0,contextptr);
 	keytooltip=Console_tooltip(contextptr);
 	continue;
       }
@@ -18407,9 +18408,8 @@ namespace xcas {
 	}      
       } // end non cursor line
     } // end loop on all lines
-    drawRectangle(0,i*vfontsize,LCD_WIDTH_PX,205-i*vfontsize,_WHITE);
-
     if ((redraw_mode & 1)==1){
+      drawRectangle(0,i*vfontsize,LCD_WIDTH_PX,205-i*vfontsize,_WHITE);
       for (; (i < LINE_DISP_MAX) ; i++)
 	drawRectangle(0,i*vfontsize,LCD_WIDTH_PX,vfontsize,_WHITE);
       int xcas_color=65055,python_color=52832,js_color=63048;
