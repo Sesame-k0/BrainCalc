@@ -25,6 +25,12 @@ $(eval $(call rule_for, \
 ))
 
 $(eval $(call rule_for, \
+  CXX, %.o, %.cc, \
+  $$(CXX) $$(CXXFLAGS) $$(SFLAGS) -c $$< -o $$@, \
+  global local \
+))
+
+$(eval $(call rule_for, \
   DFUSE, %.dfu, %.elf, \
   $$(PYTHON) build/device/elf2dfu.py $$< $$@, \
   local \

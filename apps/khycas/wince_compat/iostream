@@ -1,0 +1,25 @@
+#ifndef _WINCE_COMPAT_IOSTREAM_H
+#define _WINCE_COMPAT_IOSTREAM_H
+
+#ifndef _GLIBCXX_IOSTREAM
+#define _GLIBCXX_IOSTREAM 1
+#endif
+
+#include <bits/c++config.h>
+#include <ostream>
+#include <istream>
+
+namespace std {
+  extern istream cin;
+  extern ostream cout;
+  extern ostream cerr;
+  extern ostream clog;
+#ifdef _GLIBCXX_USE_WCHAR_T
+  extern wistream wcin;
+  extern wostream wcout;
+  extern wostream wcerr;
+  extern wostream wclog;
+#endif
+}
+
+#endif

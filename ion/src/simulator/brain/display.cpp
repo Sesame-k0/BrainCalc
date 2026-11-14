@@ -1293,7 +1293,7 @@ static constexpr GuideTopic kMathSolveTopics[12] = {
 };
 
 // --- カテゴリ 1: 基本アプリ (Lilium 標準アプリ全集) ---
-static constexpr GuideTopic kAppFeaturesTopics[8] = {
+static constexpr GuideTopic kAppFeaturesTopics[9] = {
   {
     L"1. Calculation (計算)",
     L"1. Calculation - 2D自然表示関数電卓",
@@ -1381,6 +1381,25 @@ static constexpr GuideTopic kAppFeaturesTopics[8] = {
     L"・演算子 (+, -, *, /) を押すとスタックの末尾2つの数値を演算。\n"
     L"・スタック操作: Swap (入替), Drop (削除), Roll (回転)。\n"
     L"・理工系・プログラミングの数式評価アルゴリズムの理解にも役立ちます。"
+  },
+  {
+    L"9. KhyCAS (数式処理CAS)",
+    L"9. KhyCAS - Giac/Xcas 記号数式処理エンジン",
+    L"【アプリの概要】\n"
+    L"世界最高峰のオープンソース数式処理系 Giac/Xcas を移植した CAS アプリです。\n"
+    L"数値近似ではなく、文字 x, y, a を含んだまま厳密な式変形を行います。\n\n"
+    L"【頻出コマンド一覧 (対話シェル内で入力)】\n"
+    L"・factor(x^4-1) : 因数分解 → (x-1)*(x+1)*(x^2+1)\n"
+    L"・expand((x+y)^3) : 展開 → x^3+3*x^2*y+3*x*y^2+y^3\n"
+    L"・partfrac(1/(x^2-1)) : 部分分数分解\n"
+    L"・solve(x^2-a*x+2=0, x) : 記号係数を含む方程式の厳密解\n"
+    L"・diff(sin(x)*exp(x), x) : 導関数 (記号微分)\n"
+    L"・int(1/(x^2+1), x) : 不定積分 → atan(x) (定積分は int(式,x,a,b))\n"
+    L"・limit(sin(x)/x, x, 0) : 極限値計算 → 1\n"
+    L"・series(sin(x), x=0, 5) : テイラー展開・マクローリン展開\n"
+    L"・desolve(y'+2*y=exp(x), x, y) : 微分方程式の一般解・特殊解\n"
+    L"・plot(sin(x), x) / plot3d(x^2-y^2, [x,y]) : 2D / 3D グラフ描画\n"
+    L"・det(A), inv(A), egv(A), egvl(A) : 行列式・逆行列・固有ベクトル・固有値"
   }
 };
 
@@ -1751,7 +1770,7 @@ struct GuideCategoryDef {
 
 static constexpr GuideCategoryDef kGuideCategories[kGuideCategoryCount] = {
   { L"逆引き計算", kMathSolveTopics,    12 },
-  { L"基本アプリ", kAppFeaturesTopics,  8 },
+  { L"基本アプリ", kAppFeaturesTopics,  9 },
   { L"3Dグラフ",   kPlot3DTopics,        14 },
   { L"コード言語", kCodingTopicsNormal,  5 },
   { L"操作＆キー", kKeyboardTopics,      5 },

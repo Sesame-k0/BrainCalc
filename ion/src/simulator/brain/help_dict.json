@@ -123,6 +123,16 @@
     "ja_title": "外部アプリ",
     "ja_desc": "追加の外部アドインアプリを起動します"
   },
+  "App_KhyCAS": {
+    "en_keys": [
+      "KhyCAS",
+      "KHYCAS",
+      "KhiCAS"
+    ],
+    "en_desc": "Giac/Xcas symbolic Computer Algebra System (factor, expand, solve, diff, int, limit, desolve, plot, plot3d).",
+    "ja_title": "KhyCAS (数式処理)",
+    "ja_desc": "Giac搭載の本格数式処理(CAS)。\n・因数分解 factor / 展開 expand\n・方程式 solve / 微分方程式 desolve\n・記号微分 diff / 不定積分 int\n・極限 limit / 級数 series\n・2D/3D関数描画 plot, plot3d\n【Enter】対話CAS起動 【F12】詳細"
+  },
   "App_Settings": {
     "en_keys": [
       "Settings",
@@ -3869,6 +3879,14 @@
     "en_desc": "Quick presets for 3D X, Y, Z bounding box ranges.",
     "ja_title": "表示範囲プリセット",
     "ja_desc": "X, Y, Z の描画範囲を一括設定します。\n・←→キーでプリセットを切替\n・Standard[-2,2] / Wide[-5,5] / Paraboloid Z[0,10] など関数のスケールに合わせて即座に最適化できます。"
+  },
+  "Plot3D_Range_Overflow": {
+    "en_keys": [
+      "Plot3D_Range_Overflow"
+    ],
+    "en_desc": "Overflow tolerance beyond the 3D Axes bounding box.",
+    "ja_title": "枠外はみ出し許容",
+    "ja_desc": "描画枠(Axes)からの立体の外側へのはみ出し許容度を設定します。\n・0%：枠線で厳密にクリッピング切断\n・20%：枠線から20%外側まで自然に拡張表示\n・50%：枠線から50%外側まで広域表示\n・制限なし：枠外クリップを完全開放(非推奨)"
   },
   "Plot3D_Range_Reset": {
     "en_keys": [
