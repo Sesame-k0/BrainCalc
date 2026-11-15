@@ -34,9 +34,14 @@ static bool sBackKeyHeld = false;
 static bool sSuppressBackScanUntilUp = false;
 static DWORD sBackKeyDownTick = 0;
 
-// Physical Shift key tracking (SHARP Brain [シフト] = VK_CAPITAL)
+// Physical Shift key tracking (SHARP Brain [シフト] = VK_CAPITAL, 1-shot 固定キー式対応)
 static bool sPhysicalShiftHeld = false;
 static bool sPhysicalCapitalHeld = false;
+static bool sStickyShiftArmed = false;
+
+static bool isModifierVk(WPARAM vkCode) {
+  return vkCode == VK_SHIFT || vkCode == VK_LSHIFT || vkCode == VK_RSHIFT || vkCode == VK_CAPITAL;
+}
 
 bool isShiftModifierHeld() {
   if (sPhysicalShiftHeld) {
@@ -51,8 +56,9 @@ bool isShiftModifierHeld() {
     return true;
   }
 #ifdef _WIN32_WCE
-  // SHARP Brain の物理 [シフト] キーは VK_CAPITAL を送出し VK_SHIFT を設定しない
-  if (sPhysicalCapitalHeld ||
+  // SHARP Brain の物理 [シフト] キーは VK_CAPITAL を送出し VK_SHIFT を設定しない（固定キー式も併用）
+  if (sStickyShiftArmed ||
+      sPhysicalCapitalHeld ||
       (GetKeyState(VK_CAPITAL) & 0x8000) != 0 ||
       (GetAsyncKeyState(VK_CAPITAL) & 0x8000) != 0) {
     return true;
@@ -324,6 +330,8 @@ static bool handleUpperAlphaModeKey(WPARAM vkCode) {
   return false;
 }
 
+static void dispatchKeyDown(WPARAM vkCode, LPARAM lParam);
+
 void onKeyDown(WPARAM vkCode, LPARAM lParam) {
   BrainLogInt("Keyboard::onKeyDown vkCode", (int)vkCode);
   if (vkCode == VK_SHIFT || vkCode == VK_LSHIFT || vkCode == VK_RSHIFT) {
@@ -332,10 +340,34 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
     sPhysicalCapitalHeld = true;
   }
   if (Display::isModalOpen()) {
+    if (!isModifierVk(vkCode)) {
+      sStickyShiftArmed = false;
+    }
     Display::handleModalKey(vkCode);
     return;
   }
 
+#ifdef _WIN32_WCE
+  // SHARP Brain 実機では [シフト] (VK_CAPITAL) が左上に「シフト」を出す固定キー式（1-shot）のため、
+  // 押下で待機状態をトグルし、次のキー処理後に自動解除する。
+  if (vkCode == VK_CAPITAL) {
+    bool isRepeat = (lParam & (1 << 30)) != 0;
+    if (!isRepeat) {
+      sStickyShiftArmed = !sStickyShiftArmed;
+      BrainLogInt("Keyboard::sStickyShiftArmed", sStickyShiftArmed ? 1 : 0);
+    }
+    return;
+  }
+#endif
+
+  dispatchKeyDown(vkCode, lParam);
+
+  if (!isModifierVk(vkCode)) {
+    sStickyShiftArmed = false;
+  }
+}
+
+static void dispatchKeyDown(WPARAM vkCode, LPARAM lParam) {
   bool isRepeat = (lParam & (1 << 30)) != 0;
 
   // KEY-MAPPING.md Section 2:
