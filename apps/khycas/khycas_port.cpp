@@ -1,9 +1,11 @@
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include "giac/k_defs.h"
 #include "giac/k_csdk.h"
+#include "khycas_help_ja.h"
 #include <ion/display.h>
 #include <ion/events.h>
 #include <ion/keyboard.h>

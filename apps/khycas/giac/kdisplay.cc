@@ -412,6 +412,30 @@ namespace giac {
     PrintXY(x,y,text,0);
   }
 
+  extern "C" {
+    void BrainClearCustomHelp();
+    void khycas_show_category_help(int categoryId, const char * categoryLabel);
+    void khycas_show_command_help(const char * cmdName, const char * enDesc, const char * example1, const char * example2, const char * categoryLabel);
+    void khycas_show_var_help(const char * itemText);
+    void khycas_show_menu_help(const char * itemText);
+  }
+  typedef void (*MenuSidebarUpdaterFn)(const Menu * menu);
+  static MenuSidebarUpdaterFn s_menu_sidebar_updater = 0;
+  struct ScopedMenuSidebarUpdater {
+    MenuSidebarUpdaterFn prev;
+    bool clearOnExit;
+    explicit ScopedMenuSidebarUpdater(MenuSidebarUpdaterFn fn, bool clear = false)
+      : prev(s_menu_sidebar_updater), clearOnExit(clear) {
+      s_menu_sidebar_updater = fn;
+    }
+    ~ScopedMenuSidebarUpdater() {
+      s_menu_sidebar_updater = prev;
+      if (clearOnExit && !prev) {
+        BrainClearCustomHelp();
+      }
+    }
+  };
+
   int doMenu(Menu* menu, MenuItemIcon* icontable) { // returns code telling what user did. selection is on menu->selection. menu->selection starts at 1!
     int itemsStartY=menu->startY; // char Y where to start drawing the menu items. Having a title increases this by one
     int itemsHeight=menu->height;
@@ -563,6 +587,9 @@ namespace giac {
 	VRAMInvertArea(menu->startX*C18-C18, menu->startY*C24, menu->width*C18-(menu->scrollout || !menu->scrollbar ? 0 : 5), menu->height*C24);
 	}*/
       if(menu->type == MENUTYPE_NO_KEY_HANDLING) return MENU_RETURN_INSTANT; // we don't want to handle keys
+      if (s_menu_sidebar_updater) {
+        s_menu_sidebar_updater(menu);
+      }
       int key;
       GetKey(&key);
       if (key==KEY_SHUTDOWN)
@@ -599,6 +626,7 @@ namespace giac {
 	continue;
       }
       switch(key) {
+      case ')':
       case KEY_CTRL_PAGEDOWN:
 	menu->selection+=6;
 	if (menu->selection >= menu->numitems)
@@ -624,6 +652,7 @@ namespace giac {
 	  }
 	if(menu->pBaRtR==1) return MENU_RETURN_INSTANT;
 	break;
+      case '(':
       case KEY_CTRL_PAGEUP:
 	menu->selection-=6;
 	if (menu->selection <=1)
@@ -686,6 +715,7 @@ namespace giac {
 	if(menu->numitems>0) return key==KEY_CTRL_OK?MENU_RETURN_SELECTION:key;
 	break;
       case KEY_CTRL_LEFT:
+	if (menu->type == MENUTYPE_FKEYS) return KEY_CTRL_LEFT;
 	if(menu->type != MENUTYPE_MULTISELECT) break;
 	// else fallthrough
       case KEY_CTRL_DEL:
@@ -789,13 +819,6 @@ namespace giac {
       case KEY_CHAR_SQUARE:
 	if(menu->numitems>=22) {
 	  menu->selection = 22;
-	  if (menu->type != MENUTYPE_FKEYS)  return MENU_RETURN_SELECTION;
-	}
-	break;
-      case KEY_CHAR_LPAR:
-      case KEY_CHAR_RPAR:
-	if(menu->numitems>=(key-17)) {
-	  menu->selection = (key-17);
 	  if (menu->type != MENUTYPE_FKEYS)  return MENU_RETURN_SELECTION;
 	}
 	break;
@@ -1681,7 +1704,14 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
     c.example2=as.examples.size()>=2?as.examples[1].c_str():0;
     c.category=-1;
   }
+  static void catalog_category_sidebar_updater(const Menu * menu) {
+    if (!menu || menu->numitems <= 0 || menu->selection < 1 || menu->selection > menu->numitems) return;
+    int idx = menu->selection - 1;
+    khycas_show_category_help(idx, menu->items[idx].text);
+  }
+
   int showCatalog(char* insertText,int preselect,int menupos,GIAC_CONTEXT) {
+    ScopedMenuSidebarUpdater sidebarGuard(catalog_category_sidebar_updater, true);
     // returns 0 on failure (user exit) and 1 on success (user chose a option)
     MenuItem menuitems[CAT_CATEGORY_LOGO+1];
     menuitems[CAT_CATEGORY_ALL].text = (char*)((lang==1)?"Tout":"All");
@@ -1721,8 +1751,9 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
       else {
 	if (menupos>0)
 	  menu.selection=menupos;
+	drawRectangle(0, 200, LCD_WIDTH_PX, 22, giac::_WHITE);
 	int sres = doMenu(&menu);
-	if (sres != MENU_RETURN_SELECTION && sres!=KEY_CTRL_EXE)
+	if (sres != MENU_RETURN_SELECTION && sres!=KEY_CTRL_EXE && sres!=KEY_BOOK)
 	  return 0;
       }
       // puts("catalog 3");
@@ -2000,8 +2031,36 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
 
 #define MENUITEM_MALLOC
 
+  static const char * s_catalog_cat_label = 0;
+
+  static void catalog_command_sidebar_updater(const Menu * menu) {
+    if (!menu || menu->numitems <= 0 || menu->selection < 1 || menu->selection > menu->numitems) return;
+    const MenuItem & item = menu->items[menu->selection - 1];
+    const int catCount = (lang == 1) ? CAT_COMPLETE_COUNT_FR : CAT_COMPLETE_COUNT_EN;
+    const catalogFunc * completeCat = (lang == 1) ? completeCatfr : completeCaten;
+    const char * enDesc = 0;
+    const char * ex1 = 0;
+    const char * ex2 = 0;
+    int idx = item.isfolder;
+    if (idx >= 0 && idx < catCount) {
+      enDesc = completeCat[idx].desc;
+      ex1 = completeCat[idx].example;
+      ex2 = completeCat[idx].example2;
+    } else {
+      const char * cmdNamePtr = item.text;
+      const char * fhowto = 0, * fsyntax = 0, * fexamples = 0, * frelated = 0;
+      if (has_static_help(cmdNamePtr, 0, fhowto, fsyntax, fexamples, frelated)) {
+        enDesc = fhowto;
+        ex1 = fexamples;
+      }
+    }
+    khycas_show_command_help(item.text, enDesc, ex1, ex2, s_catalog_cat_label);
+  }
+
   // 0 on exit, 1 on success
   int doCatalogMenu(char* insertText, const char* title, int category,GIAC_CONTEXT) {
+    s_catalog_cat_label = title;
+    ScopedMenuSidebarUpdater sidebarGuard(catalog_command_sidebar_updater, true);
     const catalogFunc * completeCat=(lang==1)?completeCatfr:completeCaten;
     for (;;){
       int allcmds=builtin_lexer_functions_end()-builtin_lexer_functions_begin();
@@ -2091,7 +2150,7 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
 #ifdef NSPIRE_NEWLIB
 	PrintMini(0,200,(category==CAT_CATEGORY_ALL?"menu: help | ret: ex1 | tab: ex2":"menu: help | ret ex1 | tab ex2"),4,33333,giac::_WHITE);
 #else
-	PrintMini(0,200,(category==CAT_CATEGORY_ALL?"Toolbox help | Ans ex1 | EXE  ex2":"Toolbox help | EXE ex1 | Ans ex2"),4,33333,giac::_WHITE);
+	PrintMini(0,200,(category==CAT_CATEGORY_ALL?"F1:help  F3:ins  Ent:ex1":"F1:help  F3:ins  Ent:ex1"),4,33333,giac::_WHITE);
 #endif
 	int sres = 0;
 	if (curmi==0){
@@ -2100,6 +2159,9 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
 	}
 	else
 	  sres=doMenu(&menu);
+	if (sres==KEY_CTRL_LEFT) {
+	  sres=MENU_RETURN_EXIT;
+	}
 	if (sres==KEY_CTRL_F4 && category!=CAT_CATEGORY_ALL){
 	  break;
 	}
@@ -2388,6 +2450,11 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
     return s;
   }
   
+  static void var_menu_sidebar_updater(const Menu * menu) {
+    if (!menu || menu->numitems <= 0 || menu->selection < 1 || menu->selection > menu->numitems) return;
+    khycas_show_var_help(menu->items[menu->selection - 1].text);
+  }
+
   gen select_var(GIAC_CONTEXT){
     kbd_interrupted=giac::ctrl_c=giac::interrupted=false;
 #ifdef QUICKJS
@@ -2498,7 +2565,11 @@ const catalogFunc completeCaten[] = { // list of all functions (including some n
 #endif
     smallmenu.title = (char*) vars.c_str();
     //MsgBoxPush(5);
-    int sres = doMenu(&smallmenu);
+    int sres = 0;
+    {
+      ScopedMenuSidebarUpdater sidebarGuard(var_menu_sidebar_updater, true);
+      sres = doMenu(&smallmenu);
+    }
     //MsgBoxPop();
     if (sres==KEY_CTRL_DEL && smallmenu.selection<=v.size())
       return symbolic(at_purge,v[smallmenu.selection-1]);
@@ -17198,6 +17269,11 @@ namespace xcas {
   void check_nspire_exam_mode(GIAC_CONTEXT){}
 #endif
 
+  static void main_menu_sidebar_updater(const Menu * menu) {
+    if (!menu || menu->numitems <= 0 || menu->selection < 1 || menu->selection > menu->numitems) return;
+    khycas_show_menu_help(menu->items[menu->selection - 1].text);
+  }
+
   int Console_GetKey(GIAC_CONTEXT){
     int key;
     bool keytooltip=false;
@@ -17403,7 +17479,11 @@ namespace xcas {
 	    smallmenuitems[16].text = (char*)((lang==1)?"Relancer le mode examen":"Restart exam mode");
 	  if (shutdown_state)
 	    return KEY_SHUTDOWN;
-	  int sres = doMenu(&smallmenu);
+	  int sres = 0;
+	  {
+	    ScopedMenuSidebarUpdater sidebarGuard(main_menu_sidebar_updater, true);
+	    sres = doMenu(&smallmenu);
+	  }
 	  if(sres == MENU_RETURN_SELECTION || sres==KEY_CTRL_EXE) {
 #if defined NUMWORKS && defined DEVICE
 	    if (smallmenu.selection==17){
@@ -17759,8 +17839,11 @@ namespace xcas {
       }
       const char * ptr=keytostring(key,keyflag,0,contextptr);
       if (ptr){
+	bool fullRedrawAfterModal = (key == KEY_CTRL_CATALOG || key == KEY_BOOK || key == KEY_CTRL_F4 ||
+				     key == KEY_CTRL_VARS || key == KEY_CHAR_MAT || key == KEY_CHAR_LIST ||
+				     key == KEY_CTRL_PRGM || key == KEY_CTRL_OPTN || key == KEY_CTRL_QUIT);
 	Console_Input((const char *)ptr);
-	Console_Disp(keytooltip?1:0,contextptr);
+	Console_Disp((keytooltip || fullRedrawAfterModal)?1:0,contextptr);
 	keytooltip=Console_tooltip(contextptr);
 	continue;
       }
@@ -18415,7 +18498,7 @@ namespace xcas {
       int xcas_color=65055,python_color=52832,js_color=63048;
       int interp_color=xcas_python_eval==-1?js_color:(xcas_python_eval==1?python_color:xcas_color);
       drawRectangle(0,205,LCD_WIDTH_PX,17,interp_color);
-      os_draw_string_small(2, 207, _BLACK, interp_color, "F1:Cmds  F9:Vars  F4:Clear  HOME/ESC:Exit", false);
+      os_draw_string_small(2, 207, _BLACK, interp_color, "F1:Cmds F6:Menu F9:Vars F4:Clr HOME:Exit", false);
     }
   
     // status, clock,

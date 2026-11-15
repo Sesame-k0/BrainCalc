@@ -1388,14 +1388,14 @@ static constexpr GuideTopic kAppFeaturesTopics[10] = {
     L"【アプリの概要と起動】\n"
     L"記号数式処理系 Giac/Xcas を移植した CAS アプリです。\n"
     L"起動画面で [Enter / F3] を押すと対話シェルを開始。\n\n"
-    L"【シェル内のキー操作】\n"
-    L"・[F2]: 12x(数式) / abc(英字) / ABC 入力切替\n"
-    L"・[F1]: Cmds (関数メニュー)  [F9]: Vars (変数)\n"
+    L"【シェル・メニューのキー操作】\n"
+    L"・[F2]: 12x(数式) / abc / ABC 切替\n"
+    L"・[F1]: Cmds (関数一覧・右に日本語解説)\n"
+    L"・[F6]: KhyCASメニュー  [F9]: Vars (変数)\n"
     L"・[F4]: Clear (消去)  [PgUp/PgDn]: ( / )\n"
-    L"・[Enter/F3]: 式評価・実行 (履歴再編集/EQW)\n"
-    L"・[ESC/戻る]: 入力消去 / 空行でホームへ戻る\n"
+    L"・[Enter/F3]: 式評価・決定  [Esc]: 1つ戻る\n"
     L"・[F10/HOME]: いつでもホーム画面へ戻る\n"
-    L"※ [12x]標準配列で ^, x, √, e, i, π, log, =, () 入力可"
+    L"※ 一覧中 [→/Enter]開く [←/Esc]戻る [PgUp/Dn]頁"
   },
   {
     L"10. KhyCAS (コマンド)",

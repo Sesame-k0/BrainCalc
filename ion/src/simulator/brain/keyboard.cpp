@@ -31,6 +31,7 @@ static bool sTerminationRequested = false;
 
 // Circuit breaker key tracking (for interrupting heavy Poincare calculations)
 static bool sBackKeyHeld = false;
+static bool sSuppressBackScanUntilUp = false;
 static DWORD sBackKeyDownTick = 0;
 
 // Ring buffer for platform events
@@ -343,6 +344,7 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
       pushPendingEvent(Ion::Events::Backspace);
       return;
     case VK_ESCAPE:
+      sSuppressBackScanUntilUp = true;
       if (!sBackKeyHeld) {
         sBackKeyHeld = true;
         sBackKeyDownTick = GetTickCount();
@@ -374,10 +376,6 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
       return;
     case VK_HOME:
     case VK_F10: // [HOME] -> Home（ホーム画面に戻る）
-      if (!sBackKeyHeld) {
-        sBackKeyHeld = true;
-        sBackKeyDownTick = GetTickCount();
-      }
       pushPendingEvent(Ion::Events::Home);
       return;
 
@@ -400,6 +398,9 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
       } else if (vkCode == VK_F8) {
         // KEY-MAPPING.md Section 3: F8 未割り当て時は従来の ">" として動作
         pushPendingEvent(Ion::Events::Greater);
+      } else if (vkCode == VK_F6) {
+        // 未割り当て時の F6 は KhyCAS メニュー (Shift+EXE -> KEY_CTRL_MENU) として動作
+        pushPendingEvent(Ion::Events::ShiftEXE);
       }
       return;
     }
@@ -483,11 +484,12 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
 }
 
 void onKeyUp(WPARAM vkCode, LPARAM /*lParam*/) {
+  if (vkCode == VK_ESCAPE) {
+    sBackKeyHeld = false;
+    sSuppressBackScanUntilUp = false;
+  }
   if (Display::isModalOpen()) {
     return;
-  }
-  if (vkCode == VK_ESCAPE || vkCode == VK_HOME || vkCode == VK_F10) {
-    sBackKeyHeld = false;
   }
 }
 
@@ -529,6 +531,9 @@ State scan() {
   // 計算途中で Window メッセージポンプ (DispatchMessageW) を回すと再入競合を起こすため、
   // GetAsyncKeyState による非ブロッキングなハードウェアキー状態参照のみを行う。
   if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0) {
+    if (Simulator::Keyboard::sSuppressBackScanUntilUp) {
+      return State(0);
+    }
     DWORD now = GetTickCount();
     if (!Simulator::Keyboard::sBackKeyHeld) {
       Simulator::Keyboard::sBackKeyHeld = true;
@@ -538,6 +543,7 @@ State scan() {
     }
   } else {
     Simulator::Keyboard::sBackKeyHeld = false;
+    Simulator::Keyboard::sSuppressBackScanUntilUp = false;
   }
   return State(0);
 }
