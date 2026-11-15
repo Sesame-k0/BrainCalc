@@ -18498,7 +18498,7 @@ namespace xcas {
       int xcas_color=65055,python_color=52832,js_color=63048;
       int interp_color=xcas_python_eval==-1?js_color:(xcas_python_eval==1?python_color:xcas_color);
       drawRectangle(0,205,LCD_WIDTH_PX,17,interp_color);
-      os_draw_string_small(2, 207, _BLACK, interp_color, "F1:Cmds F6:Menu F9:Vars F4:Clr HOME:Exit", false);
+      os_draw_string_small(2, 207, _BLACK, interp_color, "F1:Cmds F8:Menu F9:Vars F4:Clr HOME:Exit", false);
     }
   
     // status, clock,

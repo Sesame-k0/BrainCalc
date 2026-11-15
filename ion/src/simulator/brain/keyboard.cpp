@@ -34,6 +34,33 @@ static bool sBackKeyHeld = false;
 static bool sSuppressBackScanUntilUp = false;
 static DWORD sBackKeyDownTick = 0;
 
+// Physical Shift key tracking (SHARP Brain [シフト] = VK_CAPITAL)
+static bool sPhysicalShiftHeld = false;
+static bool sPhysicalCapitalHeld = false;
+
+bool isShiftModifierHeld() {
+  if (sPhysicalShiftHeld) {
+    return true;
+  }
+  if ((GetKeyState(VK_SHIFT) & 0x8000) != 0 ||
+      (GetKeyState(VK_LSHIFT) & 0x8000) != 0 ||
+      (GetKeyState(VK_RSHIFT) & 0x8000) != 0 ||
+      (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0 ||
+      (GetAsyncKeyState(VK_LSHIFT) & 0x8000) != 0 ||
+      (GetAsyncKeyState(VK_RSHIFT) & 0x8000) != 0) {
+    return true;
+  }
+#ifdef _WIN32_WCE
+  // SHARP Brain の物理 [シフト] キーは VK_CAPITAL を送出し VK_SHIFT を設定しない
+  if (sPhysicalCapitalHeld ||
+      (GetKeyState(VK_CAPITAL) & 0x8000) != 0 ||
+      (GetAsyncKeyState(VK_CAPITAL) & 0x8000) != 0) {
+    return true;
+  }
+#endif
+  return false;
+}
+
 // Ring buffer for platform events
 constexpr int kEventQueueCapacity = 64;
 static Ion::Events::Event sEventQueue[kEventQueueCapacity];
@@ -299,6 +326,11 @@ static bool handleUpperAlphaModeKey(WPARAM vkCode) {
 
 void onKeyDown(WPARAM vkCode, LPARAM lParam) {
   BrainLogInt("Keyboard::onKeyDown vkCode", (int)vkCode);
+  if (vkCode == VK_SHIFT || vkCode == VK_LSHIFT || vkCode == VK_RSHIFT) {
+    sPhysicalShiftHeld = true;
+  } else if (vkCode == VK_CAPITAL) {
+    sPhysicalCapitalHeld = true;
+  }
   if (Display::isModalOpen()) {
     Display::handleModalKey(vkCode);
     return;
@@ -395,11 +427,9 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
         Ion::Events::removeShift();
       } else if (vkCode == VK_F12) {
         Display::showLiliumManual();
-      } else if (vkCode == VK_F8) {
-        // KEY-MAPPING.md Section 3: F8 未割り当て時は従来の ">" として動作
-        pushPendingEvent(Ion::Events::Greater);
-      } else if (vkCode == VK_F6) {
-        // 未割り当て時の F6 は KhyCAS メニュー (Shift+EXE -> KEY_CTRL_MENU) として動作
+      } else if (vkCode == VK_F6 || vkCode == VK_F8) {
+        // Brain 実機には F6 がないため F8 に KhyCAS メニュー (Shift+EXE -> KEY_CTRL_MENU) を割り当て
+        // （PC 互換のため未割当の F6 も同じく KhyCAS メニューとして扱う）
         pushPendingEvent(Ion::Events::ShiftEXE);
       }
       return;
@@ -484,6 +514,11 @@ void onKeyDown(WPARAM vkCode, LPARAM lParam) {
 }
 
 void onKeyUp(WPARAM vkCode, LPARAM /*lParam*/) {
+  if (vkCode == VK_SHIFT || vkCode == VK_LSHIFT || vkCode == VK_RSHIFT) {
+    sPhysicalShiftHeld = false;
+  } else if (vkCode == VK_CAPITAL) {
+    sPhysicalCapitalHeld = false;
+  }
   if (vkCode == VK_ESCAPE) {
     sBackKeyHeld = false;
     sSuppressBackScanUntilUp = false;

@@ -420,7 +420,7 @@ bool executeAction(KeyAction action) {
     case KeyAction::Var:          Keyboard::pushPendingEvent(Ion::Events::Var); return true;
     case KeyAction::Clear:        Keyboard::pushPendingEvent(Ion::Events::Clear); return true;
     case KeyAction::LessGreater: {
-      bool isShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+      bool isShift = Keyboard::isShiftModifierHeld();
       if (isShift) {
         Keyboard::pushPendingEvent(Ion::Events::Greater);
       } else {

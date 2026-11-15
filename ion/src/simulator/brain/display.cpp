@@ -567,12 +567,16 @@ static void renderRightSidebar(HDC hdc) {
     FillRect(hdc, &rcAccent, hAccentBrush);
     DeleteObject(hAccentBrush);
 
-    // タイトル描画
+    // タイトル描画（Bold で収まらない場合は Small → Tiny の順にフォールバック）
     SelectObject(hdc, sUiFontBold);
     SIZE titleSz = { 0, 0 };
     GetTextExtentPoint32W(hdc, helpTitle, static_cast<int>(wcslen(helpTitle)), &titleSz);
     if (titleSz.cx > cardW - 6) {
-      SelectObject(hdc, sUiFontTiny);
+      SelectObject(hdc, sUiFontSmall);
+      GetTextExtentPoint32W(hdc, helpTitle, static_cast<int>(wcslen(helpTitle)), &titleSz);
+      if (titleSz.cx > cardW - 6) {
+        SelectObject(hdc, sUiFontTiny);
+      }
     }
     drawTextLine(hdc, cardX + 3, 60, cardW - 6, 28, RGB(20, 82, 74),
                  helpTitle, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
@@ -1391,7 +1395,7 @@ static constexpr GuideTopic kAppFeaturesTopics[10] = {
     L"【シェル・メニューのキー操作】\n"
     L"・[F2]: 12x(数式) / abc / ABC 切替\n"
     L"・[F1]: Cmds (関数一覧・右に日本語解説)\n"
-    L"・[F6]: KhyCASメニュー  [F9]: Vars (変数)\n"
+    L"・[F8]: KhyCASメニュー  [F9]: Vars (変数)\n"
     L"・[F4]: Clear (消去)  [PgUp/PgDn]: ( / )\n"
     L"・[Enter/F3]: 式評価・決定  [Esc]: 1つ戻る\n"
     L"・[F10/HOME]: いつでもホーム画面へ戻る\n"
@@ -1729,6 +1733,7 @@ static constexpr GuideTopic kKeyboardTopics[5] = {
     L"・[F2] : 12x / abc 入力モード切替\n"
     L"・[F3] : OK / 決定キー\n"
     L"・[F4] : クリア / BackSpace (文字削除)\n"
+    L"・[F8] : KhyCAS メニュー (対応アプリ内)\n"
     L"・[F9] : 変数メニュー (var) - 定義済み変数・関数の一覧\n"
     L"・[F10] : HOME キー - ホームランチャーへ一発復帰\n"
     L"・[F11] : < > 統合キー (通常で '<'、Shift+F11 で '>')\n"
