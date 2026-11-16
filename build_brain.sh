@@ -122,7 +122,7 @@ if [[ "${TOOLCHAIN_OPT}" != "windows" ]]; then
   touch "${DIST_DIR}/index.din"
 fi
 
-# Copy bundled TrueType fonts (font.ttf = MisakiGothic, dotgothic16.ttf = DotGothic16) into Lilium bundle
+# Copy bundled TrueType font (font.ttf = MisakiGothic) into Lilium bundle
 FONT_SRC=""
 for candidate in "ion/src/simulator/brain/font.ttf" "../MisakiFont/misaki_gothic.ttf" "misaki_gothic.ttf"; do
   if [[ -f "$candidate" ]]; then
@@ -141,19 +141,7 @@ else
   echo "[WARN] bundled font source not found; skipping font bundle copy."
 fi
 
-DOTGOTHIC_SRC=""
-for candidate in "ion/src/simulator/brain/dotgothic16.ttf" "../DotGothic16-Regular.ttf"; do
-  if [[ -f "$candidate" ]]; then
-    DOTGOTHIC_SRC="$candidate"
-    break
-  fi
-done
-
-if [[ -n "$DOTGOTHIC_SRC" ]]; then
-  if [[ ! -f "${DIST_DIR}/dotgothic16.ttf" ]] || [[ "$DOTGOTHIC_SRC" -nt "${DIST_DIR}/dotgothic16.ttf" ]]; then
-    cp -f "$DOTGOTHIC_SRC" "${DIST_DIR}/dotgothic16.ttf" 2>/dev/null || true
-  fi
-fi
+rm -f "${DIST_DIR}/dotgothic16.ttf" 2>/dev/null || true
 
 # Ensure scripts directory exists in bundle
 mkdir -p "${DIST_DIR}/scripts"

@@ -4,23 +4,10 @@
 #include <string.h>
 #include <wchar.h>
 
-#ifndef NONANTIALIASED_QUALITY
-#define NONANTIALIASED_QUALITY 3
-#endif
-#ifndef ANTIALIASED_QUALITY
-#define ANTIALIASED_QUALITY 4
-#endif
-
-static inline void flushGdi() {
-#ifndef _WIN32_WCE
-  GdiFlush();
-#endif
-}
-
 namespace LiliumUI {
 
 // =============================================================================
-// Canvas Primitives + Dirty Tracking + Misaki (Sidebar) / DotGothic16 (Main)
+// Canvas Primitives + Dirty Tracking + Pure MisakiFont Pixel Blitting
 // =============================================================================
 
 void Canvas::clearDirty() {
@@ -100,7 +87,6 @@ void Canvas::drawThickFrame(int x, int y, int w, int h, int thickness, uint32_t 
 
 void Canvas::darkenScreen() {
   if (!pixels) return;
-  flushGdi();
   const int total = width * height;
   for (int i = 0; i < total; ++i) {
     uint32_t c = pixels[i];
@@ -109,13 +95,38 @@ void Canvas::darkenScreen() {
   addDirty(0, 0, width, height);
 }
 
+int Canvas::measureWidth(const wchar_t * text, int scale) {
+  if (!text || !text[0]) return 0;
+  return ::MisakiFont::measureTextWidth(text, static_cast<int>(wcslen(text)), scale);
+}
+
 void Canvas::drawText(int x, int y, int w, int h, uint32_t colorRgb,
                       const wchar_t * text, int scale, Align align, bool vcenter) {
   if (!pixels || !text || !text[0]) return;
-  int len = static_cast<int>(wcslen(text));
-  int textW = ::MisakiFont::measureTextWidth(text, len, scale);
-  int textH = 8 * scale;
+  int fullLen = static_cast<int>(wcslen(text));
 
+  // Clip text with "..." if wider than available w so characters never overflow boxes
+  wchar_t clipped[256];
+  const wchar_t * drawPtr = text;
+  int len = fullLen;
+  int textW = ::MisakiFont::measureTextWidth(drawPtr, len, scale);
+  if (w > 16 && textW > w) {
+    int maxCopy = (fullLen < 250) ? fullLen : 250;
+    wcsncpy(clipped, text, maxCopy);
+    clipped[maxCopy] = L'\0';
+    int ellW = ::MisakiFont::measureTextWidth(L"...", 3, scale);
+    int trimLen = maxCopy;
+    while (trimLen > 0 &&
+           ::MisakiFont::measureTextWidth(clipped, trimLen, scale) + ellW > w) {
+      --trimLen;
+    }
+    wcscpy(clipped + trimLen, L"...");
+    drawPtr = clipped;
+    len = trimLen + 3;
+    textW = ::MisakiFont::measureTextWidth(drawPtr, len, scale);
+  }
+
+  int textH = 8 * scale;
   int startX = x;
   if (align == Align::Center) {
     startX = x + (w - textW) / 2;
@@ -124,15 +135,13 @@ void Canvas::drawText(int x, int y, int w, int h, uint32_t colorRgb,
   }
   int startY = vcenter ? (y + (h - textH) / 2) : y;
 
-  flushGdi();
-  ::MisakiFont::drawString(pixels, width, height, startX, startY, text, len, colorRgb, scale);
+  ::MisakiFont::drawString(pixels, width, height, startX, startY, drawPtr, len, colorRgb, scale);
   addDirty(x, y, w, h);
 }
 
 int Canvas::drawWrappedText(int x, int y, int maxW, int maxY, uint32_t colorRgb,
                             const wchar_t * text, int scale, int lineGap) {
   if (!pixels || !text || !text[0]) return y;
-  flushGdi();
   const int lineH = 8 * scale + lineGap;
   int curY = y;
   const wchar_t * p = text;
@@ -154,15 +163,11 @@ int Canvas::drawWrappedText(int x, int y, int maxW, int maxY, uint32_t colorRgb,
     const wchar_t * lineStart = p;
 
     while (p[len] != L'\0' && p[len] != L'\n' && p[len] != L'\r' && len < 250) {
-      if (p[len] == L' ') {
-        lastSpaceIdx = len;
-      }
+      if (p[len] == L' ') lastSpaceIdx = len;
       lineBuf[len] = p[len];
       lineBuf[len + 1] = L'\0';
       int w = ::MisakiFont::measureTextWidth(lineBuf, len + 1, scale);
-      if (w > maxW && len > 0) {
-        break;
-      }
+      if (w > maxW && len > 0) break;
       ++len;
     }
 
@@ -183,47 +188,6 @@ int Canvas::drawWrappedText(int x, int y, int maxW, int maxY, uint32_t colorRgb,
   }
   addDirty(x, y, maxW, curY - y);
   return curY;
-}
-
-int Canvas::measureDotWidth(const wchar_t * text, int sizePx) {
-  if (!text || !text[0]) return 0;
-  if (!hasDotGothic || !memDC || (!dotFont16 && !dotFont12)) {
-    int scale = (sizePx >= 14) ? 2 : 1;
-    return ::MisakiFont::measureTextWidth(text, static_cast<int>(wcslen(text)), scale);
-  }
-  HFONT f = (sizePx <= 13 && dotFont12) ? dotFont12 : dotFont16;
-  HGDIOBJ oldF = SelectObject(memDC, f);
-  SIZE sz = { 0, 0 };
-  GetTextExtentPoint32W(memDC, text, static_cast<int>(wcslen(text)), &sz);
-  SelectObject(memDC, oldF);
-  return static_cast<int>(sz.cx);
-}
-
-void Canvas::drawDotText(int x, int y, int w, int h, uint32_t colorRgb,
-                         const wchar_t * text, int sizePx, Align align, bool vcenter) {
-  if (!text || !text[0]) return;
-  if (!hasDotGothic || !memDC || (!dotFont16 && !dotFont12)) {
-    int scale = (sizePx >= 14) ? 2 : 1;
-    drawText(x, y, w, h, colorRgb, text, scale, align, vcenter);
-    return;
-  }
-
-  HFONT f = (sizePx <= 13 && dotFont12) ? dotFont12 : dotFont16;
-  HGDIOBJ oldF = SelectObject(memDC, f);
-  COLORREF gdiCol = RGB((colorRgb >> 16) & 0xFF, (colorRgb >> 8) & 0xFF, colorRgb & 0xFF);
-  SetBkMode(memDC, TRANSPARENT);
-  SetTextColor(memDC, gdiCol);
-
-  UINT flags = DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS;
-  if (align == Align::Center) flags |= DT_CENTER;
-  else if (align == Align::Right) flags |= DT_RIGHT;
-  else flags |= DT_LEFT;
-  if (vcenter) flags |= DT_VCENTER;
-
-  RECT rc = { x, y, x + w, y + h };
-  DrawTextW(memDC, text, -1, &rc, flags);
-  SelectObject(memDC, oldF);
-  addDirty(x, y, w, h);
 }
 
 // =============================================================================
@@ -351,23 +315,21 @@ void restoreBrainTaskBar() {
 }
 
 // =============================================================================
-// Shared Lilium UI Chrome
-//   - Main Area & Modals -> Crisp DotGothic16 (16px NONANTIALIASED_QUALITY)
-//   - Right Sidebar      -> Compact MisakiFont (exact BrainCalc sidebar aesthetic)
+// Shared Lilium UI Chrome (100% MisakiGothic bitmap + dirty-rect safe)
 // =============================================================================
 
 void renderTopHeader(Canvas & c, const wchar_t * title, const wchar_t * badgeText) {
   c.fillRect(0, 0, kMainW, kHeaderH, kColTeal);
   c.fillRect(0, kHeaderH - 2, kMainW, 2, kColTealDark);
 
-  c.drawDotText(14, 0, 360, kHeaderH - 2, kColWhite, title, 16, Align::Left, true);
+  c.drawText(14, 0, 340, kHeaderH - 2, kColWhite, title, 2, Align::Left, true);
 
   if (badgeText && badgeText[0]) {
-    int bw = c.measureDotWidth(badgeText, 12) + 18;
-    if (bw > 220) bw = 220;
-    if (bw < 110) bw = 110;
-    c.drawBox(kMainW - bw - 12, 9, bw, 24, kColTealHeader, kColWhite);
-    c.drawDotText(kMainW - bw - 12, 9, bw, 24, kColTealDeep, badgeText, 12, Align::Center, true);
+    int bw = c.measureWidth(badgeText, 2) + 18;
+    if (bw > 260) bw = 260;
+    if (bw < 130) bw = 130;
+    c.drawBox(kMainW - bw - 12, 8, bw, 26, kColTealHeader, kColWhite);
+    c.drawText(kMainW - bw - 12, 8, bw, 26, kColTealDeep, badgeText, 2, Align::Center, true);
   }
 }
 
@@ -426,7 +388,6 @@ void renderSidebar(Canvas & c,
     renderSidebarStatus(c, statusLine);
   }
 
-  // Always update the middle explanation card on sidebar change
   const int cardX = sx + 5;
   const int cardY = 62;
   const int cardW = sw - 10;
@@ -457,19 +418,19 @@ void renderConfirmModal(Canvas & c,
 
   const int dlgW = 500;
   const int dlgH = 224;
-  const int dlgX = (kScreenW - dlgW) / 2; // 150
-  const int dlgY = (kScreenH - dlgH) / 2; // 128
+  const int dlgX = (kScreenW - dlgW) / 2;
+  const int dlgY = (kScreenH - dlgH) / 2;
 
   c.fillRect(dlgX + 4, dlgY + 4, dlgW, dlgH, kColBorderStrong);
   c.drawBox(dlgX, dlgY, dlgW, dlgH, 0xF6F8FC, 0xA5B2C2);
   c.drawBox(dlgX, dlgY, dlgW, 38, kColTealHeader, 0xB4D7D2);
-  c.drawDotText(dlgX + 10, dlgY + 2, dlgW - 20, 34, kColTealDeep, title, 16, Align::Center, true);
+  c.drawText(dlgX + 10, dlgY + 2, dlgW - 20, 34, kColTealDeep, title, 2, Align::Center, true);
 
   if (line1 && line1[0]) {
-    c.drawDotText(dlgX + 16, dlgY + 52, dlgW - 32, 24, kColText, line1, 16, Align::Center, true);
+    c.drawText(dlgX + 16, dlgY + 52, dlgW - 32, 24, kColText, line1, 2, Align::Center, true);
   }
   if (line2 && line2[0]) {
-    c.drawDotText(dlgX + 16, dlgY + 84, dlgW - 32, 22, kColMuted, line2, 16, Align::Center, true);
+    c.drawText(dlgX + 16, dlgY + 84, dlgW - 32, 22, kColMuted, line2, 2, Align::Center, true);
   }
 
   if (buttons && buttonCount > 0) {
@@ -497,13 +458,13 @@ void renderConfirmModal(Canvas & c,
       }
 
       c.drawBox(bx, by, btnW, bh, bg, bd);
-      c.drawDotText(bx, by, btnW, bh, tx, buttons[i].label, 16, Align::Center, true);
+      c.drawText(bx, by, btnW, bh, tx, buttons[i].label, 2, Align::Center, true);
       bx += btnW + gap;
     }
   }
 
   if (footerHint && footerHint[0]) {
-    c.drawDotText(dlgX + 12, dlgY + 188, dlgW - 24, 20, kColLightMuted, footerHint, 12, Align::Center, true);
+    c.drawText(dlgX + 12, dlgY + 188, dlgW - 24, 20, kColLightMuted, footerHint, 1, Align::Center, true);
   }
 }
 
@@ -515,63 +476,16 @@ static bool isModifierKey(WPARAM vkCode) {
   return vkCode == VK_SHIFT || vkCode == VK_LSHIFT || vkCode == VK_RSHIFT || vkCode == VK_CAPITAL;
 }
 
-struct FontFindCtx {
-  const wchar_t * target;
-  bool found;
-};
-
-static int CALLBACK enumFontCb(const LOGFONTW * lpelf, const TEXTMETRICW *, DWORD, LPARAM lParam) {
-  FontFindCtx * ctx = reinterpret_cast<FontFindCtx *>(lParam);
-  if (ctx && lpelf && _wcsicmp(lpelf->lfFaceName, ctx->target) == 0) {
-    ctx->found = true;
-    return 0;
-  }
-  return 1;
-}
-
-static bool isFontFaceAvailable(HDC hdc, const wchar_t * faceName) {
-  FontFindCtx ctx{ faceName, false };
-#ifdef _WIN32_WCE
-  EnumFontFamiliesW(hdc, faceName, enumFontCb, reinterpret_cast<LPARAM>(&ctx));
-#else
-  LOGFONTW lf = {};
-  lf.lfCharSet = DEFAULT_CHARSET;
-  wcsncpy(lf.lfFaceName, faceName, LF_FACESIZE - 1);
-  EnumFontFamiliesExW(hdc, &lf, enumFontCb, reinterpret_cast<LPARAM>(&ctx), 0);
-#endif
-  return ctx.found;
-}
-
-static HFONT createDotFont(const wchar_t * faceName, int heightPx, BYTE quality) {
-  LOGFONTW lf = {};
-  lf.lfHeight = -heightPx;
-  lf.lfWeight = FW_NORMAL;
-  lf.lfCharSet = DEFAULT_CHARSET;
-  lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
-  lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
-  lf.lfQuality = quality;
-  lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-  wcsncpy(lf.lfFaceName, faceName, LF_FACESIZE - 1);
-  return CreateFontIndirectW(&lf);
-}
-
 AppWindow::AppWindow()
   : m_hwnd(NULL),
     m_memDC(NULL),
     m_dibBitmap(NULL),
     m_oldBitmap(NULL),
     m_pixels(nullptr),
-    m_loadedFontPath(L""),
-    m_fontFileLoaded(false),
-    m_dotFont16(NULL),
-    m_dotFont12(NULL),
-    m_hasDotGothic(false),
     m_cb{},
     m_userData(nullptr),
     m_needsRepaint(true),
     m_fullRedrawPending(true),
-    m_hasPendingRect(false),
-    m_pendX0(0), m_pendY0(0), m_pendX1(0), m_pendY1(0),
     m_quitRequested(false),
     m_manageTaskBar(false),
     m_lastClockMinute(-1),
@@ -584,82 +498,7 @@ AppWindow::~AppWindow() {
   if (m_manageTaskBar) {
     restoreBrainTaskBar();
   }
-  freeFonts();
   freeBackbuffer();
-}
-
-void AppWindow::initFonts() {
-  wchar_t rootDir[MAX_PATH] = L"";
-  getLiliumRootDir(rootDir, MAX_PATH);
-  wchar_t exeDir[MAX_PATH] = L"";
-  getExeDir(exeDir, MAX_PATH);
-
-  wchar_t candidates[3][MAX_PATH] = {};
-  joinPath(rootDir, L"dotgothic16.ttf", candidates[0], MAX_PATH);
-  joinPath(exeDir, L"dotgothic16.ttf", candidates[1], MAX_PATH);
-  wcsncpy(candidates[2], L"dotgothic16.ttf", MAX_PATH - 1);
-
-  for (int i = 0; i < 3; ++i) {
-    if (!candidates[i][0]) continue;
-    DWORD attr = GetFileAttributesW(candidates[i]);
-    if (attr == INVALID_FILE_ATTRIBUTES) continue;
-#ifndef _WIN32_WCE
-    if (AddFontResourceExW(candidates[i], 0x10 /* FR_PRIVATE */, 0) > 0) {
-      wcsncpy(m_loadedFontPath, candidates[i], MAX_PATH - 1);
-      m_fontFileLoaded = true;
-      break;
-    }
-#else
-    if (AddFontResourceW(candidates[i]) > 0) {
-      wcsncpy(m_loadedFontPath, candidates[i], MAX_PATH - 1);
-      m_fontFileLoaded = true;
-      break;
-    }
-#endif
-  }
-
-  static constexpr const wchar_t * kFaces[] = {
-    L"DotGothic16",
-    L"DotGothic16 Regular",
-    L"DFGHSGothic-W5-SH"
-  };
-
-  const wchar_t * chosen = nullptr;
-  for (const wchar_t * f : kFaces) {
-    if (m_memDC && isFontFaceAvailable(m_memDC, f)) {
-      chosen = f;
-      break;
-    }
-  }
-
-  if (chosen) {
-    // -16 with NONANTIALIASED_QUALITY: crisp 16x16 monochrome dots with ZERO color bleed!
-    // -12 with ANTIALIASED_QUALITY: clean grayscale compact text (never ClearType!)
-    m_dotFont16 = createDotFont(chosen, 16, NONANTIALIASED_QUALITY);
-    m_dotFont12 = createDotFont(chosen, 12, ANTIALIASED_QUALITY);
-    m_hasDotGothic = (m_dotFont16 != NULL);
-  }
-}
-
-void AppWindow::freeFonts() {
-  if (m_dotFont16) {
-    DeleteObject(m_dotFont16);
-    m_dotFont16 = NULL;
-  }
-  if (m_dotFont12) {
-    DeleteObject(m_dotFont12);
-    m_dotFont12 = NULL;
-  }
-  m_hasDotGothic = false;
-  if (m_fontFileLoaded && m_loadedFontPath[0]) {
-#ifndef _WIN32_WCE
-    RemoveFontResourceExW(m_loadedFontPath, 0x10 /* FR_PRIVATE */, 0);
-#else
-    RemoveFontResourceW(m_loadedFontPath);
-#endif
-    m_fontFileLoaded = false;
-    m_loadedFontPath[0] = L'\0';
-  }
 }
 
 void AppWindow::initBackbuffer() {
@@ -737,7 +576,6 @@ bool AppWindow::create(const wchar_t * className, const wchar_t * title,
   if (!m_hwnd) return false;
 
   initBackbuffer();
-  initFonts();
   if (m_manageTaskBar) hideBrainTaskBar();
   SetWindowPos(m_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
 
@@ -747,7 +585,6 @@ bool AppWindow::create(const wchar_t * className, const wchar_t * title,
   bool dummyChg = false;
   queryBattery(m_lastBatteryPct, dummyChg);
 
-  // Check clock & battery only once per second (no idle redraws!)
   SetTimer(m_hwnd, 1, 1000, NULL);
   m_fullRedrawPending = true;
   m_needsRepaint = true;
@@ -757,30 +594,7 @@ bool AppWindow::create(const wchar_t * className, const wchar_t * title,
 
 void AppWindow::requestRepaint(bool full) {
   m_needsRepaint = true;
-  if (full) {
-    m_fullRedrawPending = true;
-  }
-}
-
-void AppWindow::requestDirtyRect(int x, int y, int w, int h) {
-  m_needsRepaint = true;
-  int x0 = (x < 0) ? 0 : x;
-  int y0 = (y < 0) ? 0 : y;
-  int x1 = (x + w > kScreenW) ? kScreenW : (x + w);
-  int y1 = (y + h > kScreenH) ? kScreenH : (y + h);
-  if (x0 >= x1 || y0 >= y1) return;
-  if (!m_hasPendingRect) {
-    m_hasPendingRect = true;
-    m_pendX0 = x0;
-    m_pendY0 = y0;
-    m_pendX1 = x1;
-    m_pendY1 = y1;
-  } else {
-    if (x0 < m_pendX0) m_pendX0 = x0;
-    if (y0 < m_pendY0) m_pendY0 = y0;
-    if (x1 > m_pendX1) m_pendX1 = x1;
-    if (y1 > m_pendY1) m_pendY1 = y1;
-  }
+  if (full) m_fullRedrawPending = true;
 }
 
 void AppWindow::requestQuit() {
@@ -808,7 +622,6 @@ void AppWindow::blitDirtyToScreen(int x0, int y0, int x1, int y1) {
   int w = x1 - x0;
   int h = y1 - y0;
   if (w <= 0 || h <= 0) return;
-  flushGdi();
   HDC hdcWin = GetDC(m_hwnd);
   if (hdcWin) {
     BitBlt(hdcWin, x0, y0, w, h, m_memDC, x0, y0, SRCCOPY);
@@ -820,10 +633,6 @@ void AppWindow::redrawNow() {
   if (!m_hwnd || !m_pixels) return;
   Canvas canvas = {};
   canvas.pixels = m_pixels;
-  canvas.memDC = m_memDC;
-  canvas.dotFont16 = m_dotFont16;
-  canvas.dotFont12 = m_dotFont12;
-  canvas.hasDotGothic = m_hasDotGothic;
   canvas.width = kScreenW;
   canvas.height = kScreenH;
   canvas.fullRedraw = m_fullRedrawPending;
@@ -834,7 +643,6 @@ void AppWindow::redrawNow() {
   }
   m_needsRepaint = false;
   m_fullRedrawPending = false;
-  m_hasPendingRect = false;
 
   if (canvas.dirtyValid) {
     blitDirtyToScreen(canvas.dirtyX0, canvas.dirtyY0, canvas.dirtyX1, canvas.dirtyY1);
@@ -894,7 +702,6 @@ LRESULT AppWindow::handleMsg(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
       return 0;
 
     case WM_TIMER: {
-      // Only repaint sidebar status when clock minute or battery percentage actually changes!
       SYSTEMTIME st;
       GetLocalTime(&st);
       int batPct = 100;
@@ -906,10 +713,6 @@ LRESULT AppWindow::handleMsg(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         if (m_cb.onTimer && m_pixels) {
           Canvas canvas = {};
           canvas.pixels = m_pixels;
-          canvas.memDC = m_memDC;
-          canvas.dotFont16 = m_dotFont16;
-          canvas.dotFont12 = m_dotFont12;
-          canvas.hasDotGothic = m_hasDotGothic;
           canvas.width = kScreenW;
           canvas.height = kScreenH;
           canvas.fullRedraw = false;
@@ -983,7 +786,6 @@ LRESULT AppWindow::handleMsg(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         int pw = ps.rcPaint.right - ps.rcPaint.left;
         int ph = ps.rcPaint.bottom - ps.rcPaint.top;
         if (pw > 0 && ph > 0) {
-          flushGdi();
           BitBlt(hdc, px, py, pw, ph, m_memDC, px, py, SRCCOPY);
         }
       }
@@ -995,7 +797,6 @@ LRESULT AppWindow::handleMsg(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
     case WM_PRINTCLIENT: {
       HDC hdcTarget = reinterpret_cast<HDC>(wParam);
       if (m_memDC && hdcTarget) {
-        flushGdi();
         BitBlt(hdcTarget, 0, 0, kScreenW, kScreenH, m_memDC, 0, 0, SRCCOPY);
       }
       return 0;

@@ -219,6 +219,16 @@ static void refreshSystemSnapshot(TaskMgrState * st) {
           }
         }
 #endif
+        if (wcschr(pi.fullPath, L'\\') == nullptr && pi.exeName[0]) {
+          wchar_t winPath[MAX_PATH] = {};
+          _snwprintf(winPath, MAX_PATH, L"\\Windows\\%ls", pi.exeName);
+          winPath[MAX_PATH - 1] = L'\0';
+          DWORD attr = GetFileAttributesW(winPath);
+          if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            wcsncpy(pi.fullPath, winPath, MAX_PATH - 1);
+            pi.fullPath[MAX_PATH - 1] = L'\0';
+          }
+        }
         pi.kind = classifyProcess(pi.pid, pi.exeName, pi.fullPath);
       } while (Process32Next(hSnap, &pe));
     }
@@ -351,8 +361,8 @@ static void renderProcessRow(LiliumUI::Canvas & c, const TaskMgrState * st, int 
   wchar_t pidStr[24];
   _snwprintf(pidStr, 24, L"%lu", static_cast<unsigned long>(p.pid));
   pidStr[23] = L'\0';
-  c.drawDotText(listX + 10, ry, 86, rowH - 2, LiliumUI::kColMuted, pidStr, 12, LiliumUI::Align::Left, true);
-  c.drawDotText(listX + 100, ry, 380, rowH - 2, LiliumUI::kColText, p.exeName, 16, LiliumUI::Align::Left, true);
+  c.drawText(listX + 10, ry, 86, rowH - 2, LiliumUI::kColMuted, pidStr, 2, LiliumUI::Align::Left, true);
+  c.drawText(listX + 100, ry, 382, rowH - 2, LiliumUI::kColText, p.exeName, 2, LiliumUI::Align::Left, true);
 
   const wchar_t * badgeText = L"アプリ";
   uint32_t bBg = 0xEEF2F6, bBd = LiliumUI::kColBtnBorder, bTx = LiliumUI::kColTextSub;
@@ -367,7 +377,7 @@ static void renderProcessRow(LiliumUI::Canvas & c, const TaskMgrState * st, int 
     bBg = LiliumUI::kColTealHeader; bBd = LiliumUI::kColTealBorder; bTx = LiliumUI::kColTealDeep;
   }
   c.drawBox(listX + listW - 114, ry + 4, 100, rowH - 10, bBg, bBd);
-  c.drawDotText(listX + listW - 114, ry + 4, 100, rowH - 10, bTx, badgeText, 12, LiliumUI::Align::Center, true);
+  c.drawText(listX + listW - 114, ry + 4, 100, rowH - 10, bTx, badgeText, 2, LiliumUI::Align::Center, true);
 }
 
 static void renderWindowRow(LiliumUI::Canvas & c, const TaskMgrState * st, int r) {
@@ -385,9 +395,9 @@ static void renderWindowRow(LiliumUI::Canvas & c, const TaskMgrState * st, int r
   uint32_t rowBd = sel ? LiliumUI::kColTeal : rowBg;
   c.drawBox(listX + 4, ry, listW - 8, rowH - 2, rowBg, rowBd);
 
-  c.drawDotText(listX + 12, ry, 430, rowH - 2, LiliumUI::kColText, w.title, 16, LiliumUI::Align::Left, true);
+  c.drawText(listX + 12, ry, 430, rowH - 2, LiliumUI::kColText, w.title, 2, LiliumUI::Align::Left, true);
   c.drawBox(listX + listW - 156, ry + 4, 142, rowH - 10, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
-  c.drawDotText(listX + listW - 156, ry + 4, 142, rowH - 10, LiliumUI::kColTealDeep, w.ownerExe, 12, LiliumUI::Align::Center, true);
+  c.drawText(listX + listW - 156, ry + 4, 142, rowH - 10, LiliumUI::kColTealDeep, w.ownerExe, 2, LiliumUI::Align::Center, true);
 }
 
 static void onRender(LiliumUI::Canvas & c, void * userData) {
@@ -409,7 +419,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     wchar_t ramText[64];
     _snwprintf(ramText, 64, L"RAM使用率: %d%% (使用 %d MB)", usedPct, totalMB - availMB);
     ramText[63] = L'\0';
-    c.drawDotText(20, 48, 290, 28, LiliumUI::kColText, ramText, 16, LiliumUI::Align::Left, true);
+    c.drawText(20, 48, 300, 28, LiliumUI::kColText, ramText, 2, LiliumUI::Align::Left, true);
 
     const int barX = 330, barY = 55, barW = 282, barH = 14;
     c.drawBox(barX, barY, barW, barH, 0xE6EAEF, LiliumUI::kColBtnBorder);
@@ -431,18 +441,18 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     c.drawBox(12, 82, tabW, 28,
               (st->tab == 0) ? LiliumUI::kColTeal : LiliumUI::kColWhite,
               (st->tab == 0) ? LiliumUI::kColTealDark : LiliumUI::kColBorder);
-    c.drawDotText(12, 82, tabW, 28,
-                  (st->tab == 0) ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
-                  tab0, 16, LiliumUI::Align::Center, true);
+    c.drawText(12, 82, tabW, 28,
+               (st->tab == 0) ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
+               tab0, 2, LiliumUI::Align::Center, true);
 
     c.drawBox(12 + tabW + 8, 82, tabW, 28,
               (st->tab == 1) ? LiliumUI::kColTeal : LiliumUI::kColWhite,
               (st->tab == 1) ? LiliumUI::kColTealDark : LiliumUI::kColBorder);
-    c.drawDotText(12 + tabW + 8, 82, tabW, 28,
-                  (st->tab == 1) ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
-                  tab1, 16, LiliumUI::Align::Center, true);
+    c.drawText(12 + tabW + 8, 82, tabW, 28,
+               (st->tab == 1) ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
+               tab1, 2, LiliumUI::Align::Center, true);
 
-    c.drawDotText(412, 82, 216, 28, LiliumUI::kColMuted, L"[F4]更新  [F8]ログ保存", 12, LiliumUI::Align::Right, true);
+    c.drawText(404, 82, 224, 28, LiliumUI::kColMuted, L"[F4]更新 [F8]ログ", 2, LiliumUI::Align::Right, true);
 
     // 3. List Frame + rows
     const int listX = 12, listY = 114, listW = LiliumUI::kMainW - 24, rowH = 34;
@@ -455,11 +465,11 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     // 4. Bottom hint strip
     c.fillRect(0, 440, LiliumUI::kMainW, 40, LiliumUI::kColSidebar);
     c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
-    c.drawDotText(14, 440, LiliumUI::kMainW - 28, 40, LiliumUI::kColTextSub,
-                  (st->tab == 0)
-                    ? L"[↑↓]:選択  [←→/F2]:タブ  [Ent/F3]:詳細  [F5]:終了  [F8]:ログ保存"
-                    : L"[↑↓]:選択  [←→/F2]:タブ  [Ent/F3]:前面  [F4]:更新  [Esc]:戻る",
-                  12, LiliumUI::Align::Left, true);
+    c.drawText(14, 440, LiliumUI::kMainW - 28, 40, LiliumUI::kColTextSub,
+               (st->tab == 0)
+                 ? L"[↑↓]選択 [←→]タブ [Ent]詳細 [F4]更新 [F5]終了 [F8]ログ"
+                 : L"[↑↓]選択 [←→]タブ [Ent]前面 [F4]更新 [Esc]戻る",
+               2, LiliumUI::Align::Left, true);
   } else {
     // Fast differential redraw for row moves without re-blitting whole 800x480!
     if (st->tab == 0) {

@@ -106,19 +106,19 @@ static void renderAppCard(LiliumUI::Canvas & c, int i, bool sel) {
   wchar_t numLabel[16];
   _snwprintf(numLabel, 16, L"%d.", i + 1);
   numLabel[15] = L'\0';
-  c.drawDotText(cardX + 82, curY + 14, 34, 22, sel ? LiliumUI::kColTealDeep : LiliumUI::kColMuted,
-                numLabel, 16, LiliumUI::Align::Left, true);
-  c.drawDotText(cardX + 112, curY + 14, 350, 22, LiliumUI::kColText,
-                kApps[i].name, 16, LiliumUI::Align::Left, true);
-  c.drawDotText(cardX + 82, curY + 46, 396, 20, LiliumUI::kColMuted,
-                kApps[i].subtitle, 12, LiliumUI::Align::Left, true);
+  c.drawText(cardX + 82, curY + 14, 34, 22, sel ? LiliumUI::kColTealDeep : LiliumUI::kColMuted,
+             numLabel, 2, LiliumUI::Align::Left, true);
+  c.drawText(cardX + 112, curY + 14, 350, 22, LiliumUI::kColText,
+             kApps[i].name, 2, LiliumUI::Align::Left, true);
+  c.drawText(cardX + 82, curY + 46, 396, 20, LiliumUI::kColMuted,
+             kApps[i].subtitle, 2, LiliumUI::Align::Left, true);
 
   uint32_t pillBg = sel ? LiliumUI::kColTeal : 0xF2F4F7;
   uint32_t pillBd = sel ? LiliumUI::kColTealDark : LiliumUI::kColBtnBorder;
   uint32_t pillTx = sel ? LiliumUI::kColWhite : LiliumUI::kColTextSub;
   c.drawBox(cardX + cardW - 110, curY + 23, 94, 36, pillBg, pillBd);
-  c.drawDotText(cardX + cardW - 110, curY + 23, 94, 36, pillTx,
-                L"起　動", 16, LiliumUI::Align::Center, true);
+  c.drawText(cardX + cardW - 110, curY + 23, 94, 36, pillTx,
+             L"起　動", 2, LiliumUI::Align::Center, true);
 }
 
 static void launchSelectedApp(LauncherState * st) {
@@ -211,8 +211,8 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     LiliumUI::renderTopHeader(c, L"LILIUM LAUNCHER", badge);
 
     c.drawBox(16, 54, LiliumUI::kMainW - 32, 34, LiliumUI::kColWhite, LiliumUI::kColBorder);
-    c.drawDotText(26, 54, LiliumUI::kMainW - 52, 34, LiliumUI::kColTextSub,
-                  L"起動する Lilium アプリを選択してください", 16, LiliumUI::Align::Left, true);
+    c.drawText(26, 54, LiliumUI::kMainW - 52, 34, LiliumUI::kColTextSub,
+               L"起動する Lilium アプリを選択してください", 2, LiliumUI::Align::Left, true);
 
     for (int i = 0; i < kAppCount; ++i) {
       renderAppCard(c, i, i == st->selectedIndex);
@@ -220,20 +220,20 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
 
     c.drawBox(16, 304, LiliumUI::kMainW - 32, 118, LiliumUI::kColWhite, LiliumUI::kColBorder);
     c.drawBox(16, 304, LiliumUI::kMainW - 32, 28, LiliumUI::kColTealHeader, LiliumUI::kColBorder);
-    c.drawDotText(26, 304, LiliumUI::kMainW - 52, 28, LiliumUI::kColTealDeep,
-                  L"■ Lilium Suite 構成ステータス (Phase 1)", 16, LiliumUI::Align::Left, true);
-    c.drawDotText(26, 340, LiliumUI::kMainW - 52, 22, LiliumUI::kColTextSub,
-                  L"・Calc (電卓/KhyCAS) と TaskMgr を分離独立しました", 16, LiliumUI::Align::Left, true);
-    c.drawDotText(26, 366, LiliumUI::kMainW - 52, 22, LiliumUI::kColMuted,
-                  L"・追加予定: Lilium Clock / Lilium Filer (apps/*.exe)", 16, LiliumUI::Align::Left, true);
-    c.drawDotText(26, 394, LiliumUI::kMainW - 52, 20, LiliumUI::kColLightMuted,
-                  L"※ 次段階: TaskMgr 調査をもとに純正辞書の解放・自動復帰を実装", 12, LiliumUI::Align::Left, true);
+    c.drawText(26, 304, LiliumUI::kMainW - 52, 28, LiliumUI::kColTealDeep,
+               L"■ Lilium Suite 構成ステータス (Phase 1)", 2, LiliumUI::Align::Left, true);
+    c.drawText(26, 340, LiliumUI::kMainW - 52, 22, LiliumUI::kColTextSub,
+               L"・Calc (電卓/KhyCAS) と TaskMgr を分離独立しました", 2, LiliumUI::Align::Left, true);
+    c.drawText(26, 366, LiliumUI::kMainW - 52, 22, LiliumUI::kColMuted,
+               L"・追加予定: Lilium Clock / Lilium Filer (apps/*.exe)", 2, LiliumUI::Align::Left, true);
+    c.drawText(26, 394, LiliumUI::kMainW - 52, 20, LiliumUI::kColLightMuted,
+               L"※ 次段階: TaskMgr 拡充＋純正辞書の解放・自動復帰", 1, LiliumUI::Align::Left, true);
 
     c.fillRect(0, 440, LiliumUI::kMainW, 40, LiliumUI::kColSidebar);
     c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
-    c.drawDotText(16, 440, LiliumUI::kMainW - 32, 40, LiliumUI::kColTextSub,
-                  L"[↑/↓/1-2]:選択   [Enter/F3]:起動   [Esc/F5/HOME]:Brainへ戻る",
-                  12, LiliumUI::Align::Left, true);
+    c.drawText(16, 440, LiliumUI::kMainW - 32, 40, LiliumUI::kColTextSub,
+               L"[↑↓/1-2]:選択 [Ent/F3]:起動 [Esc/F5/HOME]:終了",
+               2, LiliumUI::Align::Left, true);
   } else {
     // Differential partial redraw: only update previous & newly selected app cards
     if (st->prevSelectedIndex != st->selectedIndex) {
