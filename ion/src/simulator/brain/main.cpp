@@ -128,7 +128,63 @@ static void unloadBundledFont() {
   }
 }
 
+bool isLaunchedFromLauncher() {
+  const wchar_t * cmd = GetCommandLineW();
+  if (cmd && wcsstr(cmd, L"--from-launcher") != nullptr) {
+    return true;
+  }
+  wchar_t exeDir[MAX_PATH] = L"";
+  if (GetModuleFileNameW(NULL, exeDir, MAX_PATH) > 0) {
+    wchar_t * lastSlash = wcsrchr(exeDir, L'\\');
+    if (!lastSlash) lastSlash = wcsrchr(exeDir, L'/');
+    if (lastSlash) {
+      *(lastSlash + 1) = L'\0';
+      size_t len = wcslen(exeDir);
+      if (len >= 6 && _wcsicmp(exeDir + len - 6, L"\\apps\\") == 0) {
+        return true;
+      }
+      if (len >= 6 && _wcsicmp(exeDir + len - 6, L"/apps/") == 0) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool resolveRootFilePath(const wchar_t * filename, wchar_t * outPath, size_t maxLen) {
+  if (!filename || !outPath || maxLen == 0) return false;
+  wchar_t exeDir[MAX_PATH] = L"";
+  if (GetModuleFileNameW(NULL, exeDir, MAX_PATH) > 0) {
+    wchar_t * lastSlash = wcsrchr(exeDir, L'\\');
+    if (!lastSlash) {
+      lastSlash = wcsrchr(exeDir, L'/');
+    }
+    if (lastSlash) {
+      *(lastSlash + 1) = L'\0';
+      size_t len = wcslen(exeDir);
+      if (len >= 6 && (_wcsicmp(exeDir + len - 6, L"\\apps\\") == 0 ||
+                      _wcsicmp(exeDir + len - 6, L"/apps/") == 0)) {
+        exeDir[len - 5] = L'\0';
+      }
+    } else {
+      exeDir[0] = L'\0';
+    }
+  }
+  if (exeDir[0] != L'\0') {
+    wcsncpy(outPath, exeDir, maxLen - 1);
+    outPath[maxLen - 1] = L'\0';
+    wcsncat(outPath, filename, maxLen - wcslen(outPath) - 1);
+  } else {
+    wcsncpy(outPath, filename, maxLen - 1);
+  }
+  outPath[maxLen - 1] = L'\0';
+  return true;
+}
+
 void hideTaskBar() {
+  if (isLaunchedFromLauncher()) {
+    return;
+  }
   HWND hTaskBar = FindWindowW(L"HHTaskBar", NULL);
   if (hTaskBar != NULL) {
     sTaskBarHwnd = hTaskBar;
@@ -137,6 +193,9 @@ void hideTaskBar() {
 }
 
 void restoreTaskBar() {
+  if (isLaunchedFromLauncher()) {
+    return;
+  }
   HWND hTaskBar = sTaskBarHwnd ? sTaskBarHwnd : FindWindowW(L"HHTaskBar", NULL);
   if (hTaskBar != NULL) {
     ShowWindow(hTaskBar, SW_SHOW);
@@ -203,26 +262,7 @@ static uint32_t getRdataCanary() {
 }
 
 static bool getStateFilePath(wchar_t * outPath, size_t maxLen) {
-  wchar_t exeDir[MAX_PATH] = L"";
-  if (GetModuleFileNameW(NULL, exeDir, MAX_PATH) > 0) {
-    wchar_t * lastSlash = wcsrchr(exeDir, L'\\');
-    if (!lastSlash) {
-      lastSlash = wcsrchr(exeDir, L'/');
-    }
-    if (lastSlash) {
-      *(lastSlash + 1) = L'\0';
-    } else {
-      exeDir[0] = L'\0';
-    }
-  }
-  if (exeDir[0] != L'\0') {
-    wcsncpy(outPath, exeDir, maxLen - 1);
-    wcsncat(outPath, L"brain_state.bin", maxLen - wcslen(outPath) - 1);
-  } else {
-    wcsncpy(outPath, L"brain_state.bin", maxLen - 1);
-  }
-  outPath[maxLen - 1] = L'\0';
-  return true;
+  return resolveRootFilePath(L"brain_state.bin", outPath, maxLen);
 }
 
 void saveBrainState() {

@@ -72,16 +72,42 @@ fi
 make PLATFORM=simulator TARGET=brain TOOLCHAIN="${TOOLCHAIN_OPT}" -j"${JOBS}"
 
 DIST_DIR="${OUT_DIR}/Lilium"
-mkdir -p "$DIST_DIR"
+APPS_DIR="${DIST_DIR}/apps"
+mkdir -p "$DIST_DIR" "$APPS_DIR"
 
-# アプリ本体 (epsilon.exe) を DIST_DIR/AppMain_.exe として出力 (SHARP Brain PW-SB4 必須仕様)
+# 1. Lilium Calc (Upsilon/KhyCAS 本体) -> DIST_DIR/apps/LiliumCalc.exe
+if [[ ! -f "${APPS_DIR}/LiliumCalc.exe" ]] || [[ "${OUT_DIR}/epsilon.exe" -nt "${APPS_DIR}/LiliumCalc.exe" ]]; then
+  rm -f "${APPS_DIR}/LiliumCalc.exe" 2>/dev/null || true
+  cp -f "${OUT_DIR}/epsilon.exe" "${APPS_DIR}/LiliumCalc.exe.tmp"
+  mv -f "${APPS_DIR}/LiliumCalc.exe.tmp" "${APPS_DIR}/LiliumCalc.exe"
+fi
+
+# 2. Standalone Lilium Suite apps (Launcher + TaskManager)
+SUITE_COMMON_SRCS="suite/common/lilium_ui.cpp ion/src/simulator/brain/misaki_font_data.cpp"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
-  # PCホスト検証用 (--host) の場合は AppMain.exe および Lilium.exe として出力
-  cp -f "${OUT_DIR}/epsilon.exe" "${DIST_DIR}/AppMain.exe" 2>/dev/null || true
-  cp -f "${OUT_DIR}/epsilon.exe" "${DIST_DIR}/Lilium.exe" 2>/dev/null || true
+  SUITE_CXX="g++"
+  SUITE_CXXFLAGS="-O2 -std=gnu++17 -Wall -Wextra -DNOMINMAX -DUNICODE -D_UNICODE -fno-exceptions -fno-rtti"
+  SUITE_LDFLAGS="-mwindows -static -s -lgdi32 -luser32 -lcomctl32"
+  LAUNCHER_OUT="${DIST_DIR}/AppMain.exe"
 else
-  # Brain実機向けの場合は AppMain_.exe として出力
-  cp -f "${OUT_DIR}/epsilon.exe" "${DIST_DIR}/AppMain_.exe"
+  SUITE_CXX="arm-mingw32ce-g++"
+  SUITE_CXXFLAGS="-O3 -std=gnu++17 -Wall -Wextra -march=armv5tej -mcpu=arm926ej-s -DNOMINMAX -DUNICODE -D_UNICODE -fno-exceptions -fno-rtti"
+  SUITE_LDFLAGS="-march=armv5tej -mcpu=arm926ej-s -static -s -lcommctrl -lcommdlg"
+  LAUNCHER_OUT="${DIST_DIR}/AppMain_.exe"
+fi
+
+echo "[INFO] Building Lilium Launcher -> ${LAUNCHER_OUT}..."
+${SUITE_CXX} ${SUITE_CXXFLAGS} suite/launcher/main.cpp ${SUITE_COMMON_SRCS} -o "${LAUNCHER_OUT}" ${SUITE_LDFLAGS}
+if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
+  cp -f "${LAUNCHER_OUT}" "${DIST_DIR}/LiliumLauncher.exe" 2>/dev/null || true
+fi
+
+TASKMGR_OUT="${APPS_DIR}/LiliumTaskMgr.exe"
+echo "[INFO] Building Lilium TaskManager -> ${TASKMGR_OUT}..."
+if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
+  ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/taskmgr/main.cpp ${SUITE_COMMON_SRCS} -o "${TASKMGR_OUT}" ${SUITE_LDFLAGS}
+else
+  ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/taskmgr/main.cpp ${SUITE_COMMON_SRCS} -o "${TASKMGR_OUT}" ${SUITE_LDFLAGS} -ltoolhelp
 fi
 
 # PW-SB4 動作必須のローダー (188KB AppMain.exe) と AppMain.cfg (8バイト) をリポジトリ内から確実に配置
@@ -121,10 +147,11 @@ mkdir -p "${DIST_DIR}/scripts"
 echo "=============================================================================="
 echo "[SUCCESS] Build completed!"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
-  echo "  Executable : ${DIST_DIR}/AppMain.exe"
-  echo "  Bundle     : ${DIST_DIR}/ (AppMain.exe, font.ttf)"
+  echo "  Launcher   : ${DIST_DIR}/AppMain.exe (LiliumLauncher.exe)"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, ${APPS_DIR}/LiliumTaskMgr.exe"
 else
-  echo "  App Binary : ${DIST_DIR}/AppMain_.exe"
-  echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe [loader], AppMain.cfg, AppMain_.exe [app], index.din, font.ttf)"
+  echo "  Launcher   : ${DIST_DIR}/AppMain_.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, ${APPS_DIR}/LiliumTaskMgr.exe"
+  echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe [loader], AppMain.cfg, AppMain_.exe [Launcher], index.din, font.ttf, apps/)"
 fi
 echo "=============================================================================="

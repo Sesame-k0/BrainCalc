@@ -1,0 +1,701 @@
+#include "../common/lilium_ui.h"
+
+#include <tlhelp32.h>
+#include <stdio.h>
+#include <string.h>
+#include <wchar.h>
+
+namespace {
+
+constexpr int kMaxProcesses = 256;
+constexpr int kMaxWindows = 128;
+constexpr int kVisibleRows = 9;
+
+enum class ProcProtection {
+  OsCritical = 0, // Must never be terminated
+  DictCandidate,  // Possible SHARP Brain built-in dictionary shell
+  LiliumApp,      // Lilium Suite child process
+  UserApp         // Regular user process
+};
+
+struct ProcInfo {
+  DWORD pid;
+  DWORD threads;
+  wchar_t exeName[64];
+  wchar_t fullPath[MAX_PATH];
+  ProcProtection kind;
+};
+
+struct WinInfo {
+  HWND hwnd;
+  DWORD pid;
+  wchar_t title[80];
+  wchar_t className[48];
+  wchar_t ownerExe[48];
+};
+
+enum class ModalMode {
+  None = 0,
+  ProtectedWarn,
+  KillConfirm,
+  ProcessDetail,
+  LogSaved
+};
+
+struct TaskMgrState {
+  LiliumUI::AppWindow window;
+  bool manageTaskBar = false;
+
+  int tab = 0; // 0: Processes, 1: Windows
+  ProcInfo procs[kMaxProcesses];
+  int procCount = 0;
+  int procSel = 0;
+  int procScroll = 0;
+
+  WinInfo wins[kMaxWindows];
+  int winCount = 0;
+  int winSel = 0;
+  int winScroll = 0;
+
+  ModalMode modal = ModalMode::None;
+  int modalFocus = 0;
+  wchar_t statusMsg1[96] = L"";
+  wchar_t statusMsg2[96] = L"";
+};
+
+static const wchar_t * getBaseName(const wchar_t * path) {
+  if (!path) return L"";
+  const wchar_t * last = wcsrchr(path, L'\\');
+  const wchar_t * flast = wcsrchr(path, L'/');
+  if (flast && (!last || flast > last)) last = flast;
+  return last ? (last + 1) : path;
+}
+
+static bool containsNoCase(const wchar_t * hay, const wchar_t * needle) {
+  if (!hay || !needle || !needle[0]) return false;
+  size_t nLen = wcslen(needle);
+  size_t hLen = wcslen(hay);
+  if (nLen > hLen) return false;
+  for (size_t i = 0; i + nLen <= hLen; ++i) {
+    if (_wcsnicmp(hay + i, needle, nLen) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static ProcProtection classifyProcess(DWORD pid, const wchar_t * exeName, const wchar_t * fullPath) {
+  if (pid == 0 || pid == 4 || pid == GetCurrentProcessId()) {
+    return ProcProtection::OsCritical;
+  }
+
+  static constexpr const wchar_t * kOsProtectedNames[] = {
+    L"nk.exe", L"filesys.exe", L"gwes.exe", L"device.exe", L"udevice.exe",
+    L"services.exe", L"servicesd.exe", L"shell32.exe", L"connmgr.exe",
+    L"system", L"smss.exe", L"csrss.exe", L"wininit.exe", L"services.exe",
+    L"lsass.exe", L"winlogon.exe", L"dwm.exe", L"explorer.exe", L"svchost.exe",
+    L"secure system", L"registry",
+    L"taskmgr.exe", L"appmain.exe", L"appmain_.exe", L"liliumlauncher.exe"
+  };
+  for (const wchar_t * pName : kOsProtectedNames) {
+    if (_wcsicmp(exeName, pName) == 0) {
+      return ProcProtection::OsCritical;
+    }
+  }
+
+  if (containsNoCase(exeName, L"Lilium")) {
+    return ProcProtection::LiliumApp;
+  }
+
+  // Flag likely SHARP Brain dictionary / menu shell processes for observation
+  if (containsNoCase(exeName, L"edict") ||
+      containsNoCase(exeName, L"mainmenu") ||
+      containsNoCase(exeName, L"shdict") ||
+      containsNoCase(exeName, L"dic") ||
+      containsNoCase(fullPath, L"\\NAND")) {
+    return ProcProtection::DictCandidate;
+  }
+
+  return ProcProtection::UserApp;
+}
+
+static void closeSnapshotSafe(HANDLE hSnap) {
+  if (hSnap == INVALID_HANDLE_VALUE) return;
+#if defined(_WIN32_WCE) || defined(__MINGW32CE__)
+  CloseToolhelp32Snapshot(hSnap);
+#else
+  CloseHandle(hSnap);
+#endif
+}
+
+static BOOL CALLBACK enumWinCallback(HWND hWnd, LPARAM lParam) {
+  TaskMgrState * st = reinterpret_cast<TaskMgrState *>(lParam);
+  if (!st || st->winCount >= kMaxWindows) return FALSE;
+  if (!IsWindowVisible(hWnd)) return TRUE;
+
+  wchar_t title[80] = L"";
+  GetWindowTextW(hWnd, title, 79);
+  wchar_t cls[48] = L"";
+  GetClassNameW(hWnd, cls, 47);
+
+  DWORD pid = 0;
+  GetWindowThreadProcessId(hWnd, &pid);
+
+  WinInfo & w = st->wins[st->winCount++];
+  w.hwnd = hWnd;
+  w.pid = pid;
+  wcsncpy(w.title, title[0] ? title : L"(無題ウィンドウ)", 79);
+  w.title[79] = L'\0';
+  wcsncpy(w.className, cls, 47);
+  w.className[47] = L'\0';
+  wcscpy(w.ownerExe, L"?");
+
+  for (int i = 0; i < st->procCount; ++i) {
+    if (st->procs[i].pid == pid) {
+      wcsncpy(w.ownerExe, st->procs[i].exeName, 47);
+      w.ownerExe[47] = L'\0';
+      break;
+    }
+  }
+  return TRUE;
+}
+
+static void refreshSystemSnapshot(TaskMgrState * st) {
+  if (!st) return;
+  st->procCount = 0;
+  st->winCount = 0;
+
+  DWORD flags = TH32CS_SNAPPROCESS;
+#ifdef TH32CS_SNAPNOHEAPS
+  flags |= TH32CS_SNAPNOHEAPS;
+#endif
+  HANDLE hSnap = CreateToolhelp32Snapshot(flags, 0);
+  if (hSnap != INVALID_HANDLE_VALUE) {
+    PROCESSENTRY32 pe = {};
+    pe.dwSize = sizeof(pe);
+    if (Process32First(hSnap, &pe)) {
+      do {
+        if (st->procCount >= kMaxProcesses) break;
+        ProcInfo & pi = st->procs[st->procCount++];
+        pi.pid = pe.th32ProcessID;
+        pi.threads = pe.cntThreads;
+
+        const wchar_t * base = getBaseName(pe.szExeFile);
+        wcsncpy(pi.exeName, base[0] ? base : pe.szExeFile, 63);
+        pi.exeName[63] = L'\0';
+        wcsncpy(pi.fullPath, pe.szExeFile, MAX_PATH - 1);
+        pi.fullPath[MAX_PATH - 1] = L'\0';
+
+#ifdef TH32CS_SNAPMODULE
+        // Try resolving full executable module path when szExeFile only has basename (pid=0 means self!)
+        if (pi.pid != 0 && wcschr(pi.fullPath, L'\\') == nullptr) {
+          HANDLE hModSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pi.pid);
+          if (hModSnap != INVALID_HANDLE_VALUE) {
+            MODULEENTRY32 me = {};
+            me.dwSize = sizeof(me);
+            if (Module32First(hModSnap, &me) && me.szExePath[0]) {
+              wcsncpy(pi.fullPath, me.szExePath, MAX_PATH - 1);
+              pi.fullPath[MAX_PATH - 1] = L'\0';
+            }
+            closeSnapshotSafe(hModSnap);
+          }
+        }
+#endif
+        pi.kind = classifyProcess(pi.pid, pi.exeName, pi.fullPath);
+      } while (Process32Next(hSnap, &pe));
+    }
+    closeSnapshotSafe(hSnap);
+  }
+
+  EnumWindows(enumWinCallback, reinterpret_cast<LPARAM>(st));
+
+  if (st->procSel >= st->procCount) st->procSel = (st->procCount > 0) ? (st->procCount - 1) : 0;
+  if (st->procScroll > st->procSel) st->procScroll = st->procSel;
+  if (st->winSel >= st->winCount) st->winSel = (st->winCount > 0) ? (st->winCount - 1) : 0;
+  if (st->winScroll > st->winSel) st->winScroll = st->winSel;
+}
+
+static void adjustScroll(int sel, int count, int & scroll) {
+  if (sel < scroll) scroll = sel;
+  if (sel >= scroll + kVisibleRows) scroll = sel - kVisibleRows + 1;
+  int maxScroll = (count > kVisibleRows) ? (count - kVisibleRows) : 0;
+  if (scroll > maxScroll) scroll = maxScroll;
+  if (scroll < 0) scroll = 0;
+}
+
+static void exportDiagnosticLog(TaskMgrState * st) {
+  wchar_t rootDir[MAX_PATH] = L"";
+  LiliumUI::getLiliumRootDir(rootDir, MAX_PATH);
+  wchar_t logPath[MAX_PATH] = L"";
+  LiliumUI::joinPath(rootDir, L"lilium_tasks.txt", logPath, MAX_PATH);
+
+  HANDLE hFile = CreateFileW(logPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (hFile == INVALID_HANDLE_VALUE) {
+    wcsncpy(st->statusMsg1, L"ログ出力に失敗しました", 95);
+    wcsncpy(st->statusMsg2, logPath, 95);
+    st->modal = ModalMode::LogSaved;
+    return;
+  }
+
+  auto writeUtf8 = [hFile](const wchar_t * wtext) {
+    if (!wtext || !wtext[0]) return;
+    char buf[1024];
+    int n = WideCharToMultiByte(CP_UTF8, 0, wtext, -1, buf, sizeof(buf), NULL, NULL);
+    if (n > 1) {
+      DWORD written = 0;
+      WriteFile(hFile, buf, static_cast<DWORD>(n - 1), &written, NULL);
+    }
+  };
+
+  int totalMB = 0, availMB = 0, usedPct = 0;
+  LiliumUI::queryMemoryMB(totalMB, availMB, usedPct);
+  wchar_t header[256];
+  _snwprintf(header, 256,
+             L"=== Lilium TaskManager Snapshot ===\r\nRAM: avail=%d MB / total=%d MB (%d%% used)\r\n\r\n[Processes (%d)]\r\n",
+             availMB, totalMB, usedPct, st->procCount);
+  writeUtf8(header);
+
+  for (int i = 0; i < st->procCount; ++i) {
+    const ProcInfo & p = st->procs[i];
+    const wchar_t * kindStr = (p.kind == ProcProtection::OsCritical) ? L"OS_PROTECT" :
+                              (p.kind == ProcProtection::DictCandidate) ? L"DICT_CAND" :
+                              (p.kind == ProcProtection::LiliumApp) ? L"LILIUM" : L"USER";
+    wchar_t line[512];
+    _snwprintf(line, 512, L"PID=%lu  thr=%lu  [%s]  name=%s  path=%s\r\n",
+               static_cast<unsigned long>(p.pid), static_cast<unsigned long>(p.threads),
+               kindStr, p.exeName, p.fullPath);
+    writeUtf8(line);
+  }
+
+  wchar_t winHdr[64];
+  _snwprintf(winHdr, 64, L"\r\n[Visible Windows (%d)]\r\n", st->winCount);
+  writeUtf8(winHdr);
+  for (int i = 0; i < st->winCount; ++i) {
+    const WinInfo & w = st->wins[i];
+    wchar_t line[512];
+    _snwprintf(line, 512, L"HWND=0x%lX  PID=%lu  owner=%s  cls=%s  title=%s\r\n",
+               static_cast<unsigned long>(reinterpret_cast<uintptr_t>(w.hwnd)),
+               static_cast<unsigned long>(w.pid), w.ownerExe, w.className, w.title);
+    writeUtf8(line);
+  }
+
+  FlushFileBuffers(hFile);
+  CloseHandle(hFile);
+
+  wcsncpy(st->statusMsg1, L"プロセス・ウィンドウ情報を書き出しました", 95);
+  wcsncpy(st->statusMsg2, L"Lilium/lilium_tasks.txt", 95);
+  st->modal = ModalMode::LogSaved;
+}
+
+static void tryCloseOrKillSelected(TaskMgrState * st, bool forceKill) {
+  if (st->tab != 0 || st->procSel < 0 || st->procSel >= st->procCount) return;
+  const ProcInfo & p = st->procs[st->procSel];
+  if (p.kind == ProcProtection::OsCritical) return;
+
+  if (!forceKill) {
+    for (int i = 0; i < st->winCount; ++i) {
+      if (st->wins[i].pid == p.pid && st->wins[i].hwnd) {
+        PostMessageW(st->wins[i].hwnd, WM_CLOSE, 0, 0);
+      }
+    }
+  } else {
+    HANDLE hProc = OpenProcess(PROCESS_TERMINATE, FALSE, p.pid);
+    if (hProc) {
+      TerminateProcess(hProc, 1);
+      CloseHandle(hProc);
+    }
+  }
+  Sleep(150);
+  refreshSystemSnapshot(st);
+}
+
+static void onRender(LiliumUI::Canvas & c, void * userData) {
+  TaskMgrState * st = static_cast<TaskMgrState *>(userData);
+  c.fillRect(0, 0, LiliumUI::kMainW, LiliumUI::kScreenH, LiliumUI::kColBgMain);
+
+  int totalMB = 0, availMB = 0, usedPct = 0;
+  LiliumUI::queryMemoryMB(totalMB, availMB, usedPct);
+
+  wchar_t badge[48];
+  _snwprintf(badge, 48, L"空き %d MB / %d MB", availMB, totalMB);
+  badge[47] = L'\0';
+  LiliumUI::renderTopHeader(c, L"LILIUM TASKMGR", badge);
+
+  // 1. Live Memory Gauge strip (Y = 48..76)
+  c.drawBox(12, 48, LiliumUI::kMainW - 24, 28, LiliumUI::kColWhite, LiliumUI::kColBorder);
+  wchar_t ramText[64];
+  _snwprintf(ramText, 64, L"RAM使用率: %d%% (使用 %d MB)", usedPct, totalMB - availMB);
+  ramText[63] = L'\0';
+  c.drawText(20, 48, 280, 28, LiliumUI::kColText, ramText, 2, LiliumUI::Align::Left, true);
+
+  const int barX = 330, barY = 55, barW = 282, barH = 14;
+  c.drawBox(barX, barY, barW, barH, 0xE6EAEF, LiliumUI::kColBtnBorder);
+  int fillW = (barW - 2) * usedPct / 100;
+  if (fillW < 0) fillW = 0;
+  if (fillW > barW - 2) fillW = barW - 2;
+  uint32_t barCol = (usedPct >= 80) ? LiliumUI::kColDangerFill :
+                    (usedPct >= 60) ? LiliumUI::kColWarnBorder : LiliumUI::kColTeal;
+  c.fillRect(barX + 1, barY + 1, fillW, barH - 2, barCol);
+
+  // 2. Category Tabs (Y = 82..112, KeyConfig tab style)
+  wchar_t tab0[48], tab1[48];
+  _snwprintf(tab0, 48, L"プロセス (%d)", st->procCount);
+  _snwprintf(tab1, 48, L"ウィンドウ (%d)", st->winCount);
+  tab0[47] = L'\0';
+  tab1[47] = L'\0';
+
+  const int tabW = 190;
+  c.drawBox(12, 82, tabW, 28,
+            (st->tab == 0) ? LiliumUI::kColTeal : LiliumUI::kColWhite,
+            (st->tab == 0) ? LiliumUI::kColTealDark : LiliumUI::kColBorder);
+  c.drawText(12, 82, tabW, 28,
+             (st->tab == 0) ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
+             tab0, 2, LiliumUI::Align::Center, true);
+
+  c.drawBox(12 + tabW + 8, 82, tabW, 28,
+            (st->tab == 1) ? LiliumUI::kColTeal : LiliumUI::kColWhite,
+            (st->tab == 1) ? LiliumUI::kColTealDark : LiliumUI::kColBorder);
+  c.drawText(12 + tabW + 8, 82, tabW, 28,
+             (st->tab == 1) ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
+             tab1, 2, LiliumUI::Align::Center, true);
+
+  c.drawText(412, 82, 216, 28, LiliumUI::kColMuted, L"[F4]更新  [F8]ログ保存", 1, LiliumUI::Align::Right, true);
+
+  // 3. Scrollable list box (Y = 114..432, 9 rows * 34px + 12px pad)
+  const int listX = 12, listY = 114, listW = LiliumUI::kMainW - 24, rowH = 34;
+  c.drawBox(listX, listY, listW, kVisibleRows * rowH + 8, LiliumUI::kColWhite, LiliumUI::kColBorder);
+
+  if (st->tab == 0) {
+    for (int r = 0; r < kVisibleRows; ++r) {
+      int idx = st->procScroll + r;
+      if (idx >= st->procCount) break;
+      const ProcInfo & p = st->procs[idx];
+      int ry = listY + 4 + r * rowH;
+      bool sel = (idx == st->procSel);
+      uint32_t rowBg = sel ? LiliumUI::kColTealSoft : ((r % 2 == 1) ? LiliumUI::kColRowAlt : LiliumUI::kColWhite);
+      uint32_t rowBd = sel ? LiliumUI::kColTeal : rowBg;
+      c.drawBox(listX + 4, ry, listW - 8, rowH - 2, rowBg, rowBd);
+
+      wchar_t pidStr[20];
+      _snwprintf(pidStr, 20, L"%5lu", static_cast<unsigned long>(p.pid));
+      pidStr[19] = L'\0';
+      c.drawText(listX + 10, ry, 52, rowH - 2, LiliumUI::kColMuted, pidStr, 1, LiliumUI::Align::Left, true);
+      c.drawText(listX + 66, ry, 340, rowH - 2, LiliumUI::kColText, p.exeName, 2, LiliumUI::Align::Left, true);
+
+      const wchar_t * badgeText = L"アプリ";
+      uint32_t bBg = 0xEEF2F6, bBd = LiliumUI::kColBtnBorder, bTx = LiliumUI::kColTextSub;
+      if (p.kind == ProcProtection::OsCritical) {
+        badgeText = L"OS保護";
+        bBg = 0xE6EAEF; bBd = LiliumUI::kColBorderStrong; bTx = LiliumUI::kColMuted;
+      } else if (p.kind == ProcProtection::DictCandidate) {
+        badgeText = L"辞書候補";
+        bBg = LiliumUI::kColWarnBg; bBd = LiliumUI::kColWarnBorder; bTx = LiliumUI::kColWarnText;
+      } else if (p.kind == ProcProtection::LiliumApp) {
+        badgeText = L"Lilium";
+        bBg = LiliumUI::kColTealHeader; bBd = LiliumUI::kColTealBorder; bTx = LiliumUI::kColTealDeep;
+      }
+      c.drawBox(listX + listW - 110, ry + 5, 96, rowH - 12, bBg, bBd);
+      c.drawText(listX + listW - 110, ry + 5, 96, rowH - 12, bTx, badgeText, 1, LiliumUI::Align::Center, true);
+    }
+  } else {
+    for (int r = 0; r < kVisibleRows; ++r) {
+      int idx = st->winScroll + r;
+      if (idx >= st->winCount) break;
+      const WinInfo & w = st->wins[idx];
+      int ry = listY + 4 + r * rowH;
+      bool sel = (idx == st->winSel);
+      uint32_t rowBg = sel ? LiliumUI::kColTealSoft : ((r % 2 == 1) ? LiliumUI::kColRowAlt : LiliumUI::kColWhite);
+      uint32_t rowBd = sel ? LiliumUI::kColTeal : rowBg;
+      c.drawBox(listX + 4, ry, listW - 8, rowH - 2, rowBg, rowBd);
+
+      c.drawText(listX + 12, ry, 420, rowH - 2, LiliumUI::kColText, w.title, 2, LiliumUI::Align::Left, true);
+      c.drawBox(listX + listW - 148, ry + 5, 134, rowH - 12, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
+      c.drawText(listX + listW - 148, ry + 5, 134, rowH - 12, LiliumUI::kColTealDeep, w.ownerExe, 1, LiliumUI::Align::Center, true);
+    }
+  }
+
+  // 4. Bottom hint strip (Y = 440..479)
+  c.fillRect(0, 440, LiliumUI::kMainW, 40, LiliumUI::kColSidebar);
+  c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
+  c.drawText(14, 440, LiliumUI::kMainW - 28, 40, LiliumUI::kColTextSub,
+             (st->tab == 0)
+               ? L"[↑↓]:選択 [←→/F2]:タブ [Ent/F3]:詳細 [F5]:終了 [F8]:ログ保存"
+               : L"[↑↓]:選択 [←→/F2]:タブ [Ent/F3]:前面 [F4]:更新 [Esc]:戻る",
+             1, LiliumUI::Align::Left, true);
+
+  // 5. Right Sidebar with live detail card
+  const wchar_t * cardTitle = L"詳細情報";
+  wchar_t cardBody[512] = L"項目なし";
+  if (st->tab == 0 && st->procSel >= 0 && st->procSel < st->procCount) {
+    const ProcInfo & p = st->procs[st->procSel];
+    cardTitle = p.exeName;
+    const wchar_t * kindJa = (p.kind == ProcProtection::OsCritical) ? L"OS保護(終了不可)" :
+                             (p.kind == ProcProtection::DictCandidate) ? L"辞書アプリ候補" :
+                             (p.kind == ProcProtection::LiliumApp) ? L"Liliumアプリ" : L"一般アプリ";
+    _snwprintf(cardBody, 512,
+               L"【分類】\n%s\n【PID / Thread】\n%lu / %lu\n【パス】\n%s",
+               kindJa,
+               static_cast<unsigned long>(p.pid),
+               static_cast<unsigned long>(p.threads),
+               p.fullPath);
+    cardBody[511] = L'\0';
+  } else if (st->tab == 1 && st->winSel >= 0 && st->winSel < st->winCount) {
+    const WinInfo & w = st->wins[st->winSel];
+    cardTitle = w.ownerExe;
+    _snwprintf(cardBody, 512,
+               L"【クラス】\n%s\n【PID / HWND】\n%lu / 0x%lX\n【タイトル】\n%s",
+               w.className,
+               static_cast<unsigned long>(w.pid),
+               static_cast<unsigned long>(reinterpret_cast<uintptr_t>(w.hwnd)),
+               w.title);
+    cardBody[511] = L'\0';
+  }
+
+  wchar_t sideStatus[48];
+  _snwprintf(sideStatus, 48, L"%s %d件", (st->tab == 0) ? L"プロセス" : L"ウィンドウ",
+             (st->tab == 0) ? st->procCount : st->winCount);
+  sideStatus[47] = L'\0';
+
+  LiliumUI::renderSidebar(c, sideStatus, cardTitle, cardBody,
+                          L"[F4]:再読込 [F8]:ログ保存", L"[F5]:終了(非保護のみ)",
+                          L"戻　る", false);
+
+  // Modals
+  if (st->modal == ModalMode::ProtectedWarn) {
+    static constexpr LiliumUI::ModalButton kWarnBtns[1] = { { L"閉じる", false } };
+    LiliumUI::renderConfirmModal(c, L"【 保護対象プロセス 】",
+                                 L"OS必須プロセスは終了できません",
+                                 L"終了すると Brain 本体がフリーズします。",
+                                 kWarnBtns, 1, 0, L"[Enter / Esc]: 閉じる");
+  } else if (st->modal == ModalMode::KillConfirm) {
+    static constexpr LiliumUI::ModalButton kKillBtns[3] = {
+      { L"通常終了", false },
+      { L"強制終了", true },
+      { L"キャンセル", false }
+    };
+    const wchar_t * name = (st->procSel >= 0 && st->procSel < st->procCount)
+                           ? st->procs[st->procSel].exeName : L"対象";
+    LiliumUI::renderConfirmModal(c, L"【 プロセス終了の確認 】",
+                                 name,
+                                 L"対象プロセスへ終了操作を実行しますか？",
+                                 kKillBtns, 3, st->modalFocus,
+                                 L"[←/→]:選択   [Enter]:実行   [Esc]:中止");
+  } else if (st->modal == ModalMode::ProcessDetail) {
+    static constexpr LiliumUI::ModalButton kDetBtns[1] = { { L"閉じる", false } };
+    LiliumUI::renderConfirmModal(c, L"【 プロセス詳細 】",
+                                 st->statusMsg1, st->statusMsg2,
+                                 kDetBtns, 1, 0, L"[Enter / Esc]: 閉じる");
+  } else if (st->modal == ModalMode::LogSaved) {
+    static constexpr LiliumUI::ModalButton kLogBtns[1] = { { L"OK", false } };
+    LiliumUI::renderConfirmModal(c, L"【 スナップショット保存 】",
+                                 st->statusMsg1, st->statusMsg2,
+                                 kLogBtns, 1, 0, L"[Enter / Esc]: 閉じる");
+  }
+}
+
+static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
+  TaskMgrState * st = static_cast<TaskMgrState *>(userData);
+
+  if (st->modal == ModalMode::ProtectedWarn ||
+      st->modal == ModalMode::ProcessDetail ||
+      st->modal == ModalMode::LogSaved) {
+    if (vkCode == VK_RETURN || vkCode == VK_F3 || vkCode == VK_ESCAPE || vkCode == VK_BACK) {
+      st->modal = ModalMode::None;
+    }
+    return;
+  }
+
+  if (st->modal == ModalMode::KillConfirm) {
+    switch (vkCode) {
+      case VK_LEFT:
+        st->modalFocus = (st->modalFocus + 2) % 3;
+        break;
+      case VK_RIGHT:
+        st->modalFocus = (st->modalFocus + 1) % 3;
+        break;
+      case VK_RETURN:
+      case VK_F3:
+        if (st->modalFocus == 0) tryCloseOrKillSelected(st, false);
+        else if (st->modalFocus == 1) tryCloseOrKillSelected(st, true);
+        st->modal = ModalMode::None;
+        break;
+      case VK_ESCAPE:
+      case VK_BACK:
+        st->modal = ModalMode::None;
+        break;
+      default:
+        break;
+    }
+    return;
+  }
+
+  switch (vkCode) {
+    case VK_LEFT:
+    case VK_RIGHT:
+    case VK_F2:
+    case VK_TAB:
+      st->tab = (st->tab == 0) ? 1 : 0;
+      break;
+    case VK_UP:
+      if (st->tab == 0 && st->procCount > 0) {
+        st->procSel = (st->procSel - 1 + st->procCount) % st->procCount;
+        adjustScroll(st->procSel, st->procCount, st->procScroll);
+      } else if (st->tab == 1 && st->winCount > 0) {
+        st->winSel = (st->winSel - 1 + st->winCount) % st->winCount;
+        adjustScroll(st->winSel, st->winCount, st->winScroll);
+      }
+      break;
+    case VK_DOWN:
+      if (st->tab == 0 && st->procCount > 0) {
+        st->procSel = (st->procSel + 1) % st->procCount;
+        adjustScroll(st->procSel, st->procCount, st->procScroll);
+      } else if (st->tab == 1 && st->winCount > 0) {
+        st->winSel = (st->winSel + 1) % st->winCount;
+        adjustScroll(st->winSel, st->winCount, st->winScroll);
+      }
+      break;
+    case VK_PRIOR:
+      if (st->tab == 0 && st->procCount > 0) {
+        st->procSel -= kVisibleRows;
+        if (st->procSel < 0) st->procSel = 0;
+        adjustScroll(st->procSel, st->procCount, st->procScroll);
+      } else if (st->tab == 1 && st->winCount > 0) {
+        st->winSel -= kVisibleRows;
+        if (st->winSel < 0) st->winSel = 0;
+        adjustScroll(st->winSel, st->winCount, st->winScroll);
+      }
+      break;
+    case VK_NEXT:
+      if (st->tab == 0 && st->procCount > 0) {
+        st->procSel += kVisibleRows;
+        if (st->procSel >= st->procCount) st->procSel = st->procCount - 1;
+        adjustScroll(st->procSel, st->procCount, st->procScroll);
+      } else if (st->tab == 1 && st->winCount > 0) {
+        st->winSel += kVisibleRows;
+        if (st->winSel >= st->winCount) st->winSel = st->winCount - 1;
+        adjustScroll(st->winSel, st->winCount, st->winScroll);
+      }
+      break;
+    case VK_F4:
+      refreshSystemSnapshot(st);
+      break;
+    case VK_F8:
+      exportDiagnosticLog(st);
+      break;
+    case VK_F5:
+    case VK_DELETE:
+      if (st->tab == 0 && st->procSel >= 0 && st->procSel < st->procCount) {
+        if (st->procs[st->procSel].kind == ProcProtection::OsCritical) {
+          st->modal = ModalMode::ProtectedWarn;
+        } else {
+          st->modal = ModalMode::KillConfirm;
+          st->modalFocus = 2; // Default focus to Cancel for safety
+        }
+      }
+      break;
+    case VK_RETURN:
+    case VK_F3:
+      if (st->tab == 0 && st->procSel >= 0 && st->procSel < st->procCount) {
+        const ProcInfo & p = st->procs[st->procSel];
+        _snwprintf(st->statusMsg1, 96, L"%s (PID: %lu, スレッド: %lu)",
+                   p.exeName, static_cast<unsigned long>(p.pid), static_cast<unsigned long>(p.threads));
+        _snwprintf(st->statusMsg2, 96, L"%s", p.fullPath);
+        st->statusMsg1[95] = L'\0';
+        st->statusMsg2[95] = L'\0';
+        st->modal = ModalMode::ProcessDetail;
+      } else if (st->tab == 1 && st->winSel >= 0 && st->winSel < st->winCount) {
+        SetForegroundWindow(st->wins[st->winSel].hwnd);
+      }
+      break;
+    case VK_ESCAPE:
+    case VK_HOME:
+    case VK_F10:
+      st->window.requestQuit();
+      break;
+    default:
+      break;
+  }
+}
+
+static void onClick(int x, int y, void * userData) {
+  TaskMgrState * st = static_cast<TaskMgrState *>(userData);
+
+  if (st->modal == ModalMode::ProtectedWarn ||
+      st->modal == ModalMode::ProcessDetail ||
+      st->modal == ModalMode::LogSaved) {
+    st->modal = ModalMode::None;
+    return;
+  }
+
+  if (st->modal == ModalMode::KillConfirm) {
+    const int dlgX = (LiliumUI::kScreenW - 480) / 2;
+    const int by = (LiliumUI::kScreenH - 224) / 2 + 132;
+    const int btnW = 128, gap = 24;
+    const int totalW = 3 * btnW + 2 * gap;
+    const int bx0 = dlgX + (480 - totalW) / 2;
+    if (y >= by && y < by + 42) {
+      for (int i = 0; i < 3; ++i) {
+        int bx = bx0 + i * (btnW + gap);
+        if (x >= bx && x < bx + btnW) {
+          if (i == 0) tryCloseOrKillSelected(st, false);
+          else if (i == 1) tryCloseOrKillSelected(st, true);
+          st->modal = ModalMode::None;
+          return;
+        }
+      }
+    }
+    return;
+  }
+
+  // Bottom-right "戻る" button
+  if (x >= LiliumUI::kExitBtnX && x < LiliumUI::kExitBtnX + LiliumUI::kExitBtnW &&
+      y >= LiliumUI::kExitBtnY && y < LiliumUI::kExitBtnY + LiliumUI::kExitBtnH) {
+    st->window.requestQuit();
+    return;
+  }
+
+  // Tabs click
+  if (y >= 82 && y < 110) {
+    if (x >= 12 && x < 202) { st->tab = 0; return; }
+    if (x >= 210 && x < 400) { st->tab = 1; return; }
+  }
+
+  // Row selection click
+  if (x >= 16 && x < LiliumUI::kMainW - 16 && y >= 118 && y < 118 + kVisibleRows * 34) {
+    int r = (y - 118) / 34;
+    if (st->tab == 0 && st->procScroll + r < st->procCount) {
+      st->procSel = st->procScroll + r;
+    } else if (st->tab == 1 && st->winScroll + r < st->winCount) {
+      st->winSel = st->winScroll + r;
+    }
+  }
+}
+
+static void onTimer(void * /*userData*/) {
+  // Periodic clock / RAM / battery refresh (keep lightweight; process rescan on F4)
+}
+
+} // namespace
+
+int main(int /*argc*/, char * /*argv*/[]) {
+  TaskMgrState state;
+  state.manageTaskBar = !LiliumUI::isLaunchedFromLauncherArg();
+
+  LiliumUI::AppCallbacks cb = {};
+  cb.onRender = onRender;
+  cb.onKeyDown = onKeyDown;
+  cb.onClick = onClick;
+  cb.onTimer = onTimer;
+
+  if (!state.window.create(L"LiliumTaskMgrWinClass",
+                           L"Lilium TaskManager (SHARP Brain 800x480)",
+                           cb, &state, state.manageTaskBar)) {
+    return 1;
+  }
+
+  refreshSystemSnapshot(&state);
+  state.window.requestRepaint();
+  InvalidateRect(state.window.hwnd(), NULL, FALSE);
+
+  return state.window.runLoop();
+}

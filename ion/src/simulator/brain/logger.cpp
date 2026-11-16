@@ -1,4 +1,5 @@
 #include "logger.h"
+#include "main.h"
 
 #include <windows.h>
 #include <stdio.h>
@@ -22,27 +23,7 @@ static void resolveLogFilePath() {
   if (sLogPathResolved) {
     return;
   }
-  wchar_t modulePath[MAX_PATH] = L"";
-  DWORD len = GetModuleFileNameW(NULL, modulePath, MAX_PATH);
-  if (len > 0 && len < MAX_PATH) {
-    wchar_t * lastSlash = NULL;
-    for (DWORD i = 0; i < len; i++) {
-      if (modulePath[i] == L'\\' || modulePath[i] == L'/') {
-        lastSlash = &modulePath[i];
-      }
-    }
-    if (lastSlash != NULL) {
-      size_t dirLen = (size_t)(lastSlash - modulePath + 1);
-      if (dirLen + 20 < MAX_PATH) {
-        memcpy(sLogFilePath, modulePath, dirLen * sizeof(wchar_t));
-        sLogFilePath[dirLen] = L'\0';
-        wcscat(sLogFilePath, L"lilium_debug.log");
-        sLogPathResolved = true;
-        return;
-      }
-    }
-  }
-  wcscpy(sLogFilePath, L"lilium_debug.log");
+  Ion::Simulator::Main::resolveRootFilePath(L"lilium_debug.log", sLogFilePath, MAX_PATH);
   sLogPathResolved = true;
 }
 

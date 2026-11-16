@@ -7,6 +7,7 @@
 #include "keyboard.h"
 #include "display.h"
 #include "logger.h"
+#include "main.h"
 
 namespace Ion {
 namespace Simulator {
@@ -103,25 +104,7 @@ struct LiliumConfigData {
 #pragma pack(pop)
 
 static void resolveConfigFilePath(wchar_t * outPath, size_t maxLen) {
-  wchar_t exeDir[MAX_PATH] = L"";
-  if (GetModuleFileNameW(NULL, exeDir, MAX_PATH) > 0) {
-    wchar_t * lastSlash = wcsrchr(exeDir, L'\\');
-    if (!lastSlash) {
-      lastSlash = wcsrchr(exeDir, L'/');
-    }
-    if (lastSlash) {
-      *(lastSlash + 1) = L'\0';
-    } else {
-      exeDir[0] = L'\0';
-    }
-  }
-  if (exeDir[0] != L'\0') {
-    wcsncpy(outPath, exeDir, maxLen - 1);
-    wcsncat(outPath, L"lilium_config.bin", maxLen - wcslen(outPath) - 1);
-  } else {
-    wcsncpy(outPath, L"lilium_config.bin", maxLen - 1);
-  }
-  outPath[maxLen - 1] = L'\0';
+  Main::resolveRootFilePath(L"lilium_config.bin", outPath, maxLen);
 }
 
 void init() {

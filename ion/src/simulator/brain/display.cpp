@@ -845,7 +845,10 @@ static void renderExitConfirmBase(HDC hdc) {
 
   // 4. メッセージ文
   drawTextLine(hdc, kExitDialogX, kExitDialogY + 52, kExitDialogW, 20,
-               RGB(42, 50, 60), L"Lilium を終了してホーム画面に戻りますか？",
+               RGB(42, 50, 60),
+               Main::isLaunchedFromLauncher()
+                 ? L"Lilium Calc を終了してランチャーに戻りますか？"
+                 : L"Lilium を終了してホーム画面に戻りますか？",
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   SelectObject(hdc, sUiFontSmall);
   drawTextLine(hdc, kExitDialogX, kExitDialogY + 76, kExitDialogW, 20,
