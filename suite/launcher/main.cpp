@@ -48,17 +48,16 @@ enum class ModalState {
 struct LauncherState {
   LiliumUI::AppWindow window;
   int selectedIndex = 0;
+  int prevSelectedIndex = 0;
   ModalState modal = ModalState::None;
   int modalFocus = 1; // 0: Yes/Quit, 1: Cancel
   wchar_t errLine1[96] = L"";
   wchar_t errLine2[96] = L"";
 };
 
-// Geometric emblem inside 56x56 card badge (inherits clean 2-color Lilium icon style)
 static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, int kind, bool selected) {
   uint32_t frameCol = selected ? LiliumUI::kColTeal : LiliumUI::kColBorder;
   c.drawBox(x, y, 56, 56, 0xF4F7F6, frameCol);
-  // Subtle 4-corner teal L-accents
   c.fillRect(x + 3, y + 3, 7, 2, LiliumUI::kColTeal);
   c.fillRect(x + 3, y + 3, 2, 7, LiliumUI::kColTeal);
   c.fillRect(x + 46, y + 3, 7, 2, LiliumUI::kColTeal);
@@ -69,7 +68,6 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, int kind, bool sel
   c.fillRect(x + 51, y + 46, 2, 7, LiliumUI::kColTeal);
 
   if (kind == 0) {
-    // Calc mini-emblem: charcoal body + teal display + keypad dots
     c.drawBox(x + 13, y + 9, 30, 38, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
     c.drawThickFrame(x + 13, y + 9, 30, 38, 2, LiliumUI::kColCharcoal);
     c.fillRect(x + 17, y + 13, 22, 9, LiliumUI::kColTeal);
@@ -80,7 +78,6 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, int kind, bool sel
       }
     }
   } else {
-    // TaskManager mini-emblem: monitor box + teal memory/activity bars
     c.drawBox(x + 11, y + 11, 34, 34, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
     c.drawThickFrame(x + 11, y + 11, 34, 34, 2, LiliumUI::kColCharcoal);
     c.fillRect(x + 15, y + 29, 5, 11, LiliumUI::kColCharcoal);
@@ -88,6 +85,40 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, int kind, bool sel
     c.fillRect(x + 29, y + 17, 5, 23, LiliumUI::kColCharcoal);
     c.fillRect(x + 36, y + 25, 5, 15, LiliumUI::kColTeal);
   }
+}
+
+static void renderAppCard(LiliumUI::Canvas & c, int i, bool sel) {
+  const int cardX = 16;
+  const int cardW = LiliumUI::kMainW - 32;
+  const int cardH = 82;
+  const int cardGap = 14;
+  int curY = 102 + i * (cardH + cardGap);
+
+  uint32_t bg = sel ? LiliumUI::kColTealSoft : LiliumUI::kColWhite;
+  uint32_t bd = sel ? LiliumUI::kColTeal : LiliumUI::kColBorder;
+  c.drawBox(cardX, curY, cardW, cardH, bg, bd);
+  if (sel) {
+    c.drawThickFrame(cardX, curY, cardW, cardH, 2, LiliumUI::kColTeal);
+  }
+
+  drawAppEmblem(c, cardX + 14, curY + 13, kApps[i].emblemKind, sel);
+
+  wchar_t numLabel[16];
+  _snwprintf(numLabel, 16, L"%d.", i + 1);
+  numLabel[15] = L'\0';
+  c.drawDotText(cardX + 82, curY + 14, 34, 22, sel ? LiliumUI::kColTealDeep : LiliumUI::kColMuted,
+                numLabel, 16, LiliumUI::Align::Left, true);
+  c.drawDotText(cardX + 112, curY + 14, 350, 22, LiliumUI::kColText,
+                kApps[i].name, 16, LiliumUI::Align::Left, true);
+  c.drawDotText(cardX + 82, curY + 46, 396, 20, LiliumUI::kColMuted,
+                kApps[i].subtitle, 12, LiliumUI::Align::Left, true);
+
+  uint32_t pillBg = sel ? LiliumUI::kColTeal : 0xF2F4F7;
+  uint32_t pillBd = sel ? LiliumUI::kColTealDark : LiliumUI::kColBtnBorder;
+  uint32_t pillTx = sel ? LiliumUI::kColWhite : LiliumUI::kColTextSub;
+  c.drawBox(cardX + cardW - 110, curY + 23, 94, 36, pillBg, pillBd);
+  c.drawDotText(cardX + cardW - 110, curY + 23, 94, 36, pillTx,
+                L"起　動", 16, LiliumUI::Align::Center, true);
 }
 
 static void launchSelectedApp(LauncherState * st) {
@@ -107,13 +138,11 @@ static void launchSelectedApp(LauncherState * st) {
     st->errLine2[95] = L'\0';
     st->modal = ModalState::LaunchError;
     st->modalFocus = 0;
+    st->window.requestRepaint(true);
     return;
   }
 
 #ifdef _WIN32_WCE
-  // WinCE 版 CreateProcessW では lpCurrentDirectory / lpStartupInfo が未サポートのため NULL 固定にする
-  // （非 NULL を渡すと ERROR_INVALID_PARAMETER = 87 で失敗する）。
-  // また lpszCmdLine にはフルパスを含めず引数文字列のみを書き込み可能バッファで渡す。
   wchar_t cmdLine[64] = L"--from-launcher";
   PROCESS_INFORMATION pi = {};
   BOOL ok = CreateProcessW(exePath, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi);
@@ -131,9 +160,9 @@ static void launchSelectedApp(LauncherState * st) {
   STARTUPINFOW si = {};
   si.cb = sizeof(si);
   PROCESS_INFORMATION pi = {};
-
   BOOL ok = CreateProcessW(exePath, cmdLine, NULL, NULL, FALSE, 0, NULL, workDir, &si, &pi);
 #endif
+
   if (!ok) {
     DWORD err = GetLastError();
     _snwprintf(st->errLine1, 96, L"起動に失敗しました (Code: %lu)", static_cast<unsigned long>(err));
@@ -142,17 +171,15 @@ static void launchSelectedApp(LauncherState * st) {
     st->errLine2[95] = L'\0';
     st->modal = ModalState::LaunchError;
     st->modalFocus = 0;
+    st->window.requestRepaint(true);
     return;
   }
 
-  // Hide launcher and wait cleanly for child exit while keeping message queue responsive
   st->window.setVisible(false);
 
   for (;;) {
     DWORD waitRes = WaitForSingleObject(pi.hProcess, 50);
-    if (waitRes == WAIT_OBJECT_0 || waitRes == WAIT_FAILED) {
-      break;
-    }
+    if (waitRes == WAIT_OBJECT_0 || waitRes == WAIT_FAILED) break;
     MSG msg;
     while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
       if (msg.message == WM_QUIT) {
@@ -166,86 +193,61 @@ static void launchSelectedApp(LauncherState * st) {
 
   CloseHandle(pi.hThread);
   CloseHandle(pi.hProcess);
-
   st->window.setVisible(true);
 }
 
 static void onRender(LiliumUI::Canvas & c, void * userData) {
   LauncherState * st = static_cast<LauncherState *>(userData);
 
-  c.fillRect(0, 0, LiliumUI::kMainW, LiliumUI::kScreenH, LiliumUI::kColBgMain);
-
   int totalMB = 0, availMB = 0, usedPct = 0;
   LiliumUI::queryMemoryMB(totalMB, availMB, usedPct);
-  wchar_t badge[48];
-  _snwprintf(badge, 48, L"RAM空き: %d/%d MB", availMB, totalMB);
-  badge[47] = L'\0';
-  LiliumUI::renderTopHeader(c, L"LILIUM LAUNCHER", badge);
 
-  // Sub-banner
-  c.drawBox(16, 54, LiliumUI::kMainW - 32, 34, LiliumUI::kColWhite, LiliumUI::kColBorder);
-  c.drawText(26, 54, LiliumUI::kMainW - 52, 34, LiliumUI::kColTextSub,
-             L"起動する Lilium アプリを選択してください", 2, LiliumUI::Align::Left, true);
+  if (c.fullRedraw || st->modal != ModalState::None) {
+    c.fillRect(0, 0, LiliumUI::kMainW, LiliumUI::kScreenH, LiliumUI::kColBgMain);
 
-  // App cards (Y = 102..)
-  const int cardX = 16;
-  const int cardW = LiliumUI::kMainW - 32; // 608
-  const int cardH = 82;
-  const int cardGap = 14;
-  int curY = 102;
+    wchar_t badge[48];
+    _snwprintf(badge, 48, L"RAM空き: %d/%d MB", availMB, totalMB);
+    badge[47] = L'\0';
+    LiliumUI::renderTopHeader(c, L"LILIUM LAUNCHER", badge);
 
-  for (int i = 0; i < kAppCount; ++i) {
-    bool sel = (i == st->selectedIndex);
-    uint32_t bg = sel ? LiliumUI::kColTealSoft : LiliumUI::kColWhite;
-    uint32_t bd = sel ? LiliumUI::kColTeal : LiliumUI::kColBorder;
-    c.drawBox(cardX, curY, cardW, cardH, bg, bd);
-    if (sel) {
-      c.drawThickFrame(cardX, curY, cardW, cardH, 2, LiliumUI::kColTeal);
+    c.drawBox(16, 54, LiliumUI::kMainW - 32, 34, LiliumUI::kColWhite, LiliumUI::kColBorder);
+    c.drawDotText(26, 54, LiliumUI::kMainW - 52, 34, LiliumUI::kColTextSub,
+                  L"起動する Lilium アプリを選択してください", 16, LiliumUI::Align::Left, true);
+
+    for (int i = 0; i < kAppCount; ++i) {
+      renderAppCard(c, i, i == st->selectedIndex);
     }
 
-    drawAppEmblem(c, cardX + 14, curY + 13, kApps[i].emblemKind, sel);
+    c.drawBox(16, 304, LiliumUI::kMainW - 32, 118, LiliumUI::kColWhite, LiliumUI::kColBorder);
+    c.drawBox(16, 304, LiliumUI::kMainW - 32, 28, LiliumUI::kColTealHeader, LiliumUI::kColBorder);
+    c.drawDotText(26, 304, LiliumUI::kMainW - 52, 28, LiliumUI::kColTealDeep,
+                  L"■ Lilium Suite 構成ステータス (Phase 1)", 16, LiliumUI::Align::Left, true);
+    c.drawDotText(26, 340, LiliumUI::kMainW - 52, 22, LiliumUI::kColTextSub,
+                  L"・Calc (電卓/KhyCAS) と TaskMgr を分離独立しました", 16, LiliumUI::Align::Left, true);
+    c.drawDotText(26, 366, LiliumUI::kMainW - 52, 22, LiliumUI::kColMuted,
+                  L"・追加予定: Lilium Clock / Lilium Filer (apps/*.exe)", 16, LiliumUI::Align::Left, true);
+    c.drawDotText(26, 394, LiliumUI::kMainW - 52, 20, LiliumUI::kColLightMuted,
+                  L"※ 次段階: TaskMgr 調査をもとに純正辞書の解放・自動復帰を実装", 12, LiliumUI::Align::Left, true);
 
-    wchar_t numLabel[16];
-    _snwprintf(numLabel, 16, L"%d.", i + 1);
-    numLabel[15] = L'\0';
-    c.drawText(cardX + 82, curY + 14, 34, 22, sel ? LiliumUI::kColTealDeep : LiliumUI::kColMuted,
-               numLabel, 2, LiliumUI::Align::Left, true);
-    c.drawText(cardX + 114, curY + 14, 340, 22, LiliumUI::kColText,
-               kApps[i].name, 2, LiliumUI::Align::Left, true);
-    c.drawText(cardX + 82, curY + 46, 390, 18, LiliumUI::kColMuted,
-               kApps[i].subtitle, 2, LiliumUI::Align::Left, true);
-
-    // Right launch pill
-    uint32_t pillBg = sel ? LiliumUI::kColTeal : 0xF2F4F7;
-    uint32_t pillBd = sel ? LiliumUI::kColTealDark : LiliumUI::kColBtnBorder;
-    uint32_t pillTx = sel ? LiliumUI::kColWhite : LiliumUI::kColTextSub;
-    c.drawBox(cardX + cardW - 110, curY + 23, 94, 36, pillBg, pillBd);
-    c.drawText(cardX + cardW - 110, curY + 23, 94, 36, pillTx,
-               L"起　動", 2, LiliumUI::Align::Center, true);
-
-    curY += cardH + cardGap;
+    c.fillRect(0, 440, LiliumUI::kMainW, 40, LiliumUI::kColSidebar);
+    c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
+    c.drawDotText(16, 440, LiliumUI::kMainW - 32, 40, LiliumUI::kColTextSub,
+                  L"[↑/↓/1-2]:選択   [Enter/F3]:起動   [Esc/F5/HOME]:Brainへ戻る",
+                  12, LiliumUI::Align::Left, true);
+  } else {
+    // Differential partial redraw: only update previous & newly selected app cards
+    if (st->prevSelectedIndex != st->selectedIndex) {
+      if (st->prevSelectedIndex >= 0 && st->prevSelectedIndex < kAppCount) {
+        renderAppCard(c, st->prevSelectedIndex, false);
+      }
+      if (st->selectedIndex >= 0 && st->selectedIndex < kAppCount) {
+        renderAppCard(c, st->selectedIndex, true);
+      }
+    }
   }
 
-  // Roadmap preview notice card (subtle light info box)
-  c.drawBox(16, 304, LiliumUI::kMainW - 32, 118, LiliumUI::kColWhite, LiliumUI::kColBorder);
-  c.drawBox(16, 304, LiliumUI::kMainW - 32, 28, LiliumUI::kColTealHeader, LiliumUI::kColBorder);
-  c.drawText(26, 304, LiliumUI::kMainW - 52, 28, LiliumUI::kColTealDeep,
-             L"■ Lilium Suite 構成ステータス (Phase 1)", 2, LiliumUI::Align::Left, true);
-  c.drawText(26, 342, LiliumUI::kMainW - 52, 20, LiliumUI::kColTextSub,
-             L"・Calc (電卓/KhyCAS) と TaskMgr を分離独立しました", 2, LiliumUI::Align::Left, true);
-  c.drawText(26, 368, LiliumUI::kMainW - 52, 20, LiliumUI::kColMuted,
-             L"・追加予定: Lilium Clock / Lilium Filer (apps/*.exe)", 2, LiliumUI::Align::Left, true);
-  c.drawText(26, 394, LiliumUI::kMainW - 52, 16, LiliumUI::kColLightMuted,
-             L"※ 将来 TaskMgr 連携で純正辞書の安全解放・復帰に対応予定", 1, LiliumUI::Align::Left, true);
+  st->prevSelectedIndex = st->selectedIndex;
 
-  // Bottom key hint bar
-  c.fillRect(0, 440, LiliumUI::kMainW, 40, LiliumUI::kColSidebar);
-  c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
-  c.drawText(16, 440, LiliumUI::kMainW - 32, 40, LiliumUI::kColTextSub,
-             L"[↑/↓/1-2]:選択   [Enter/F3]:起動   [Esc/F5/HOME]:Brainへ戻る",
-             2, LiliumUI::Align::Left, true);
-
-  // Right Sidebar
   const AppEntry & cur = kApps[st->selectedIndex];
   wchar_t statusLine[48];
   _snwprintf(statusLine, 48, L"アプリ: %d/%d  メモリ:%d%%", st->selectedIndex + 1, kAppCount, usedPct);
@@ -255,7 +257,6 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                           L"[↑↓]:選択 [Ent/F3]:起動", L"[Esc/HOME]:終了確認",
                           L"終　了", true);
 
-  // Modal overlays
   if (st->modal == ModalState::ExitConfirm) {
     static constexpr LiliumUI::ModalButton kExitBtns[2] = {
       { L"終了する", true },
@@ -290,6 +291,7 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
       case VK_UP:
       case VK_DOWN:
         st->modalFocus = (st->modalFocus == 0) ? 1 : 0;
+        st->window.requestRepaint(true);
         break;
       case VK_RETURN:
       case VK_F3:
@@ -297,11 +299,13 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
           st->window.requestQuit();
         } else {
           st->modal = ModalState::None;
+          st->window.requestRepaint(true);
         }
         break;
       case VK_ESCAPE:
       case VK_BACK:
         st->modal = ModalState::None;
+        st->window.requestRepaint(true);
         break;
       default:
         break;
@@ -312,6 +316,7 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
   if (st->modal == ModalState::LaunchError) {
     if (vkCode == VK_RETURN || vkCode == VK_F3 || vkCode == VK_ESCAPE || vkCode == VK_BACK) {
       st->modal = ModalState::None;
+      st->window.requestRepaint(true);
     }
     return;
   }
@@ -319,19 +324,31 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
   switch (vkCode) {
     case VK_UP:
     case VK_LEFT:
+      st->prevSelectedIndex = st->selectedIndex;
       st->selectedIndex = (st->selectedIndex - 1 + kAppCount) % kAppCount;
+      st->window.requestRepaint(false);
       break;
     case VK_DOWN:
     case VK_RIGHT:
+      st->prevSelectedIndex = st->selectedIndex;
       st->selectedIndex = (st->selectedIndex + 1) % kAppCount;
+      st->window.requestRepaint(false);
       break;
     case '1':
     case 'Q':
-      st->selectedIndex = 0;
+      if (st->selectedIndex != 0) {
+        st->prevSelectedIndex = st->selectedIndex;
+        st->selectedIndex = 0;
+        st->window.requestRepaint(false);
+      }
       break;
     case '2':
     case 'W':
-      if (kAppCount > 1) st->selectedIndex = 1;
+      if (kAppCount > 1 && st->selectedIndex != 1) {
+        st->prevSelectedIndex = st->selectedIndex;
+        st->selectedIndex = 1;
+        st->window.requestRepaint(false);
+      }
       break;
     case VK_RETURN:
     case VK_F3:
@@ -344,6 +361,7 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
     case VK_F10:
       st->modal = ModalState::ExitConfirm;
       st->modalFocus = 1;
+      st->window.requestRepaint(true);
       break;
     default:
       break;
@@ -354,16 +372,17 @@ static void onClick(int x, int y, void * userData) {
   LauncherState * st = static_cast<LauncherState *>(userData);
 
   if (st->modal == ModalState::ExitConfirm) {
-    const int dlgX = (LiliumUI::kScreenW - 480) / 2;
+    const int dlgX = (LiliumUI::kScreenW - 500) / 2;
     const int by = (LiliumUI::kScreenH - 224) / 2 + 132;
-    const int totalW = 2 * 160 + 24;
-    const int bx0 = dlgX + (480 - totalW) / 2;
-    const int bx1 = bx0 + 160 + 24;
+    const int totalW = 2 * 160 + 22;
+    const int bx0 = dlgX + (500 - totalW) / 2;
+    const int bx1 = bx0 + 160 + 22;
     if (y >= by && y < by + 42) {
       if (x >= bx0 && x < bx0 + 160) {
         st->window.requestQuit();
       } else if (x >= bx1 && x < bx1 + 160) {
         st->modal = ModalState::None;
+        st->window.requestRepaint(true);
       }
     }
     return;
@@ -371,26 +390,29 @@ static void onClick(int x, int y, void * userData) {
 
   if (st->modal == ModalState::LaunchError) {
     st->modal = ModalState::None;
+    st->window.requestRepaint(true);
     return;
   }
 
-  // Exit button in bottom-right sidebar
   if (x >= LiliumUI::kExitBtnX && x < LiliumUI::kExitBtnX + LiliumUI::kExitBtnW &&
       y >= LiliumUI::kExitBtnY && y < LiliumUI::kExitBtnY + LiliumUI::kExitBtnH) {
     st->modal = ModalState::ExitConfirm;
     st->modalFocus = 1;
+    st->window.requestRepaint(true);
     return;
   }
 
-  // App card hit test
   int curY = 102;
   for (int i = 0; i < kAppCount; ++i) {
     if (x >= 16 && x < LiliumUI::kMainW - 16 && y >= curY && y < curY + 82) {
       bool alreadySelected = (st->selectedIndex == i);
       bool clickedLaunchBtn = (x >= LiliumUI::kMainW - 16 - 114);
+      st->prevSelectedIndex = st->selectedIndex;
       st->selectedIndex = i;
       if (alreadySelected || clickedLaunchBtn) {
         launchSelectedApp(st);
+      } else {
+        st->window.requestRepaint(false);
       }
       return;
     }
@@ -398,18 +420,22 @@ static void onClick(int x, int y, void * userData) {
   }
 }
 
-static void onTimer(void * /*userData*/) {
-  // Periodic refresh updates clock/battery/RAM readout in header and sidebar
+static void onTimer(LiliumUI::Canvas & c, void * userData) {
+  LauncherState * st = static_cast<LauncherState *>(userData);
+  int totalMB = 0, availMB = 0, usedPct = 0;
+  LiliumUI::queryMemoryMB(totalMB, availMB, usedPct);
+  wchar_t statusLine[48];
+  _snwprintf(statusLine, 48, L"アプリ: %d/%d  メモリ:%d%%", st->selectedIndex + 1, kAppCount, usedPct);
+  statusLine[47] = L'\0';
+  LiliumUI::renderSidebarStatus(c, statusLine);
 }
 
 static bool onCloseRequest(void * userData) {
   LauncherState * st = static_cast<LauncherState *>(userData);
-  if (st->modal == ModalState::ExitConfirm) {
-    return true;
-  }
+  if (st->modal == ModalState::ExitConfirm) return true;
   st->modal = ModalState::ExitConfirm;
   st->modalFocus = 1;
-  st->window.requestRepaint();
+  st->window.requestRepaint(true);
   return false;
 }
 

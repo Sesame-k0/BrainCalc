@@ -67,19 +67,43 @@ enum class Align {
 
 struct Canvas {
   uint32_t * pixels;
+  HDC memDC;
+  HFONT dotFont16; // DotGothic16 -16 NONANTIALIASED_QUALITY (zero color bleed)
+  HFONT dotFont12; // DotGothic16 -12 ANTIALIASED_QUALITY (grayscale)
+  bool hasDotGothic;
   int width;
   int height;
+
+  // Differential dirty bounding box for fast partial BitBlt on Brain ARM
+  bool dirtyValid;
+  int dirtyX0;
+  int dirtyY0;
+  int dirtyX1;
+  int dirtyY1;
+  bool fullRedraw;
+
+  void addDirty(int x, int y, int w, int h);
+  void clearDirty();
 
   void clear(uint32_t rgb);
   void fillRect(int x, int y, int w, int h, uint32_t rgb);
   void drawBox(int x, int y, int w, int h, uint32_t bgRgb, uint32_t borderRgb);
   void drawThickFrame(int x, int y, int w, int h, int thickness, uint32_t borderRgb);
   void darkenScreen();
+
+  // Compact Misaki bitmap font (used in Sidebar and fallback)
   void drawText(int x, int y, int w, int h, uint32_t colorRgb,
                 const wchar_t * text, int scale = 2,
                 Align align = Align::Left, bool vcenter = true);
   int drawWrappedText(int x, int y, int maxW, int maxY, uint32_t colorRgb,
                       const wchar_t * text, int scale = 2, int lineGap = 4);
+
+  // High-clarity DotGothic16 GDI text for main area / filenames / modals
+  // sizePx: 16 (native pixel-perfect monochrome) or 12 (compact grayscale)
+  void drawDotText(int x, int y, int w, int h, uint32_t colorRgb,
+                   const wchar_t * text, int sizePx = 16,
+                   Align align = Align::Left, bool vcenter = true);
+  int measureDotWidth(const wchar_t * text, int sizePx = 16);
 };
 
 // System & path telemetry
@@ -97,6 +121,7 @@ void restoreBrainTaskBar();
 
 // Shared Lilium chrome helpers
 void renderTopHeader(Canvas & c, const wchar_t * title, const wchar_t * badgeText);
+void renderSidebarStatus(Canvas & c, const wchar_t * statusLine);
 void renderSidebar(Canvas & c,
                    const wchar_t * statusLine,
                    const wchar_t * cardTitle,
@@ -125,7 +150,7 @@ struct AppCallbacks {
   void (*onRender)(Canvas & canvas, void * userData);
   void (*onKeyDown)(WPARAM vkCode, bool isShift, void * userData);
   void (*onClick)(int x, int y, void * userData);
-  void (*onTimer)(void * userData); // ~500ms tick
+  void (*onTimer)(Canvas & canvas, void * userData); // Optional partial status update on minute/battery change
   bool (*onCloseRequest)(void * userData); // return true to allow immediate close
 };
 
@@ -138,7 +163,8 @@ public:
               const AppCallbacks & callbacks, void * userData,
               bool manageTaskBar);
   int runLoop();
-  void requestRepaint();
+  void requestRepaint(bool full = true);
+  void requestDirtyRect(int x, int y, int w, int h);
   void requestQuit();
   void setVisible(bool visible);
   HWND hwnd() const { return m_hwnd; }
@@ -147,19 +173,37 @@ private:
   static LRESULT CALLBACK wndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
   LRESULT handleMsg(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
   void initBackbuffer();
+  void initFonts();
+  void freeFonts();
   void freeBackbuffer();
   void redrawNow();
+  void blitDirtyToScreen(int x0, int y0, int x1, int y1);
 
   HWND m_hwnd;
   HDC m_memDC;
   HBITMAP m_dibBitmap;
   HGDIOBJ m_oldBitmap;
   uint32_t * m_pixels;
+
+  // DotGothic16 GDI resources
+  wchar_t m_loadedFontPath[MAX_PATH];
+  bool m_fontFileLoaded;
+  HFONT m_dotFont16;
+  HFONT m_dotFont12;
+  bool m_hasDotGothic;
+
   AppCallbacks m_cb;
   void * m_userData;
   bool m_needsRepaint;
+  bool m_fullRedrawPending;
+  bool m_hasPendingRect;
+  int m_pendX0, m_pendY0, m_pendX1, m_pendY1;
   bool m_quitRequested;
   bool m_manageTaskBar;
+
+  // Timer change detection (avoid idle full-screen blits!)
+  int m_lastClockMinute;
+  int m_lastBatteryPct;
 
   // Physical Shift tracking (supports WinCE VK_CAPITAL 1-shot sticky Shift)
   bool m_shiftHeld;
