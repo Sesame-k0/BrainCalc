@@ -110,6 +110,14 @@ static void launchSelectedApp(LauncherState * st) {
     return;
   }
 
+#ifdef _WIN32_WCE
+  // WinCE 版 CreateProcessW では lpCurrentDirectory / lpStartupInfo が未サポートのため NULL 固定にする
+  // （非 NULL を渡すと ERROR_INVALID_PARAMETER = 87 で失敗する）。
+  // また lpszCmdLine にはフルパスを含めず引数文字列のみを書き込み可能バッファで渡す。
+  wchar_t cmdLine[64] = L"--from-launcher";
+  PROCESS_INFORMATION pi = {};
+  BOOL ok = CreateProcessW(exePath, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi);
+#else
   wchar_t workDir[MAX_PATH] = L"";
   wcsncpy(workDir, exePath, MAX_PATH - 1);
   workDir[MAX_PATH - 1] = L'\0';
@@ -125,6 +133,7 @@ static void launchSelectedApp(LauncherState * st) {
   PROCESS_INFORMATION pi = {};
 
   BOOL ok = CreateProcessW(exePath, cmdLine, NULL, NULL, FALSE, 0, NULL, workDir, &si, &pi);
+#endif
   if (!ok) {
     DWORD err = GetLastError();
     _snwprintf(st->errLine1, 96, L"起動に失敗しました (Code: %lu)", static_cast<unsigned long>(err));
