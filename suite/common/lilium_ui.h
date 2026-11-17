@@ -109,6 +109,20 @@ void queryClockStr(wchar_t * outBuf, size_t maxLen);
 void hideBrainTaskBar();
 void restoreBrainTaskBar();
 
+// Built-in SHARP Brain dictionary shell (wceprj.exe / cls="SHARP SIM") helpers
+struct DictStatus {
+  bool running;
+  bool windowReady;
+  DWORD pid;
+  HWND hwnd;
+  wchar_t exePath[MAX_PATH];
+};
+
+DictStatus queryDictStatus();
+bool launchDictApp(bool waitWindowReady, DWORD timeoutMs, HWND * outHwnd = nullptr);
+bool terminateDictApp(DWORD timeoutMs);
+void pumpPaintMessages();
+
 // Shared Lilium chrome helpers
 void renderTopHeader(Canvas & c, const wchar_t * title, const wchar_t * badgeText);
 void renderSidebarStatus(Canvas & c, const wchar_t * statusLine);
@@ -156,6 +170,7 @@ public:
   void requestRepaint(bool full = true);
   void requestQuit();
   void setVisible(bool visible);
+  void redrawNow();
   HWND hwnd() const { return m_hwnd; }
 
 private:
@@ -163,7 +178,6 @@ private:
   LRESULT handleMsg(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
   void initBackbuffer();
   void freeBackbuffer();
-  void redrawNow();
   void blitDirtyToScreen(int x0, int y0, int x1, int y1);
 
   HWND m_hwnd;

@@ -28,12 +28,12 @@ static constexpr AppEntry kApps[] = {
   },
   {
     L"Lilium TaskMgr",
-    L"プロセス一覧・RAM監視・安全保護チェック",
+    L"プロセス監視・RAM統計・電子辞書(wceprj)解放",
     L"apps\\LiliumTaskMgr.exe",
     L"TaskManager",
-    L"【機能】\n起動中プロセス・可視ウィンドウ・RAM空き容量を確認。\n"
-    L"【保護機構】\nOS必須プロセスは終了禁止ロック。\n"
-    L"【連携予定】\n実機の辞書プロセス調査・解放の土台。",
+    L"【機能】\n起動中プロセス・ウィンドウ・RAM使用率を監視。\n"
+    L"【辞書解放】\n[F6] で純正辞書 (wceprj.exe) を安全に解放・再起動。\n"
+    L"【保護機構】\nOS必須プロセスは終了禁止。",
     1
   }
 };
@@ -42,11 +42,14 @@ static constexpr int kAppCount = static_cast<int>(sizeof(kApps) / sizeof(kApps[0
 enum class ModalState {
   None = 0,
   ExitConfirm,
+  RestartingDict,
+  DictRestartFailed,
   LaunchError
 };
 
 struct LauncherState {
   LiliumUI::AppWindow window;
+  LiliumUI::DictStatus dict = {};
   int selectedIndex = 0;
   int prevSelectedIndex = 0;
   ModalState modal = ModalState::None;
@@ -193,7 +196,35 @@ static void launchSelectedApp(LauncherState * st) {
 
   CloseHandle(pi.hThread);
   CloseHandle(pi.hProcess);
+  st->dict = LiliumUI::queryDictStatus();
   st->window.setVisible(true);
+}
+
+static void executeSafeLauncherExit(LauncherState * st) {
+  st->dict = LiliumUI::queryDictStatus();
+  if (st->dict.running && st->dict.windowReady) {
+    st->window.requestQuit();
+    return;
+  }
+
+  st->modal = ModalState::RestartingDict;
+  st->window.requestRepaint(true);
+  st->window.redrawNow();
+
+  HWND hSim = NULL;
+  bool ok = LiliumUI::launchDictApp(true, 10000, &hSim);
+  if (ok) {
+    if (hSim && IsWindow(hSim)) {
+      SetForegroundWindow(hSim);
+    }
+    st->window.requestQuit();
+    return;
+  }
+
+  st->dict = LiliumUI::queryDictStatus();
+  st->modal = ModalState::DictRestartFailed;
+  st->modalFocus = 0; // Safe default: 戻る
+  st->window.requestRepaint(true);
 }
 
 static void onRender(LiliumUI::Canvas & c, void * userData) {
@@ -218,16 +249,28 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
       renderAppCard(c, i, i == st->selectedIndex);
     }
 
-    c.drawBox(16, 304, LiliumUI::kMainW - 32, 118, LiliumUI::kColWhite, LiliumUI::kColBorder);
+    c.drawBox(16, 304, LiliumUI::kMainW - 32, 124, LiliumUI::kColWhite, LiliumUI::kColBorder);
     c.drawBox(16, 304, LiliumUI::kMainW - 32, 28, LiliumUI::kColTealHeader, LiliumUI::kColBorder);
-    c.drawText(26, 304, LiliumUI::kMainW - 52, 28, LiliumUI::kColTealDeep,
-               L"■ Lilium Suite 構成ステータス (Phase 1)", 2, LiliumUI::Align::Left, true);
-    c.drawText(26, 340, LiliumUI::kMainW - 52, 22, LiliumUI::kColTextSub,
-               L"・Calc (電卓/KhyCAS) と TaskMgr を分離独立しました", 2, LiliumUI::Align::Left, true);
+    c.drawText(26, 304, LiliumUI::kMainW - 160, 28, LiliumUI::kColTealDeep,
+               L"■ Lilium Suite ステータス (Phase 2)", 2, LiliumUI::Align::Left, true);
+
+    c.drawBox(LiliumUI::kMainW - 122, 307, 96, 22,
+              st->dict.running ? LiliumUI::kColTealSoft : LiliumUI::kColWarnBg,
+              st->dict.running ? LiliumUI::kColTealBorder : LiliumUI::kColWarnBorder);
+    c.drawText(LiliumUI::kMainW - 122, 307, 96, 22,
+               st->dict.running ? LiliumUI::kColTealDeep : LiliumUI::kColWarnText,
+               st->dict.running ? L"辞書:稼働" : L"辞書:解放", 2, LiliumUI::Align::Center, true);
+
+    c.drawText(26, 338, LiliumUI::kMainW - 52, 22,
+               st->dict.running ? LiliumUI::kColTextSub : LiliumUI::kColWarnText,
+               st->dict.running
+                 ? L"・純正辞書 (wceprj.exe): 稼働中 (通常終了可)"
+                 : L"・純正辞書 (wceprj.exe): 解放中 (終了時自動起動)",
+               2, LiliumUI::Align::Left, true);
     c.drawText(26, 366, LiliumUI::kMainW - 52, 22, LiliumUI::kColMuted,
-               L"・追加予定: Lilium Clock / Lilium Filer (apps/*.exe)", 2, LiliumUI::Align::Left, true);
-    c.drawText(26, 394, LiliumUI::kMainW - 52, 20, LiliumUI::kColLightMuted,
-               L"※ 次段階: TaskMgr 拡充＋純正辞書の解放・自動復帰", 1, LiliumUI::Align::Left, true);
+               L"・TaskMgr [F6] で辞書解放／再起動を行えます", 2, LiliumUI::Align::Left, true);
+    c.drawText(26, 394, LiliumUI::kMainW - 52, 22, LiliumUI::kColLightMuted,
+               L"・次予定: Lilium Clock / Lilium Filer (apps/*.exe)", 2, LiliumUI::Align::Left, true);
 
     c.fillRect(0, 440, LiliumUI::kMainW, 40, LiliumUI::kColSidebar);
     c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
@@ -262,12 +305,31 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
       { L"終了する", true },
       { L"キャンセル", false }
     };
+    const bool needRestart = !(st->dict.running && st->dict.windowReady);
     LiliumUI::renderConfirmModal(c,
-                                 L"【 終了の確認 】",
-                                 L"Lilium Launcher を終了しますか？",
-                                 L"SHARP Brain の元の画面に戻ります。",
+                                 needRestart ? L"【 辞書の自動起動と終了確認 】" : L"【 終了の確認 】",
+                                 needRestart ? L"辞書 (wceprj.exe) を起動して終了します" : L"Lilium Launcher を終了しますか？",
+                                 needRestart ? L"SHARP SIM 確認後に元の画面へ戻ります。" : L"SHARP Brain の元の画面に戻ります。",
                                  kExitBtns, 2, st->modalFocus,
                                  L"[←/→]:選択   [Enter]:決定   [Esc]:キャンセル");
+  } else if (st->modal == ModalState::RestartingDict) {
+    LiliumUI::renderConfirmModal(c,
+                                 L"【 純正電子辞書を再起動中 】",
+                                 L"wceprj.exe の起動完了を確認しています...",
+                                 L"フリーズ防止のためこのままお待ちください。",
+                                 nullptr, 0, 0,
+                                 L"SHARP Simulator ウィンドウ起動確認後に終了します");
+  } else if (st->modal == ModalState::DictRestartFailed) {
+    static constexpr LiliumUI::ModalButton kFailBtns[2] = {
+      { L"戻る (安全)", false },
+      { L"強制終了", true }
+    };
+    LiliumUI::renderConfirmModal(c,
+                                 L"【 辞書起動を確認できません 】",
+                                 L"wceprj.exe の自動起動を確認できませんでした",
+                                 L"強制終了すると本体操作不能になる恐れがあります。",
+                                 kFailBtns, 2, st->modalFocus,
+                                 L"[←/→]:選択   [Enter]:決定   [Esc]:戻る");
   } else if (st->modal == ModalState::LaunchError) {
     static constexpr LiliumUI::ModalButton kErrBtns[1] = {
       { L"閉じる", false }
@@ -284,7 +346,11 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
 static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
   LauncherState * st = static_cast<LauncherState *>(userData);
 
-  if (st->modal == ModalState::ExitConfirm) {
+  if (st->modal == ModalState::RestartingDict) {
+    return;
+  }
+
+  if (st->modal == ModalState::ExitConfirm || st->modal == ModalState::DictRestartFailed) {
     switch (vkCode) {
       case VK_LEFT:
       case VK_RIGHT:
@@ -295,11 +361,20 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
         break;
       case VK_RETURN:
       case VK_F3:
-        if (st->modalFocus == 0) {
-          st->window.requestQuit();
+        if (st->modal == ModalState::ExitConfirm) {
+          if (st->modalFocus == 0) {
+            executeSafeLauncherExit(st);
+          } else {
+            st->modal = ModalState::None;
+            st->window.requestRepaint(true);
+          }
         } else {
-          st->modal = ModalState::None;
-          st->window.requestRepaint(true);
+          if (st->modalFocus == 1) {
+            st->window.requestQuit();
+          } else {
+            st->modal = ModalState::None;
+            st->window.requestRepaint(true);
+          }
         }
         break;
       case VK_ESCAPE:
@@ -350,6 +425,10 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
         st->window.requestRepaint(false);
       }
       break;
+    case VK_F4:
+      st->dict = LiliumUI::queryDictStatus();
+      st->window.requestRepaint(true);
+      break;
     case VK_RETURN:
     case VK_F3:
       launchSelectedApp(st);
@@ -359,6 +438,7 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
     case VK_F7:
     case VK_HOME:
     case VK_F10:
+      st->dict = LiliumUI::queryDictStatus();
       st->modal = ModalState::ExitConfirm;
       st->modalFocus = 1;
       st->window.requestRepaint(true);
@@ -371,7 +451,11 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
 static void onClick(int x, int y, void * userData) {
   LauncherState * st = static_cast<LauncherState *>(userData);
 
-  if (st->modal == ModalState::ExitConfirm) {
+  if (st->modal == ModalState::RestartingDict) {
+    return;
+  }
+
+  if (st->modal == ModalState::ExitConfirm || st->modal == ModalState::DictRestartFailed) {
     const int dlgX = (LiliumUI::kScreenW - 500) / 2;
     const int by = (LiliumUI::kScreenH - 224) / 2 + 132;
     const int totalW = 2 * 160 + 22;
@@ -379,10 +463,19 @@ static void onClick(int x, int y, void * userData) {
     const int bx1 = bx0 + 160 + 22;
     if (y >= by && y < by + 42) {
       if (x >= bx0 && x < bx0 + 160) {
-        st->window.requestQuit();
+        if (st->modal == ModalState::ExitConfirm) {
+          executeSafeLauncherExit(st);
+        } else {
+          st->modal = ModalState::None;
+          st->window.requestRepaint(true);
+        }
       } else if (x >= bx1 && x < bx1 + 160) {
-        st->modal = ModalState::None;
-        st->window.requestRepaint(true);
+        if (st->modal == ModalState::ExitConfirm) {
+          st->modal = ModalState::None;
+          st->window.requestRepaint(true);
+        } else {
+          st->window.requestQuit();
+        }
       }
     }
     return;
@@ -396,6 +489,7 @@ static void onClick(int x, int y, void * userData) {
 
   if (x >= LiliumUI::kExitBtnX && x < LiliumUI::kExitBtnX + LiliumUI::kExitBtnW &&
       y >= LiliumUI::kExitBtnY && y < LiliumUI::kExitBtnY + LiliumUI::kExitBtnH) {
+    st->dict = LiliumUI::queryDictStatus();
     st->modal = ModalState::ExitConfirm;
     st->modalFocus = 1;
     st->window.requestRepaint(true);
@@ -433,6 +527,7 @@ static void onTimer(LiliumUI::Canvas & c, void * userData) {
 static bool onCloseRequest(void * userData) {
   LauncherState * st = static_cast<LauncherState *>(userData);
   if (st->modal == ModalState::ExitConfirm) return true;
+  st->dict = LiliumUI::queryDictStatus();
   st->modal = ModalState::ExitConfirm;
   st->modalFocus = 1;
   st->window.requestRepaint(true);
@@ -443,6 +538,7 @@ static bool onCloseRequest(void * userData) {
 
 int main(int /*argc*/, char * /*argv*/[]) {
   LauncherState state;
+  state.dict = LiliumUI::queryDictStatus();
   LiliumUI::AppCallbacks cb = {};
   cb.onRender = onRender;
   cb.onKeyDown = onKeyDown;

@@ -1,6 +1,8 @@
 #include "lilium_ui.h"
 
+#include <tlhelp32.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
 
@@ -312,6 +314,245 @@ void restoreBrainTaskBar() {
   HWND hTaskBar = FindWindowW(L"HHTaskBar", NULL);
   if (hTaskBar != NULL) ShowWindow(hTaskBar, SW_SHOW);
 #endif
+}
+
+// =============================================================================
+// Built-in SHARP Brain Dictionary Shell Helpers (wceprj.exe / "SHARP SIM")
+// =============================================================================
+
+namespace {
+
+wchar_t g_lastKnownDictPath[MAX_PATH] = L"";
+
+static void closeSnapSafe(HANDLE hSnap) {
+  if (hSnap == INVALID_HANDLE_VALUE) return;
+#if defined(_WIN32_WCE) || defined(__MINGW32CE__)
+  CloseToolhelp32Snapshot(hSnap);
+#else
+  CloseHandle(hSnap);
+#endif
+}
+
+static const wchar_t * baseNamePtr(const wchar_t * path) {
+  if (!path) return L"";
+  const wchar_t * b = wcsrchr(path, L'\\');
+  const wchar_t * f = wcsrchr(path, L'/');
+  if (f && (!b || f > b)) b = f;
+  return b ? (b + 1) : path;
+}
+
+static bool endsWithNoCaseUI(const wchar_t * str, const wchar_t * suffix) {
+  if (!str || !suffix) return false;
+  size_t sLen = wcslen(str);
+  size_t fLen = wcslen(suffix);
+  if (sLen < fLen) return false;
+  return _wcsicmp(str + (sLen - fLen), suffix) == 0;
+}
+
+static void saveDictPathCache(const wchar_t * path) {
+  if (!path || !path[0] || !endsWithNoCaseUI(path, L".exe")) return;
+  wcsncpy(g_lastKnownDictPath, path, MAX_PATH - 1);
+  g_lastKnownDictPath[MAX_PATH - 1] = L'\0';
+}
+
+static bool tryLaunchSingleDictCandidate(const wchar_t * path) {
+  if (!path || !path[0]) return false;
+
+#if defined(_WIN32_WCE) || defined(__MINGW32CE__)
+  PROCESS_INFORMATION pi = {};
+  BOOL ok = CreateProcessW(path, NULL, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi);
+#else
+  wchar_t workDir[MAX_PATH] = L"";
+  wcsncpy(workDir, path, MAX_PATH - 1);
+  workDir[MAX_PATH - 1] = L'\0';
+  wchar_t * lastSlash = wcsrchr(workDir, L'\\');
+  if (lastSlash) *(lastSlash + 1) = L'\0';
+
+  wchar_t cmdLine[MAX_PATH + 8] = L"";
+  _snwprintf(cmdLine, MAX_PATH + 7, L"\"%ls\"", path);
+  cmdLine[MAX_PATH + 7] = L'\0';
+
+  STARTUPINFOW si = {};
+  si.cb = sizeof(si);
+  PROCESS_INFORMATION pi = {};
+  BOOL ok = CreateProcessW(path, cmdLine, NULL, NULL, FALSE, 0, NULL,
+                           workDir[0] ? workDir : NULL, &si, &pi);
+#endif
+
+  if (!ok) return false;
+  CloseHandle(pi.hThread);
+  CloseHandle(pi.hProcess);
+  saveDictPathCache(path);
+  return true;
+}
+
+} // namespace
+
+void pumpPaintMessages() {
+  MSG msg;
+  while (PeekMessageW(&msg, NULL, WM_PAINT, WM_PAINT, PM_REMOVE)) {
+    TranslateMessage(&msg);
+    DispatchMessageW(&msg);
+  }
+}
+
+DictStatus queryDictStatus() {
+  DictStatus ds = {};
+
+  HWND hSim = FindWindowW(L"SHARP SIM", NULL);
+  if (hSim != NULL) {
+    ds.hwnd = hSim;
+    ds.windowReady = (IsWindowVisible(hSim) != FALSE);
+    DWORD wPid = 0;
+    GetWindowThreadProcessId(hSim, &wPid);
+    if (wPid != 0) {
+      ds.pid = wPid;
+      ds.running = true;
+    }
+  }
+
+  DWORD flags = TH32CS_SNAPPROCESS;
+#ifdef TH32CS_SNAPNOHEAPS
+  flags |= TH32CS_SNAPNOHEAPS;
+#endif
+  HANDLE hSnap = CreateToolhelp32Snapshot(flags, 0);
+  if (hSnap != INVALID_HANDLE_VALUE) {
+    PROCESSENTRY32 pe = {};
+    pe.dwSize = sizeof(pe);
+    if (Process32First(hSnap, &pe)) {
+      do {
+        const wchar_t * base = baseNamePtr(pe.szExeFile);
+        if (_wcsicmp(base, L"wceprj.exe") == 0 ||
+            (ds.pid != 0 && pe.th32ProcessID == ds.pid)) {
+          ds.running = true;
+          ds.pid = pe.th32ProcessID;
+          wcsncpy(ds.exePath, pe.szExeFile, MAX_PATH - 1);
+          ds.exePath[MAX_PATH - 1] = L'\0';
+
+#ifdef TH32CS_SNAPMODULE
+          if (ds.pid != 0 && wcschr(ds.exePath, L'\\') == nullptr) {
+            HANDLE hMod = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, ds.pid);
+            if (hMod != INVALID_HANDLE_VALUE) {
+              MODULEENTRY32 me = {};
+              me.dwSize = sizeof(me);
+              if (Module32First(hMod, &me)) {
+                do {
+                  if (_wcsicmp(me.szModule, base) == 0 ||
+                      endsWithNoCaseUI(me.szExePath, L".exe")) {
+                    if (me.szExePath[0]) {
+                      wcsncpy(ds.exePath, me.szExePath, MAX_PATH - 1);
+                      ds.exePath[MAX_PATH - 1] = L'\0';
+                      break;
+                    }
+                  }
+                } while (Module32Next(hMod, &me));
+              }
+              closeSnapSafe(hMod);
+            }
+          }
+#endif
+          if (wcschr(ds.exePath, L'\\') == nullptr && base[0]) {
+            wchar_t winPath[MAX_PATH] = {};
+            _snwprintf(winPath, MAX_PATH, L"\\Windows\\%ls", base);
+            winPath[MAX_PATH - 1] = L'\0';
+            DWORD attr = GetFileAttributesW(winPath);
+            if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+              wcsncpy(ds.exePath, winPath, MAX_PATH - 1);
+              ds.exePath[MAX_PATH - 1] = L'\0';
+            }
+          }
+          if (wcschr(ds.exePath, L'\\') != nullptr) {
+            saveDictPathCache(ds.exePath);
+          }
+          break;
+        }
+      } while (Process32Next(hSnap, &pe));
+    }
+    closeSnapSafe(hSnap);
+  }
+
+  return ds;
+}
+
+bool launchDictApp(bool waitWindowReady, DWORD timeoutMs, HWND * outHwnd) {
+  if (outHwnd) *outHwnd = NULL;
+  DictStatus ds = queryDictStatus();
+
+  if (!ds.running) {
+    bool launched = false;
+#if !defined(_WIN32_WCE) && !defined(__MINGW32CE__)
+    const wchar_t * envMock = _wgetenv(L"LILIUM_MOCK_DICT_EXE");
+    if (envMock && envMock[0]) {
+      launched = tryLaunchSingleDictCandidate(envMock);
+    }
+#endif
+    const wchar_t * candidates[] = {
+      g_lastKnownDictPath,
+      L"\\Windows\\wceprj.exe",
+      L"\\NAND\\wceprj.exe",
+      L"\\NAND2\\wceprj.exe",
+      L"wceprj.exe"
+    };
+    for (int i = 0; !launched && i < 5; ++i) {
+      if (candidates[i][0]) {
+        launched = tryLaunchSingleDictCandidate(candidates[i]);
+      }
+    }
+    if (!launched) {
+      return false;
+    }
+  }
+
+  if (!waitWindowReady) {
+    ds = queryDictStatus();
+    if (outHwnd) *outHwnd = ds.hwnd;
+    return ds.running;
+  }
+
+  DWORD startTick = GetTickCount();
+  for (;;) {
+    pumpPaintMessages();
+    HWND hSim = FindWindowW(L"SHARP SIM", NULL);
+    if (hSim != NULL && IsWindowVisible(hSim)) {
+      for (int s = 0; s < 3; ++s) {
+        Sleep(80);
+        pumpPaintMessages();
+      }
+      if (IsWindow(hSim)) {
+        if (outHwnd) *outHwnd = hSim;
+        return true;
+      }
+    }
+    if (GetTickCount() - startTick >= timeoutMs) {
+      break;
+    }
+    Sleep(100);
+  }
+  return false;
+}
+
+bool terminateDictApp(DWORD timeoutMs) {
+  DictStatus ds = queryDictStatus();
+  if (!ds.running || ds.pid == 0) return true;
+
+  if (wcschr(ds.exePath, L'\\') != nullptr) {
+    saveDictPathCache(ds.exePath);
+  }
+
+#if defined(_WIN32_WCE) || defined(__MINGW32CE__)
+  HANDLE hProc = OpenProcess(PROCESS_TERMINATE, FALSE, ds.pid);
+#else
+  HANDLE hProc = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, ds.pid);
+#endif
+  if (!hProc) return false;
+
+  BOOL ok = TerminateProcess(hProc, 0);
+  if (ok) {
+    WaitForSingleObject(hProc, timeoutMs);
+  }
+  CloseHandle(hProc);
+  Sleep(150);
+  return !queryDictStatus().running;
 }
 
 // =============================================================================

@@ -38,6 +38,10 @@ enum class ModalMode {
   None = 0,
   ProtectedWarn,
   KillConfirm,
+  DictReleaseConfirm,
+  DictLaunchConfirm,
+  DictStarting,
+  DictActionResult,
   ProcessDetail,
   LogSaved
 };
@@ -45,6 +49,7 @@ enum class ModalMode {
 struct TaskMgrState {
   LiliumUI::AppWindow window;
   bool manageTaskBar = false;
+  LiliumUI::DictStatus dict = {};
 
   int tab = 0; // 0: Processes, 1: Windows
   ProcInfo procs[kMaxProcesses];
@@ -63,6 +68,7 @@ struct TaskMgrState {
 
   ModalMode modal = ModalMode::None;
   int modalFocus = 0;
+  wchar_t statusTitle[64] = L"";
   wchar_t statusMsg1[96] = L"";
   wchar_t statusMsg2[96] = L"";
 };
@@ -236,6 +242,7 @@ static void refreshSystemSnapshot(TaskMgrState * st) {
   }
 
   EnumWindows(enumWinCallback, reinterpret_cast<LPARAM>(st));
+  st->dict = LiliumUI::queryDictStatus();
 
   if (st->procSel >= st->procCount) st->procSel = (st->procCount > 0) ? (st->procCount - 1) : 0;
   if (st->procScroll > st->procSel) st->procScroll = st->procSel;
@@ -343,6 +350,73 @@ static void tryCloseOrKillSelected(TaskMgrState * st, bool forceKill) {
   refreshSystemSnapshot(st);
 }
 
+static void executeDictRelease(TaskMgrState * st) {
+  int totalMB = 0, beforeAvailMB = 0, usedPct = 0;
+  LiliumUI::queryMemoryMB(totalMB, beforeAvailMB, usedPct);
+
+  bool ok = LiliumUI::terminateDictApp(1500);
+  refreshSystemSnapshot(st);
+
+  int afterAvailMB = 0;
+  LiliumUI::queryMemoryMB(totalMB, afterAvailMB, usedPct);
+  int deltaMB = afterAvailMB - beforeAvailMB;
+
+  if (ok) {
+    wcsncpy(st->statusTitle, L"【 電子辞書を解放しました 】", 63);
+    st->statusTitle[63] = L'\0';
+    if (deltaMB > 0) {
+      _snwprintf(st->statusMsg1, 96, L"空きRAM: %d MB → %d MB (+%d MB解放)",
+                 beforeAvailMB, afterAvailMB, deltaMB);
+    } else {
+      _snwprintf(st->statusMsg1, 96, L"wceprj.exe 終了完了 (空き %d MB)", afterAvailMB);
+    }
+    wcsncpy(st->statusMsg2, L"Launcher終了時は自動で辞書が再起動します。", 95);
+  } else {
+    wcsncpy(st->statusTitle, L"【 辞書解放に失敗 】", 63);
+    st->statusTitle[63] = L'\0';
+    wcsncpy(st->statusMsg1, L"wceprj.exe の終了に失敗しました", 95);
+    wcsncpy(st->statusMsg2, L"権限またはOS状態により終了できませんでした。", 95);
+  }
+  st->statusMsg1[95] = L'\0';
+  st->statusMsg2[95] = L'\0';
+  st->modal = ModalMode::DictActionResult;
+  st->modalFocus = 0;
+  st->window.requestRepaint(true);
+}
+
+static void executeDictRestart(TaskMgrState * st) {
+  st->modal = ModalMode::DictStarting;
+  st->window.requestRepaint(true);
+  st->window.redrawNow();
+
+  HWND hSim = NULL;
+  bool ok = LiliumUI::launchDictApp(true, 8000, &hSim);
+
+  // Keep TaskMgr visible on top so result confirmation stays legible
+  SetWindowPos(st->window.hwnd(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+  SetForegroundWindow(st->window.hwnd());
+
+  refreshSystemSnapshot(st);
+
+  if (ok) {
+    wcsncpy(st->statusTitle, L"【 電子辞書を再起動しました 】", 63);
+    st->statusTitle[63] = L'\0';
+    _snwprintf(st->statusMsg1, 96, L"wceprj.exe の起動を確認 (PID: %lu)",
+               static_cast<unsigned long>(st->dict.pid));
+    wcsncpy(st->statusMsg2, L"SHARP Simulator ウィンドウの準備が完了しました。", 95);
+  } else {
+    wcsncpy(st->statusTitle, L"【 辞書再起動を確認できません 】", 63);
+    st->statusTitle[63] = L'\0';
+    wcsncpy(st->statusMsg1, L"wceprj.exe の起動または待機がタイムアウトしました", 95);
+    wcsncpy(st->statusMsg2, L"Launcher終了時に再度自動起動を試みます。", 95);
+  }
+  st->statusMsg1[95] = L'\0';
+  st->statusMsg2[95] = L'\0';
+  st->modal = ModalMode::DictActionResult;
+  st->modalFocus = 0;
+  st->window.requestRepaint(true);
+}
+
 static void renderProcessRow(LiliumUI::Canvas & c, const TaskMgrState * st, int r) {
   const int listX = 12, listY = 114, listW = LiliumUI::kMainW - 24, rowH = 34;
   int idx = st->procScroll + r;
@@ -430,29 +504,38 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                       (usedPct >= 60) ? LiliumUI::kColWarnBorder : LiliumUI::kColTeal;
     c.fillRect(barX + 1, barY + 1, fillW, barH - 2, barCol);
 
-    // 2. Category Tabs
+    // 2. Category Tabs & Dedicated Dictionary / Log Actions
     wchar_t tab0[48], tab1[48];
-    _snwprintf(tab0, 48, L"プロセス (%d)", st->procCount);
-    _snwprintf(tab1, 48, L"ウィンドウ (%d)", st->winCount);
+    _snwprintf(tab0, 48, L"プロセス(%d)", st->procCount);
+    _snwprintf(tab1, 48, L"ウィンドウ(%d)", st->winCount);
     tab0[47] = L'\0';
     tab1[47] = L'\0';
 
-    const int tabW = 190;
-    c.drawBox(12, 82, tabW, 28,
+    const int tab0W = 146;
+    const int tab1W = 156;
+    c.drawBox(12, 82, tab0W, 28,
               (st->tab == 0) ? LiliumUI::kColTeal : LiliumUI::kColWhite,
               (st->tab == 0) ? LiliumUI::kColTealDark : LiliumUI::kColBorder);
-    c.drawText(12, 82, tabW, 28,
+    c.drawText(12, 82, tab0W, 28,
                (st->tab == 0) ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
                tab0, 2, LiliumUI::Align::Center, true);
 
-    c.drawBox(12 + tabW + 8, 82, tabW, 28,
+    c.drawBox(164, 82, tab1W, 28,
               (st->tab == 1) ? LiliumUI::kColTeal : LiliumUI::kColWhite,
               (st->tab == 1) ? LiliumUI::kColTealDark : LiliumUI::kColBorder);
-    c.drawText(12 + tabW + 8, 82, tabW, 28,
+    c.drawText(164, 82, tab1W, 28,
                (st->tab == 1) ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
                tab1, 2, LiliumUI::Align::Center, true);
 
-    c.drawText(404, 82, 224, 28, LiliumUI::kColMuted, L"[F4]更新 [F8]ログ", 2, LiliumUI::Align::Right, true);
+    const uint32_t dictBg = st->dict.running ? LiliumUI::kColWarnBg : LiliumUI::kColTealSoft;
+    const uint32_t dictBd = st->dict.running ? LiliumUI::kColWarnBorder : LiliumUI::kColTeal;
+    const uint32_t dictTx = st->dict.running ? LiliumUI::kColWarnText : LiliumUI::kColTealDeep;
+    const wchar_t * dictLbl = st->dict.running ? L"[F6] 辞書アプリ解放" : L"[F6] 辞書を再起動";
+    c.drawBox(326, 82, 206, 28, dictBg, dictBd);
+    c.drawText(326, 82, 206, 28, dictTx, dictLbl, 2, LiliumUI::Align::Center, true);
+
+    c.drawBox(538, 82, 90, 28, LiliumUI::kColWhite, LiliumUI::kColBorder);
+    c.drawText(538, 82, 90, 28, LiliumUI::kColTextSub, L"[F8]ログ", 2, LiliumUI::Align::Center, true);
 
     // 3. List Frame + rows
     const int listX = 12, listY = 114, listW = LiliumUI::kMainW - 24, rowH = 34;
@@ -467,8 +550,8 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
     c.drawText(14, 440, LiliumUI::kMainW - 28, 40, LiliumUI::kColTextSub,
                (st->tab == 0)
-                 ? L"[↑↓]選択 [←→]タブ [Ent]詳細 [F4]更新 [F5]終了 [F8]ログ"
-                 : L"[↑↓]選択 [←→]タブ [Ent]前面 [F4]更新 [Esc]戻る",
+                 ? L"[↑↓]選択 [Ent]詳細 [F5]終了 [F6]辞書 [F8]ログ"
+                 : L"[↑↓]選択 [←→]タブ [Ent]前面 [F6]辞書 [Esc]戻る",
                2, LiliumUI::Align::Left, true);
   } else {
     // Fast differential redraw for row moves without re-blitting whole 800x480!
@@ -527,12 +610,13 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
   }
 
   wchar_t sideStatus[48];
-  _snwprintf(sideStatus, 48, L"%s %d件", (st->tab == 0) ? L"プロセス" : L"ウィンドウ",
+  _snwprintf(sideStatus, 48, L"辞書:%s %d件",
+             st->dict.running ? L"稼働" : L"解放",
              (st->tab == 0) ? st->procCount : st->winCount);
   sideStatus[47] = L'\0';
 
   LiliumUI::renderSidebar(c, sideStatus, cardTitle, cardBody,
-                          L"[F4]:再読込 [F8]:ログ保存", L"[F5]:終了(非保護のみ)",
+                          L"[F6]:辞書解放/再起動", L"[F4]:更新 [F8]:ログ",
                           L"戻　る", false);
 
   if (st->modal == ModalMode::ProtectedWarn) {
@@ -554,6 +638,36 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                                  L"対象プロセスへ終了操作を実行しますか？",
                                  kKillBtns, 3, st->modalFocus,
                                  L"[←/→]:選択   [Enter]:実行   [Esc]:中止");
+  } else if (st->modal == ModalMode::DictReleaseConfirm) {
+    static constexpr LiliumUI::ModalButton kDictRelBtns[2] = {
+      { L"解放する", true },
+      { L"キャンセル", false }
+    };
+    LiliumUI::renderConfirmModal(c, L"【 注意：電子辞書アプリの解放 】",
+                                 L"純正電子辞書 (wceprj.exe) を終了しますか？",
+                                 L"RAMを解放 (Launcher終了時に自動再起動)",
+                                 kDictRelBtns, 2, st->modalFocus,
+                                 L"[←/→]:選択   [Enter]:決定   [Esc]:中止");
+  } else if (st->modal == ModalMode::DictLaunchConfirm) {
+    static constexpr LiliumUI::ModalButton kDictStartBtns[2] = {
+      { L"起動する", false },
+      { L"キャンセル", false }
+    };
+    LiliumUI::renderConfirmModal(c, L"【 電子辞書の再起動 】",
+                                 L"純正電子辞書 (wceprj.exe) を起動しますか？",
+                                 L"SHARP Simulator ウィンドウの復帰を確認します。",
+                                 kDictStartBtns, 2, st->modalFocus,
+                                 L"[←/→]:選択   [Enter]:決定   [Esc]:中止");
+  } else if (st->modal == ModalMode::DictStarting) {
+    LiliumUI::renderConfirmModal(c, L"【 電子辞書を起動中 】",
+                                 L"wceprj.exe の起動完了を確認しています...",
+                                 L"このまま少しお待ちください。",
+                                 nullptr, 0, 0, L"起動確認後に結果を表示します");
+  } else if (st->modal == ModalMode::DictActionResult) {
+    static constexpr LiliumUI::ModalButton kOkBtns[1] = { { L"OK", false } };
+    LiliumUI::renderConfirmModal(c, st->statusTitle,
+                                 st->statusMsg1, st->statusMsg2,
+                                 kOkBtns, 1, 0, L"[Enter / Esc]: 閉じる");
   } else if (st->modal == ModalMode::ProcessDetail) {
     static constexpr LiliumUI::ModalButton kDetBtns[1] = { { L"閉じる", false } };
     LiliumUI::renderConfirmModal(c, L"【 プロセス詳細 】",
@@ -570,12 +684,51 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
 static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
   TaskMgrState * st = static_cast<TaskMgrState *>(userData);
 
+  if (st->modal == ModalMode::DictStarting) {
+    return;
+  }
+
   if (st->modal == ModalMode::ProtectedWarn ||
+      st->modal == ModalMode::DictActionResult ||
       st->modal == ModalMode::ProcessDetail ||
       st->modal == ModalMode::LogSaved) {
     if (vkCode == VK_RETURN || vkCode == VK_F3 || vkCode == VK_ESCAPE || vkCode == VK_BACK) {
       st->modal = ModalMode::None;
       st->window.requestRepaint(true);
+    }
+    return;
+  }
+
+  if (st->modal == ModalMode::DictReleaseConfirm ||
+      st->modal == ModalMode::DictLaunchConfirm) {
+    switch (vkCode) {
+      case VK_LEFT:
+      case VK_RIGHT:
+      case VK_UP:
+      case VK_DOWN:
+        st->modalFocus = (st->modalFocus == 0) ? 1 : 0;
+        st->window.requestRepaint(true);
+        break;
+      case VK_RETURN:
+      case VK_F3:
+        if (st->modalFocus == 0) {
+          if (st->modal == ModalMode::DictReleaseConfirm) {
+            executeDictRelease(st);
+          } else {
+            executeDictRestart(st);
+          }
+        } else {
+          st->modal = ModalMode::None;
+          st->window.requestRepaint(true);
+        }
+        break;
+      case VK_ESCAPE:
+      case VK_BACK:
+        st->modal = ModalMode::None;
+        st->window.requestRepaint(true);
+        break;
+      default:
+        break;
     }
     return;
   }
@@ -684,6 +837,17 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
       refreshSystemSnapshot(st);
       st->window.requestRepaint(true);
       break;
+    case VK_F6:
+      st->dict = LiliumUI::queryDictStatus();
+      if (st->dict.running) {
+        st->modal = ModalMode::DictReleaseConfirm;
+        st->modalFocus = 1; // Safe default: Cancel
+      } else {
+        st->modal = ModalMode::DictLaunchConfirm;
+        st->modalFocus = 0;
+      }
+      st->window.requestRepaint(true);
+      break;
     case VK_F8:
       exportDiagnosticLog(st);
       break;
@@ -692,6 +856,10 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
       if (st->tab == 0 && st->procSel >= 0 && st->procSel < st->procCount) {
         if (st->procs[st->procSel].kind == ProcProtection::OsCritical) {
           st->modal = ModalMode::ProtectedWarn;
+        } else if (st->procs[st->procSel].kind == ProcProtection::DictCandidate &&
+                   _wcsicmp(st->procs[st->procSel].exeName, L"wceprj.exe") == 0) {
+          st->modal = ModalMode::DictReleaseConfirm;
+          st->modalFocus = 1;
         } else {
           st->modal = ModalMode::KillConfirm;
           st->modalFocus = 2;
@@ -727,11 +895,38 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
 static void onClick(int x, int y, void * userData) {
   TaskMgrState * st = static_cast<TaskMgrState *>(userData);
 
+  if (st->modal == ModalMode::DictStarting) {
+    return;
+  }
+
   if (st->modal == ModalMode::ProtectedWarn ||
+      st->modal == ModalMode::DictActionResult ||
       st->modal == ModalMode::ProcessDetail ||
       st->modal == ModalMode::LogSaved) {
     st->modal = ModalMode::None;
     st->window.requestRepaint(true);
+    return;
+  }
+
+  if (st->modal == ModalMode::DictReleaseConfirm ||
+      st->modal == ModalMode::DictLaunchConfirm) {
+    const int dlgX = (LiliumUI::kScreenW - 500) / 2;
+    const int by = (LiliumUI::kScreenH - 224) / 2 + 132;
+    const int totalW = 2 * 160 + 22;
+    const int bx0 = dlgX + (500 - totalW) / 2;
+    const int bx1 = bx0 + 160 + 22;
+    if (y >= by && y < by + 42) {
+      if (x >= bx0 && x < bx0 + 160) {
+        if (st->modal == ModalMode::DictReleaseConfirm) {
+          executeDictRelease(st);
+        } else {
+          executeDictRestart(st);
+        }
+      } else if (x >= bx1 && x < bx1 + 160) {
+        st->modal = ModalMode::None;
+        st->window.requestRepaint(true);
+      }
+    }
     return;
   }
 
@@ -763,14 +958,30 @@ static void onClick(int x, int y, void * userData) {
   }
 
   if (y >= 82 && y < 110) {
-    if (x >= 12 && x < 202 && st->tab != 0) {
+    if (x >= 12 && x < 158 && st->tab != 0) {
       st->tab = 0;
       st->window.requestRepaint(true);
       return;
     }
-    if (x >= 210 && x < 400 && st->tab != 1) {
+    if (x >= 164 && x < 320 && st->tab != 1) {
       st->tab = 1;
       st->window.requestRepaint(true);
+      return;
+    }
+    if (x >= 326 && x < 532) {
+      st->dict = LiliumUI::queryDictStatus();
+      if (st->dict.running) {
+        st->modal = ModalMode::DictReleaseConfirm;
+        st->modalFocus = 1;
+      } else {
+        st->modal = ModalMode::DictLaunchConfirm;
+        st->modalFocus = 0;
+      }
+      st->window.requestRepaint(true);
+      return;
+    }
+    if (x >= 538 && x < 628) {
+      exportDiagnosticLog(st);
       return;
     }
   }
@@ -794,7 +1005,8 @@ static void onClick(int x, int y, void * userData) {
 static void onTimer(LiliumUI::Canvas & c, void * userData) {
   TaskMgrState * st = static_cast<TaskMgrState *>(userData);
   wchar_t sideStatus[48];
-  _snwprintf(sideStatus, 48, L"%s %d件", (st->tab == 0) ? L"プロセス" : L"ウィンドウ",
+  _snwprintf(sideStatus, 48, L"辞書:%s %d件",
+             st->dict.running ? L"稼働" : L"解放",
              (st->tab == 0) ? st->procCount : st->winCount);
   sideStatus[47] = L'\0';
   LiliumUI::renderSidebarStatus(c, sideStatus);

@@ -92,7 +92,7 @@ if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
 else
   SUITE_CXX="arm-mingw32ce-g++"
   SUITE_CXXFLAGS="-O3 -std=gnu++17 -Wall -Wextra -march=armv5tej -mcpu=arm926ej-s -DNOMINMAX -DUNICODE -D_UNICODE -fno-exceptions -fno-rtti"
-  SUITE_LDFLAGS="-march=armv5tej -mcpu=arm926ej-s -static -s -lcommctrl -lcommdlg"
+  SUITE_LDFLAGS="-march=armv5tej -mcpu=arm926ej-s -static -s -lcommctrl -lcommdlg -ltoolhelp"
   LAUNCHER_OUT="${DIST_DIR}/AppMain_.exe"
 fi
 
@@ -104,11 +104,7 @@ fi
 
 TASKMGR_OUT="${APPS_DIR}/LiliumTaskMgr.exe"
 echo "[INFO] Building Lilium TaskManager -> ${TASKMGR_OUT}..."
-if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
-  ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/taskmgr/main.cpp ${SUITE_COMMON_SRCS} -o "${TASKMGR_OUT}" ${SUITE_LDFLAGS}
-else
-  ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/taskmgr/main.cpp ${SUITE_COMMON_SRCS} -o "${TASKMGR_OUT}" ${SUITE_LDFLAGS} -ltoolhelp
-fi
+${SUITE_CXX} ${SUITE_CXXFLAGS} suite/taskmgr/main.cpp ${SUITE_COMMON_SRCS} -o "${TASKMGR_OUT}" ${SUITE_LDFLAGS}
 
 # PW-SB4 動作必須のローダー (188KB AppMain.exe) と AppMain.cfg (8バイト) をリポジトリ内から確実に配置
 LOADER_DIR="ion/src/simulator/brain/loader"
