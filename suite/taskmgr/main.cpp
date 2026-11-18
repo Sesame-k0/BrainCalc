@@ -530,7 +530,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     const uint32_t dictBg = st->dict.running ? LiliumUI::kColWarnBg : LiliumUI::kColTealSoft;
     const uint32_t dictBd = st->dict.running ? LiliumUI::kColWarnBorder : LiliumUI::kColTeal;
     const uint32_t dictTx = st->dict.running ? LiliumUI::kColWarnText : LiliumUI::kColTealDeep;
-    const wchar_t * dictLbl = st->dict.running ? L"[F6] 辞書アプリ解放" : L"[F6] 辞書を再起動";
+    const wchar_t * dictLbl = st->dict.running ? L"[F9] 辞書アプリ解放" : L"[F9] 辞書を再起動";
     c.drawBox(326, 82, 206, 28, dictBg, dictBd);
     c.drawText(326, 82, 206, 28, dictTx, dictLbl, 2, LiliumUI::Align::Center, true);
 
@@ -550,8 +550,8 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
     c.drawText(14, 440, LiliumUI::kMainW - 28, 40, LiliumUI::kColTextSub,
                (st->tab == 0)
-                 ? L"[↑↓]選択 [Ent]詳細 [F5]終了 [F6]辞書 [F8]ログ"
-                 : L"[↑↓]選択 [←→]タブ [Ent]前面 [F6]辞書 [Esc]戻る",
+                 ? L"[↑↓]選択 [Ent]詳細 [F5]終了 [F9]辞書 [F8]ログ"
+                 : L"[↑↓]選択 [←→]タブ [Ent]前面 [F9]辞書 [Esc]戻る",
                2, LiliumUI::Align::Left, true);
   } else {
     // Fast differential redraw for row moves without re-blitting whole 800x480!
@@ -616,7 +616,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
   sideStatus[47] = L'\0';
 
   LiliumUI::renderSidebar(c, sideStatus, cardTitle, cardBody,
-                          L"[F6]:辞書解放/再起動", L"[F4]:更新 [F8]:ログ",
+                          L"[F9]:辞書解放/再起動", L"[F4]:更新 [F8]:ログ",
                           L"戻　る", false);
 
   if (st->modal == ModalMode::ProtectedWarn) {
@@ -837,7 +837,7 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
       refreshSystemSnapshot(st);
       st->window.requestRepaint(true);
       break;
-    case VK_F6:
+    case VK_F9:
       st->dict = LiliumUI::queryDictStatus();
       if (st->dict.running) {
         st->modal = ModalMode::DictReleaseConfirm;

@@ -32,7 +32,7 @@ static constexpr AppEntry kApps[] = {
     L"apps\\LiliumTaskMgr.exe",
     L"TaskManager",
     L"【機能】\n起動中プロセス・ウィンドウ・RAM使用率を監視。\n"
-    L"【辞書解放】\n[F6] で純正辞書 (wceprj.exe) を安全に解放・再起動。\n"
+    L"【辞書解放】\n[F9] で純正辞書 (wceprj.exe) を安全に解放・再起動。\n"
     L"【保護機構】\nOS必須プロセスは終了禁止。",
     1
   }
@@ -268,7 +268,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                  : L"・純正辞書 (wceprj.exe): 解放中 (終了時自動起動)",
                2, LiliumUI::Align::Left, true);
     c.drawText(26, 366, LiliumUI::kMainW - 52, 22, LiliumUI::kColMuted,
-               L"・TaskMgr [F6] で辞書解放／再起動を行えます", 2, LiliumUI::Align::Left, true);
+               L"・TaskMgr [F9] で辞書解放／再起動を行えます", 2, LiliumUI::Align::Left, true);
     c.drawText(26, 394, LiliumUI::kMainW - 52, 22, LiliumUI::kColLightMuted,
                L"・次予定: Lilium Clock / Lilium Filer (apps/*.exe)", 2, LiliumUI::Align::Left, true);
 
