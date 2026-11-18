@@ -478,6 +478,28 @@ static bool tryLaunchSingleDictCandidate(const wchar_t * path) {
   return true;
 }
 
+static bool isWindowResponsiveSafe(HWND hWnd) {
+  if (!hWnd || !IsWindow(hWnd) || !IsWindowVisible(hWnd)) return false;
+#if defined(_WIN32_WCE) || defined(__MINGW32CE__)
+  typedef LRESULT(WINAPI * PFN_SendMsgTimeoutW)(HWND, UINT, WPARAM, LPARAM, UINT, UINT, PDWORD_PTR);
+  static PFN_SendMsgTimeoutW s_pfnSmt = nullptr;
+  static bool s_tested = false;
+  if (!s_tested) {
+    s_tested = true;
+    HMODULE hCore = GetModuleHandleW(L"coredll.dll");
+    if (hCore) {
+      s_pfnSmt = reinterpret_cast<PFN_SendMsgTimeoutW>(GetProcAddress(hCore, L"SendMessageTimeoutW"));
+    }
+  }
+  if (!s_pfnSmt) return true;
+  DWORD_PTR res = 0;
+  return s_pfnSmt(hWnd, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 400, &res) != 0;
+#else
+  DWORD_PTR res = 0;
+  return SendMessageTimeoutW(hWnd, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 400, &res) != 0;
+#endif
+}
+
 } // namespace
 
 void pumpPaintMessages() {
@@ -494,7 +516,7 @@ DictStatus queryDictStatus() {
   HWND hSim = FindWindowW(L"SHARP SIM", NULL);
   if (hSim != NULL) {
     ds.hwnd = hSim;
-    ds.windowReady = (IsWindowVisible(hSim) != FALSE);
+    ds.windowReady = isWindowResponsiveSafe(hSim);
     DWORD wPid = 0;
     GetWindowThreadProcessId(hSim, &wPid);
     if (wPid != 0) {
@@ -570,6 +592,13 @@ bool launchDictApp(bool waitWindowReady, DWORD timeoutMs, HWND * outHwnd) {
   if (outHwnd) *outHwnd = NULL;
   DictStatus ds = queryDictStatus();
 
+  // If wceprj.exe process is alive in a broken/headless zombie state (e.g. after WM_CLOSE),
+  // clean it up so a fresh SHARPSIM dictionary window can launch cleanly.
+  if (ds.running && !ds.windowReady) {
+    terminateDictApp(1500);
+    ds = queryDictStatus();
+  }
+
   if (!ds.running) {
     bool launched = false;
 #if !defined(_WIN32_WCE) && !defined(__MINGW32CE__)
@@ -605,7 +634,7 @@ bool launchDictApp(bool waitWindowReady, DWORD timeoutMs, HWND * outHwnd) {
   for (;;) {
     pumpPaintMessages();
     HWND hSim = FindWindowW(L"SHARP SIM", NULL);
-    if (hSim != NULL && IsWindowVisible(hSim)) {
+    if (isWindowResponsiveSafe(hSim)) {
       for (int s = 0; s < 3; ++s) {
         Sleep(80);
         pumpPaintMessages();

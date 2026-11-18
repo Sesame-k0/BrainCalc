@@ -80,6 +80,7 @@ struct TaskMgrState {
   int lastAvailMB = 0;
   int lastClockMin = -1;
   int lastBatPct = -1;
+  int perfDrawCounter = 0;
 
   ModalMode modal = ModalMode::None;
   int modalFocus = 0;
@@ -408,8 +409,34 @@ static void exportDiagnosticLog(TaskMgrState * st) {
     RegCloseKey(hKey);
   };
 
+  dumpRegBranch(L"USB Base", L"Drivers\\USB");
   dumpRegBranch(L"USB FunctionDrivers", L"Drivers\\USB\\FunctionDrivers");
   dumpRegBranch(L"Storage Profiles", L"System\\StorageManager\\Profiles");
+  dumpRegBranch(L"Active Drivers", L"Drivers\\Active");
+
+  wchar_t modPath[MAX_PATH] = L"";
+  GetModuleFileNameW(NULL, modPath, MAX_PATH);
+  modPath[MAX_PATH - 1] = L'\0';
+  wchar_t modLine[320];
+  _snwprintf(modLine, 320, L"\r\n[Disk Space & Self Path]\r\nself=%ls\r\n", modPath);
+  modLine[319] = L'\0';
+  writeUtf8(modLine);
+
+  static constexpr const wchar_t * kProbeVols[] = {
+    L"\\", L"\\Storage Card", L"\\NAND", L"\\NAND1", L"\\NAND2", L"\\NAND3", L"\\NAND4"
+  };
+  for (const wchar_t * vol : kProbeVols) {
+    ULARGE_INTEGER freeAvail = {}, totalBytes = {}, totalFree = {};
+    if (GetDiskFreeSpaceExW(vol, &freeAvail, &totalBytes, &totalFree)) {
+      wchar_t vLine[160];
+      _snwprintf(vLine, 160, L"  vol=%ls  free=%lu MB / total=%lu MB\r\n",
+                 vol,
+                 static_cast<unsigned long>(freeAvail.QuadPart / (1024ULL * 1024ULL)),
+                 static_cast<unsigned long>(totalBytes.QuadPart / (1024ULL * 1024ULL)));
+      vLine[159] = L'\0';
+      writeUtf8(vLine);
+    }
+  }
 
   FlushFileBuffers(hFile);
   CloseHandle(hFile);
@@ -442,64 +469,30 @@ static void tryCloseOrKillSelected(TaskMgrState * st, bool forceKill) {
   refreshSystemSnapshot(st);
 }
 
-static void executeDictRelease(TaskMgrState * st, bool gracefulFirst) {
+static void executeDictRelease(TaskMgrState * st) {
   int totalMB = 0, beforeAvailMB = 0, usedPct = 0;
   LiliumUI::queryMemoryMB(totalMB, beforeAvailMB, usedPct);
 
-  bool ok = false;
-  if (gracefulFirst) {
-    LiliumUI::DictStatus ds = LiliumUI::queryDictStatus();
-    if (!ds.running) {
-      ok = true;
-    } else {
-      if (ds.hwnd) PostMessageW(ds.hwnd, WM_CLOSE, 0, 0);
-      for (int i = 0; i < st->winCount; ++i) {
-        if (st->wins[i].pid == ds.pid && st->wins[i].hwnd && st->wins[i].hwnd != ds.hwnd) {
-          PostMessageW(st->wins[i].hwnd, WM_CLOSE, 0, 0);
-        }
-      }
-      for (int t = 0; t < 12; ++t) {
-        Sleep(100);
-        LiliumUI::pumpPaintMessages();
-        if (!LiliumUI::queryDictStatus().running) {
-          ok = true;
-          break;
-        }
-      }
-    }
-    refreshSystemSnapshot(st);
-    int afterAvailMB = 0;
-    LiliumUI::queryMemoryMB(totalMB, afterAvailMB, usedPct);
-    if (ok) {
-      wcsncpy(st->statusTitle, L"【 通常終了で解放しました 】", 63);
-      _snwprintf(st->statusMsg1, 96, L"空きRAM: %d MB → %d MB (正常終了)", beforeAvailMB, afterAvailMB);
-      wcsncpy(st->statusMsg2, L"Launcher終了時は自動で辞書が再起動します。", 95);
-    } else {
-      wcsncpy(st->statusTitle, L"【 通常終了に応答しません 】", 63);
-      wcsncpy(st->statusMsg1, L"WM_CLOSE では wceprj.exe が閉じませんでした", 95);
-      wcsncpy(st->statusMsg2, L"再度 [F9] から「強制解放」をご使用ください。", 95);
-    }
-  } else {
-    ok = LiliumUI::terminateDictApp(1500);
-    refreshSystemSnapshot(st);
-    int afterAvailMB = 0;
-    LiliumUI::queryMemoryMB(totalMB, afterAvailMB, usedPct);
-    int deltaMB = afterAvailMB - beforeAvailMB;
+  bool ok = LiliumUI::terminateDictApp(1500);
+  refreshSystemSnapshot(st);
 
-    if (ok) {
-      wcsncpy(st->statusTitle, L"【 電子辞書を解放しました 】", 63);
-      if (deltaMB > 0) {
-        _snwprintf(st->statusMsg1, 96, L"空きRAM: %d MB → %d MB (+%d MB解放)",
-                   beforeAvailMB, afterAvailMB, deltaMB);
-      } else {
-        _snwprintf(st->statusMsg1, 96, L"wceprj.exe 終了完了 (空き %d MB)", afterAvailMB);
-      }
-      wcsncpy(st->statusMsg2, L"Launcher終了時は自動で辞書が再起動します。", 95);
+  int afterAvailMB = 0;
+  LiliumUI::queryMemoryMB(totalMB, afterAvailMB, usedPct);
+  int deltaMB = afterAvailMB - beforeAvailMB;
+
+  if (ok) {
+    wcsncpy(st->statusTitle, L"【 電子辞書を解放しました 】", 63);
+    if (deltaMB > 0) {
+      _snwprintf(st->statusMsg1, 96, L"空きRAM: %d MB → %d MB (+%d MB解放)",
+                 beforeAvailMB, afterAvailMB, deltaMB);
     } else {
-      wcsncpy(st->statusTitle, L"【 辞書解放に失敗 】", 63);
-      wcsncpy(st->statusMsg1, L"wceprj.exe の終了に失敗しました", 95);
-      wcsncpy(st->statusMsg2, L"権限またはOS状態により終了できませんでした。", 95);
+      _snwprintf(st->statusMsg1, 96, L"wceprj.exe 終了完了 (空き %d MB)", afterAvailMB);
     }
+    wcsncpy(st->statusMsg2, L"Launcher終了時は自動で辞書が再起動します。", 95);
+  } else {
+    wcsncpy(st->statusTitle, L"【 辞書解放に失敗 】", 63);
+    wcsncpy(st->statusMsg1, L"wceprj.exe の終了に失敗しました", 95);
+    wcsncpy(st->statusMsg2, L"権限またはOS状態により終了できませんでした。", 95);
   }
   st->statusTitle[63] = L'\0';
   st->statusMsg1[95] = L'\0';
@@ -567,71 +560,82 @@ static void samplePerfMetrics(TaskMgrState * st) {
 static void drawPerfGraphCard(LiliumUI::Canvas & c, int x, int y, int w, int h,
                               const wchar_t * title, const wchar_t * valText,
                               const uint8_t * ring, int count, int head,
-                              uint32_t lineCol, uint32_t fillCol) {
-  c.drawBox(x, y, w, h, LiliumUI::kColWhite, LiliumUI::kColBorder);
-  c.drawBox(x, y, w, 26, LiliumUI::kColTealHeader, LiliumUI::kColBorder);
-  c.drawText(x + 10, y, 270, 26, LiliumUI::kColTealDeep, title, 2, LiliumUI::Align::Left, true);
-  c.drawText(x + 280, y, w - 290, 26, LiliumUI::kColText, valText, 2, LiliumUI::Align::Right, true);
-
+                              uint32_t lineCol, uint32_t fillCol, bool chromeRedraw) {
   const int gx = x + 42;
   const int gy = y + 32;
   const int gw = w - 54;
   const int gh = h - 42;
-  c.drawBox(gx, gy, gw, gh, 0xFAFCFE, LiliumUI::kColBtnBorder);
 
-  c.drawText(x + 4, gy - 3, 34, 12, LiliumUI::kColMuted, L"100%", 1, LiliumUI::Align::Right, true);
-  c.drawText(x + 4, gy + gh / 2 - 5, 34, 12, LiliumUI::kColMuted, L"50%", 1, LiliumUI::Align::Right, true);
-  c.drawText(x + 4, gy + gh - 9, 34, 12, LiliumUI::kColMuted, L"0%", 1, LiliumUI::Align::Right, true);
+  if (chromeRedraw) {
+    c.drawBox(x, y, w, h, LiliumUI::kColWhite, LiliumUI::kColBorder);
+    c.drawBox(x, y, w, 26, LiliumUI::kColTealHeader, LiliumUI::kColBorder);
+    c.drawText(x + 10, y, 270, 26, LiliumUI::kColTealDeep, title, 2, LiliumUI::Align::Left, true);
+    c.drawBox(gx, gy, gw, gh, 0xFAFCFE, LiliumUI::kColBtnBorder);
 
-  // Horizontal dotted grid at 25%, 50%, 75%
-  for (int pct = 25; pct <= 75; pct += 25) {
-    int ly = gy + gh - 1 - (gh - 2) * pct / 100;
-    for (int px = gx + 2; px < gx + gw - 2; px += 4) {
-      c.fillRect(px, ly, 2, 1, 0xDCE3EC);
-    }
+    c.drawText(x + 4, gy - 3, 34, 12, LiliumUI::kColMuted, L"100%", 1, LiliumUI::Align::Right, true);
+    c.drawText(x + 4, gy + gh / 2 - 5, 34, 12, LiliumUI::kColMuted, L"50%", 1, LiliumUI::Align::Right, true);
+    c.drawText(x + 4, gy + gh - 9, 34, 12, LiliumUI::kColMuted, L"0%", 1, LiliumUI::Align::Right, true);
+  } else {
+    c.fillRect(x + 280, y + 1, w - 284, 24, LiliumUI::kColTealHeader);
   }
-
-  if (count <= 0) return;
+  c.drawText(x + 280, y, w - 290, 26, LiliumUI::kColText, valText, 2, LiliumUI::Align::Right, true);
 
   const int plotX = gx + 1;
   const int plotW = gw - 2;
   const int plotTop = gy + 1;
   const int plotBot = gy + gh - 2;
   const int plotH = plotBot - plotTop;
-  if (plotW <= 2 || plotH <= 2) return;
+  if (plotW <= 2 || plotH <= 2 || !c.pixels) return;
 
-  // Map 60 slots right-aligned across plotW
+  const int ly25 = gy + gh - 1 - (gh - 2) * 25 / 100;
+  const int ly50 = gy + gh - 1 - (gh - 2) * 50 / 100;
+  const int ly75 = gy + gh - 1 - (gh - 2) * 75 / 100;
+
   auto sampleAtSlot = [&](int slot) -> int {
     int startSlot = kPerfHistoryLen - count;
     if (slot < startSlot) return 0;
-    int ageIdx = slot - startSlot; // 0 = oldest, count - 1 = newest
+    int ageIdx = slot - startSlot;
     int ringIdx = (head - count + ageIdx + kPerfHistoryLen * 2) % kPerfHistoryLen;
     return static_cast<int>(ring[ringIdx]);
   };
 
+  // Single-pass zero-overdraw plot render directly into DIB pixel buffer
   const int firstSlot = kPerfHistoryLen - count;
   for (int px = 0; px < plotW; ++px) {
-    int fNum = px * (kPerfHistoryLen - 1);
-    int s0 = fNum / (plotW - 1);
-    int rem = fNum % (plotW - 1);
-    if (s0 < firstSlot - 1) continue;
-    int v0 = sampleAtSlot(s0);
-    int v1 = (s0 + 1 < kPerfHistoryLen) ? sampleAtSlot(s0 + 1) : v0;
-    int v = (s0 < firstSlot) ? v1 : (v0 + ((v1 - v0) * rem) / (plotW - 1));
-    if (v < 0) v = 0;
-    if (v > 100) v = 100;
-
-    int yLine = plotBot - (plotH * v) / 100;
-    if (yLine < plotTop) yLine = plotTop;
-    int fillHeight = plotBot - yLine + 1;
-    if (fillHeight > 0) {
-      c.fillRect(plotX + px, yLine, 1, fillHeight, fillCol);
+    int yLine = -1;
+    if (count > 0) {
+      int fNum = px * (kPerfHistoryLen - 1);
+      int s0 = fNum / (plotW - 1);
+      int rem = fNum % (plotW - 1);
+      if (s0 >= firstSlot - 1) {
+        int v0 = sampleAtSlot(s0);
+        int v1 = (s0 + 1 < kPerfHistoryLen) ? sampleAtSlot(s0 + 1) : v0;
+        int v = (s0 < firstSlot) ? v1 : (v0 + ((v1 - v0) * rem) / (plotW - 1));
+        if (v < 0) v = 0;
+        if (v > 100) v = 100;
+        yLine = plotBot - (plotH * v) / 100;
+        if (yLine < plotTop) yLine = plotTop;
+      }
     }
-    c.fillRect(plotX + px, yLine, 1, (yLine + 1 <= plotBot) ? 2 : 1, lineCol);
+
+    const bool dotCol = ((plotX + px) & 3) < 2;
+    const int absX = plotX + px;
+    for (int py = plotTop; py <= plotBot; ++py) {
+      uint32_t col;
+      if (yLine >= 0 && py >= yLine) {
+        col = (py <= yLine + 1) ? lineCol : fillCol;
+      } else if (dotCol && (py == ly25 || py == ly50 || py == ly75)) {
+        col = 0xDCE3EC;
+      } else {
+        col = 0xFAFCFE;
+      }
+      c.pixels[py * c.width + absX] = col;
+    }
   }
+  c.addDirty(plotX, plotTop, plotW, plotBot - plotTop + 1);
 }
 
-static void renderPerfPanel(LiliumUI::Canvas & c, const TaskMgrState * st) {
+static void renderPerfPanel(LiliumUI::Canvas & c, const TaskMgrState * st, bool chromeRedraw) {
   wchar_t cpuVal[48];
   if (st->cpuSupported) {
     _snwprintf(cpuVal, 48, L"%d%% (最大 %d%%)", st->cpuNow, st->cpuPeak);
@@ -642,7 +646,7 @@ static void renderPerfPanel(LiliumUI::Canvas & c, const TaskMgrState * st) {
   drawPerfGraphCard(c, 12, 114, LiliumUI::kMainW - 24, 152,
                     L"CPU使用率 (1C1T)", cpuVal,
                     st->cpuHist, st->histCount, st->histHead,
-                    LiliumUI::kColTealDark, LiliumUI::kColTealSoft);
+                    LiliumUI::kColTealDark, LiliumUI::kColTealSoft, chromeRedraw);
 
   wchar_t ramVal[48];
   _snwprintf(ramVal, 48, L"%d%% (最大 %d%% / 空%dMB)", st->ramNow, st->ramPeak, st->lastAvailMB);
@@ -652,7 +656,7 @@ static void renderPerfPanel(LiliumUI::Canvas & c, const TaskMgrState * st) {
   drawPerfGraphCard(c, 12, 274, LiliumUI::kMainW - 24, 152,
                     L"RAM使用率 (60秒推移)", ramVal,
                     st->ramHist, st->histCount, st->histHead,
-                    ramLine, ramFill);
+                    ramLine, ramFill, chromeRedraw);
 }
 
 static void renderProcessRow(LiliumUI::Canvas & c, const TaskMgrState * st, int r) {
@@ -786,7 +790,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
 
     // 3. List Frame or Performance Graphs
     if (st->tab == 2) {
-      renderPerfPanel(c, st);
+      renderPerfPanel(c, st, true);
     } else {
       const int listX = 12, listY = 114, listW = LiliumUI::kMainW - 24, rowH = 34;
       c.drawBox(listX, listY, listW, kVisibleRows * rowH + 8, LiliumUI::kColWhite, LiliumUI::kColBorder);
@@ -806,7 +810,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                hint, 2, LiliumUI::Align::Left, true);
   } else if (st->tab == 2) {
     renderRamStrip();
-    renderPerfPanel(c, st);
+    renderPerfPanel(c, st, false);
   } else {
     // Fast differential redraw for row moves without re-blitting whole 800x480!
     if (st->tab == 0) {
@@ -903,15 +907,14 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                                  kKillBtns, 3, st->modalFocus,
                                  L"[←/→]:選択   [Enter]:実行   [Esc]:中止");
   } else if (st->modal == ModalMode::DictReleaseConfirm) {
-    static constexpr LiliumUI::ModalButton kDictRelBtns[3] = {
-      { L"通常終了", false },
+    static constexpr LiliumUI::ModalButton kDictRelBtns[2] = {
       { L"強制解放", true },
       { L"キャンセル", false }
     };
     LiliumUI::renderConfirmModal(c, L"【 注意：電子辞書アプリの解放 】",
-                                 L"純正電子辞書 (wceprj.exe) を終了しますか？",
+                                 L"純正電子辞書 (wceprj.exe) を解放しますか？",
                                  L"RAMを解放 (Launcher終了時に自動再起動)",
-                                 kDictRelBtns, 3, st->modalFocus,
+                                 kDictRelBtns, 2, st->modalFocus,
                                  L"[←/→]:選択   [Enter]:決定   [Esc]:中止");
   } else if (st->modal == ModalMode::DictLaunchConfirm) {
     static constexpr LiliumUI::ModalButton kDictStartBtns[2] = {
@@ -964,39 +967,8 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
     return;
   }
 
-  if (st->modal == ModalMode::DictReleaseConfirm) {
-    switch (vkCode) {
-      case VK_LEFT:
-        st->modalFocus = (st->modalFocus + 2) % 3;
-        st->window.requestRepaint(true);
-        break;
-      case VK_RIGHT:
-        st->modalFocus = (st->modalFocus + 1) % 3;
-        st->window.requestRepaint(true);
-        break;
-      case VK_RETURN:
-      case VK_F3:
-        if (st->modalFocus == 0) {
-          executeDictRelease(st, true);
-        } else if (st->modalFocus == 1) {
-          executeDictRelease(st, false);
-        } else {
-          st->modal = ModalMode::None;
-          st->window.requestRepaint(true);
-        }
-        break;
-      case VK_ESCAPE:
-      case VK_BACK:
-        st->modal = ModalMode::None;
-        st->window.requestRepaint(true);
-        break;
-      default:
-        break;
-    }
-    return;
-  }
-
-  if (st->modal == ModalMode::DictLaunchConfirm) {
+  if (st->modal == ModalMode::DictReleaseConfirm ||
+      st->modal == ModalMode::DictLaunchConfirm) {
     switch (vkCode) {
       case VK_LEFT:
       case VK_RIGHT:
@@ -1008,7 +980,11 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
       case VK_RETURN:
       case VK_F3:
         if (st->modalFocus == 0) {
-          executeDictRestart(st);
+          if (st->modal == ModalMode::DictReleaseConfirm) {
+            executeDictRelease(st);
+          } else {
+            executeDictRestart(st);
+          }
         } else {
           st->modal = ModalMode::None;
           st->window.requestRepaint(true);
@@ -1136,7 +1112,7 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
       st->dict = LiliumUI::queryDictStatus();
       if (st->dict.running) {
         st->modal = ModalMode::DictReleaseConfirm;
-        st->modalFocus = 2; // Safe default: Cancel
+        st->modalFocus = 1; // Safe default: Cancel
       } else {
         st->modal = ModalMode::DictLaunchConfirm;
         st->modalFocus = 0;
@@ -1154,7 +1130,7 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
         } else if (st->procs[st->procSel].kind == ProcProtection::DictCandidate &&
                    _wcsicmp(st->procs[st->procSel].exeName, L"wceprj.exe") == 0) {
           st->modal = ModalMode::DictReleaseConfirm;
-          st->modalFocus = 2;
+          st->modalFocus = 1;
         } else {
           st->modal = ModalMode::KillConfirm;
           st->modalFocus = 2;
@@ -1203,27 +1179,8 @@ static void onClick(int x, int y, void * userData) {
     return;
   }
 
-  if (st->modal == ModalMode::DictReleaseConfirm) {
-    const int dlgX = (LiliumUI::kScreenW - 500) / 2;
-    const int by = (LiliumUI::kScreenH - 224) / 2 + 132;
-    const int btnW = 132, gap = 22;
-    const int totalW = 3 * btnW + 2 * gap;
-    const int bx0 = dlgX + (500 - totalW) / 2;
-    if (y >= by && y < by + 42) {
-      for (int i = 0; i < 3; ++i) {
-        int bx = bx0 + i * (btnW + gap);
-        if (x >= bx && x < bx + btnW) {
-          if (i == 0) executeDictRelease(st, true);
-          else if (i == 1) executeDictRelease(st, false);
-          else { st->modal = ModalMode::None; st->window.requestRepaint(true); }
-          return;
-        }
-      }
-    }
-    return;
-  }
-
-  if (st->modal == ModalMode::DictLaunchConfirm) {
+  if (st->modal == ModalMode::DictReleaseConfirm ||
+      st->modal == ModalMode::DictLaunchConfirm) {
     const int dlgX = (LiliumUI::kScreenW - 500) / 2;
     const int by = (LiliumUI::kScreenH - 224) / 2 + 132;
     const int totalW = 2 * 160 + 22;
@@ -1231,7 +1188,11 @@ static void onClick(int x, int y, void * userData) {
     const int bx1 = bx0 + 160 + 22;
     if (y >= by && y < by + 42) {
       if (x >= bx0 && x < bx0 + 160) {
-        executeDictRestart(st);
+        if (st->modal == ModalMode::DictReleaseConfirm) {
+          executeDictRelease(st);
+        } else {
+          executeDictRestart(st);
+        }
       } else if (x >= bx1 && x < bx1 + 160) {
         st->modal = ModalMode::None;
         st->window.requestRepaint(true);
@@ -1287,7 +1248,7 @@ static void onClick(int x, int y, void * userData) {
       st->dict = LiliumUI::queryDictStatus();
       if (st->dict.running) {
         st->modal = ModalMode::DictReleaseConfirm;
-        st->modalFocus = 2;
+        st->modalFocus = 1;
       } else {
         st->modal = ModalMode::DictLaunchConfirm;
         st->modalFocus = 0;
@@ -1338,7 +1299,10 @@ static void onTimer(LiliumUI::Canvas & c, void * userData) {
   }
 
   if (st->tab == 2 && st->modal == ModalMode::None) {
-    onRender(c, userData);
+    ++st->perfDrawCounter;
+    if ((st->perfDrawCounter & 1) == 0) {
+      onRender(c, userData);
+    }
   }
 }
 
