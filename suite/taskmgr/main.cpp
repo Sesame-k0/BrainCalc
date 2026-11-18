@@ -334,6 +334,83 @@ static void exportDiagnosticLog(TaskMgrState * st) {
     writeUtf8(line);
   }
 
+  // Read-only System / CPU / USB / Storage Registry Telemetry (safe diagnostic probe)
+  SYSTEM_INFO sysInfo = {};
+  GetSystemInfo(&sysInfo);
+  wchar_t sysLine[192];
+  _snwprintf(sysLine, 192,
+             L"\r\n[System Info]\r\ncpuCount=%lu  procType=%lu  arch=%u  cpuNow=%d%% (supported=%d)\r\n",
+             static_cast<unsigned long>(sysInfo.dwNumberOfProcessors),
+             static_cast<unsigned long>(sysInfo.dwProcessorType),
+             static_cast<unsigned int>(sysInfo.wProcessorArchitecture),
+             st->cpuNow, st->cpuSupported ? 1 : 0);
+  writeUtf8(sysLine);
+
+  auto dumpRegBranch = [&](const wchar_t * label, const wchar_t * subKey) {
+    wchar_t hdr[192];
+    _snwprintf(hdr, 192, L"\r\n[%ls: HKLM\\%ls]\r\n", label, subKey);
+    writeUtf8(hdr);
+    HKEY hKey = NULL;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, subKey, 0, KEY_READ, &hKey) != ERROR_SUCCESS) {
+      writeUtf8(L"(open failed or missing)\r\n");
+      return;
+    }
+    for (DWORD vi = 0; vi < 32; ++vi) {
+      wchar_t vName[96] = {};
+      DWORD vNameLen = 95, vType = 0, vDataBytes = 256;
+      uint8_t vData[260] = {};
+      if (RegEnumValueW(hKey, vi, vName, &vNameLen, NULL, &vType, vData, &vDataBytes) != ERROR_SUCCESS) break;
+      wchar_t line[320];
+      if (vType == REG_SZ || vType == REG_EXPAND_SZ) {
+        _snwprintf(line, 320, L"  %ls = \"%ls\"\r\n", vName[0] ? vName : L"(Default)",
+                   reinterpret_cast<const wchar_t *>(vData));
+      } else if (vType == REG_DWORD && vDataBytes >= 4) {
+        DWORD dw = *reinterpret_cast<const DWORD *>(vData);
+        _snwprintf(line, 320, L"  %ls = 0x%lX (%lu)\r\n", vName[0] ? vName : L"(Default)",
+                   static_cast<unsigned long>(dw), static_cast<unsigned long>(dw));
+      } else {
+        _snwprintf(line, 320, L"  %ls = (type %lu, %lu bytes)\r\n", vName[0] ? vName : L"(Default)",
+                   static_cast<unsigned long>(vType), static_cast<unsigned long>(vDataBytes));
+      }
+      writeUtf8(line);
+    }
+    for (DWORD ki = 0; ki < 24; ++ki) {
+      wchar_t kName[96] = {};
+      DWORD kNameLen = 95;
+      if (RegEnumKeyExW(hKey, ki, kName, &kNameLen, NULL, NULL, NULL, NULL) != ERROR_SUCCESS) break;
+      wchar_t subHdr[160];
+      _snwprintf(subHdr, 160, L"  [%ls]\r\n", kName);
+      writeUtf8(subHdr);
+      HKEY hSub = NULL;
+      if (RegOpenKeyExW(hKey, kName, 0, KEY_READ, &hSub) == ERROR_SUCCESS) {
+        for (DWORD svi = 0; svi < 16; ++svi) {
+          wchar_t svName[96] = {};
+          DWORD svNameLen = 95, svType = 0, svBytes = 256;
+          uint8_t svData[260] = {};
+          if (RegEnumValueW(hSub, svi, svName, &svNameLen, NULL, &svType, svData, &svBytes) != ERROR_SUCCESS) break;
+          wchar_t line[320];
+          if (svType == REG_SZ || svType == REG_EXPAND_SZ) {
+            _snwprintf(line, 320, L"    %ls = \"%ls\"\r\n", svName[0] ? svName : L"(Default)",
+                       reinterpret_cast<const wchar_t *>(svData));
+          } else if (svType == REG_DWORD && svBytes >= 4) {
+            DWORD dw = *reinterpret_cast<const DWORD *>(svData);
+            _snwprintf(line, 320, L"    %ls = 0x%lX\r\n", svName[0] ? svName : L"(Default)",
+                       static_cast<unsigned long>(dw));
+          } else {
+            _snwprintf(line, 320, L"    %ls = (type %lu, %luB)\r\n", svName[0] ? svName : L"(Default)",
+                       static_cast<unsigned long>(svType), static_cast<unsigned long>(svBytes));
+          }
+          writeUtf8(line);
+        }
+        RegCloseKey(hSub);
+      }
+    }
+    RegCloseKey(hKey);
+  };
+
+  dumpRegBranch(L"USB FunctionDrivers", L"Drivers\\USB\\FunctionDrivers");
+  dumpRegBranch(L"Storage Profiles", L"System\\StorageManager\\Profiles");
+
   FlushFileBuffers(hFile);
   CloseHandle(hFile);
 
@@ -365,33 +442,66 @@ static void tryCloseOrKillSelected(TaskMgrState * st, bool forceKill) {
   refreshSystemSnapshot(st);
 }
 
-static void executeDictRelease(TaskMgrState * st) {
+static void executeDictRelease(TaskMgrState * st, bool gracefulFirst) {
   int totalMB = 0, beforeAvailMB = 0, usedPct = 0;
   LiliumUI::queryMemoryMB(totalMB, beforeAvailMB, usedPct);
 
-  bool ok = LiliumUI::terminateDictApp(1500);
-  refreshSystemSnapshot(st);
-
-  int afterAvailMB = 0;
-  LiliumUI::queryMemoryMB(totalMB, afterAvailMB, usedPct);
-  int deltaMB = afterAvailMB - beforeAvailMB;
-
-  if (ok) {
-    wcsncpy(st->statusTitle, L"【 電子辞書を解放しました 】", 63);
-    st->statusTitle[63] = L'\0';
-    if (deltaMB > 0) {
-      _snwprintf(st->statusMsg1, 96, L"空きRAM: %d MB → %d MB (+%d MB解放)",
-                 beforeAvailMB, afterAvailMB, deltaMB);
+  bool ok = false;
+  if (gracefulFirst) {
+    LiliumUI::DictStatus ds = LiliumUI::queryDictStatus();
+    if (!ds.running) {
+      ok = true;
     } else {
-      _snwprintf(st->statusMsg1, 96, L"wceprj.exe 終了完了 (空き %d MB)", afterAvailMB);
+      if (ds.hwnd) PostMessageW(ds.hwnd, WM_CLOSE, 0, 0);
+      for (int i = 0; i < st->winCount; ++i) {
+        if (st->wins[i].pid == ds.pid && st->wins[i].hwnd && st->wins[i].hwnd != ds.hwnd) {
+          PostMessageW(st->wins[i].hwnd, WM_CLOSE, 0, 0);
+        }
+      }
+      for (int t = 0; t < 12; ++t) {
+        Sleep(100);
+        LiliumUI::pumpPaintMessages();
+        if (!LiliumUI::queryDictStatus().running) {
+          ok = true;
+          break;
+        }
+      }
     }
-    wcsncpy(st->statusMsg2, L"Launcher終了時は自動で辞書が再起動します。", 95);
+    refreshSystemSnapshot(st);
+    int afterAvailMB = 0;
+    LiliumUI::queryMemoryMB(totalMB, afterAvailMB, usedPct);
+    if (ok) {
+      wcsncpy(st->statusTitle, L"【 通常終了で解放しました 】", 63);
+      _snwprintf(st->statusMsg1, 96, L"空きRAM: %d MB → %d MB (正常終了)", beforeAvailMB, afterAvailMB);
+      wcsncpy(st->statusMsg2, L"Launcher終了時は自動で辞書が再起動します。", 95);
+    } else {
+      wcsncpy(st->statusTitle, L"【 通常終了に応答しません 】", 63);
+      wcsncpy(st->statusMsg1, L"WM_CLOSE では wceprj.exe が閉じませんでした", 95);
+      wcsncpy(st->statusMsg2, L"再度 [F9] から「強制解放」をご使用ください。", 95);
+    }
   } else {
-    wcsncpy(st->statusTitle, L"【 辞書解放に失敗 】", 63);
-    st->statusTitle[63] = L'\0';
-    wcsncpy(st->statusMsg1, L"wceprj.exe の終了に失敗しました", 95);
-    wcsncpy(st->statusMsg2, L"権限またはOS状態により終了できませんでした。", 95);
+    ok = LiliumUI::terminateDictApp(1500);
+    refreshSystemSnapshot(st);
+    int afterAvailMB = 0;
+    LiliumUI::queryMemoryMB(totalMB, afterAvailMB, usedPct);
+    int deltaMB = afterAvailMB - beforeAvailMB;
+
+    if (ok) {
+      wcsncpy(st->statusTitle, L"【 電子辞書を解放しました 】", 63);
+      if (deltaMB > 0) {
+        _snwprintf(st->statusMsg1, 96, L"空きRAM: %d MB → %d MB (+%d MB解放)",
+                   beforeAvailMB, afterAvailMB, deltaMB);
+      } else {
+        _snwprintf(st->statusMsg1, 96, L"wceprj.exe 終了完了 (空き %d MB)", afterAvailMB);
+      }
+      wcsncpy(st->statusMsg2, L"Launcher終了時は自動で辞書が再起動します。", 95);
+    } else {
+      wcsncpy(st->statusTitle, L"【 辞書解放に失敗 】", 63);
+      wcsncpy(st->statusMsg1, L"wceprj.exe の終了に失敗しました", 95);
+      wcsncpy(st->statusMsg2, L"権限またはOS状態により終了できませんでした。", 95);
+    }
   }
+  st->statusTitle[63] = L'\0';
   st->statusMsg1[95] = L'\0';
   st->statusMsg2[95] = L'\0';
   st->modal = ModalMode::DictActionResult;
@@ -793,14 +903,15 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                                  kKillBtns, 3, st->modalFocus,
                                  L"[←/→]:選択   [Enter]:実行   [Esc]:中止");
   } else if (st->modal == ModalMode::DictReleaseConfirm) {
-    static constexpr LiliumUI::ModalButton kDictRelBtns[2] = {
-      { L"解放する", true },
+    static constexpr LiliumUI::ModalButton kDictRelBtns[3] = {
+      { L"通常終了", false },
+      { L"強制解放", true },
       { L"キャンセル", false }
     };
     LiliumUI::renderConfirmModal(c, L"【 注意：電子辞書アプリの解放 】",
                                  L"純正電子辞書 (wceprj.exe) を終了しますか？",
                                  L"RAMを解放 (Launcher終了時に自動再起動)",
-                                 kDictRelBtns, 2, st->modalFocus,
+                                 kDictRelBtns, 3, st->modalFocus,
                                  L"[←/→]:選択   [Enter]:決定   [Esc]:中止");
   } else if (st->modal == ModalMode::DictLaunchConfirm) {
     static constexpr LiliumUI::ModalButton kDictStartBtns[2] = {
@@ -853,8 +964,39 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
     return;
   }
 
-  if (st->modal == ModalMode::DictReleaseConfirm ||
-      st->modal == ModalMode::DictLaunchConfirm) {
+  if (st->modal == ModalMode::DictReleaseConfirm) {
+    switch (vkCode) {
+      case VK_LEFT:
+        st->modalFocus = (st->modalFocus + 2) % 3;
+        st->window.requestRepaint(true);
+        break;
+      case VK_RIGHT:
+        st->modalFocus = (st->modalFocus + 1) % 3;
+        st->window.requestRepaint(true);
+        break;
+      case VK_RETURN:
+      case VK_F3:
+        if (st->modalFocus == 0) {
+          executeDictRelease(st, true);
+        } else if (st->modalFocus == 1) {
+          executeDictRelease(st, false);
+        } else {
+          st->modal = ModalMode::None;
+          st->window.requestRepaint(true);
+        }
+        break;
+      case VK_ESCAPE:
+      case VK_BACK:
+        st->modal = ModalMode::None;
+        st->window.requestRepaint(true);
+        break;
+      default:
+        break;
+    }
+    return;
+  }
+
+  if (st->modal == ModalMode::DictLaunchConfirm) {
     switch (vkCode) {
       case VK_LEFT:
       case VK_RIGHT:
@@ -866,11 +1008,7 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
       case VK_RETURN:
       case VK_F3:
         if (st->modalFocus == 0) {
-          if (st->modal == ModalMode::DictReleaseConfirm) {
-            executeDictRelease(st);
-          } else {
-            executeDictRestart(st);
-          }
+          executeDictRestart(st);
         } else {
           st->modal = ModalMode::None;
           st->window.requestRepaint(true);
@@ -998,7 +1136,7 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
       st->dict = LiliumUI::queryDictStatus();
       if (st->dict.running) {
         st->modal = ModalMode::DictReleaseConfirm;
-        st->modalFocus = 1; // Safe default: Cancel
+        st->modalFocus = 2; // Safe default: Cancel
       } else {
         st->modal = ModalMode::DictLaunchConfirm;
         st->modalFocus = 0;
@@ -1016,7 +1154,7 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
         } else if (st->procs[st->procSel].kind == ProcProtection::DictCandidate &&
                    _wcsicmp(st->procs[st->procSel].exeName, L"wceprj.exe") == 0) {
           st->modal = ModalMode::DictReleaseConfirm;
-          st->modalFocus = 1;
+          st->modalFocus = 2;
         } else {
           st->modal = ModalMode::KillConfirm;
           st->modalFocus = 2;
@@ -1065,8 +1203,27 @@ static void onClick(int x, int y, void * userData) {
     return;
   }
 
-  if (st->modal == ModalMode::DictReleaseConfirm ||
-      st->modal == ModalMode::DictLaunchConfirm) {
+  if (st->modal == ModalMode::DictReleaseConfirm) {
+    const int dlgX = (LiliumUI::kScreenW - 500) / 2;
+    const int by = (LiliumUI::kScreenH - 224) / 2 + 132;
+    const int btnW = 132, gap = 22;
+    const int totalW = 3 * btnW + 2 * gap;
+    const int bx0 = dlgX + (500 - totalW) / 2;
+    if (y >= by && y < by + 42) {
+      for (int i = 0; i < 3; ++i) {
+        int bx = bx0 + i * (btnW + gap);
+        if (x >= bx && x < bx + btnW) {
+          if (i == 0) executeDictRelease(st, true);
+          else if (i == 1) executeDictRelease(st, false);
+          else { st->modal = ModalMode::None; st->window.requestRepaint(true); }
+          return;
+        }
+      }
+    }
+    return;
+  }
+
+  if (st->modal == ModalMode::DictLaunchConfirm) {
     const int dlgX = (LiliumUI::kScreenW - 500) / 2;
     const int by = (LiliumUI::kScreenH - 224) / 2 + 132;
     const int totalW = 2 * 160 + 22;
@@ -1074,11 +1231,7 @@ static void onClick(int x, int y, void * userData) {
     const int bx1 = bx0 + 160 + 22;
     if (y >= by && y < by + 42) {
       if (x >= bx0 && x < bx0 + 160) {
-        if (st->modal == ModalMode::DictReleaseConfirm) {
-          executeDictRelease(st);
-        } else {
-          executeDictRestart(st);
-        }
+        executeDictRestart(st);
       } else if (x >= bx1 && x < bx1 + 160) {
         st->modal = ModalMode::None;
         st->window.requestRepaint(true);
@@ -1134,7 +1287,7 @@ static void onClick(int x, int y, void * userData) {
       st->dict = LiliumUI::queryDictStatus();
       if (st->dict.running) {
         st->modal = ModalMode::DictReleaseConfirm;
-        st->modalFocus = 1;
+        st->modalFocus = 2;
       } else {
         st->modal = ModalMode::DictLaunchConfirm;
         st->modalFocus = 0;

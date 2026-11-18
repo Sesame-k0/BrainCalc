@@ -60,31 +60,67 @@ static constexpr uint8_t kSegMask[10] = {
   0x6F  // 9
 };
 
+static void drawHorizSeg(LiliumUI::Canvas & c, int x, int y, int w, int t, int kind, uint32_t col) {
+  // kind: 0 = top, 1 = middle, 2 = bottom (zero overlap with vertical segments)
+  if (kind == 0) {
+    for (int r = 0; r < t; ++r) {
+      int lx = x + 1 + r;
+      int rw = w - 2 * (1 + r);
+      if (rw > 0) c.fillRect(lx, y + r, rw, 1, col);
+    }
+  } else if (kind == 2) {
+    for (int r = 0; r < t; ++r) {
+      int inset = t - r;
+      int lx = x + inset;
+      int rw = w - 2 * inset;
+      if (rw > 0) c.fillRect(lx, y + r, rw, 1, col);
+    }
+  } else {
+    int half = t / 2;
+    for (int m = -half; m <= half; ++m) {
+      int d = (m < 0) ? -m : m;
+      int lx = x + 2 + d;
+      int rw = w - 2 * (2 + d);
+      if (rw > 0) c.fillRect(lx, y + half + m, rw, 1, col);
+    }
+  }
+}
+
+static void drawVertSegCol(LiliumUI::Canvas & c, int px, int yTop, int yBot, uint32_t col) {
+  int h = yBot - yTop + 1;
+  if (h > 0) c.fillRect(px, yTop, 1, h, col);
+}
+
 static void drawSevenSegDigit(LiliumUI::Canvas & c, int x, int y, int w, int h, int thick,
                               int digit, uint32_t onCol, uint32_t ghostCol) {
   uint8_t mask = (digit >= 0 && digit <= 9) ? kSegMask[digit] : 0;
   int halfH = h / 2;
-  int gap = 2;
+  int midY = y + halfH;
+  int tMid = (thick % 2 == 0) ? (thick - 2) : thick;
+  if (tMid < 4) tMid = 4;
 
   auto segCol = [&](int bit) -> uint32_t {
     return (mask & (1 << bit)) ? onCol : ghostCol;
   };
 
-  // Top (0)
-  c.fillRect(x + gap, y, w - 2 * gap, thick, segCol(0));
-  // Middle (6)
-  c.fillRect(x + gap, y + halfH - thick / 2, w - 2 * gap, thick, segCol(6));
-  // Bottom (3)
-  c.fillRect(x + gap, y + h - thick, w - 2 * gap, thick, segCol(3));
+  // Horizontal segments (0: Top, 6: Mid, 3: Bottom)
+  drawHorizSeg(c, x, y, w, thick, 0, segCol(0));
+  drawHorizSeg(c, x, midY - tMid / 2, w, tMid, 1, segCol(6));
+  drawHorizSeg(c, x, y + h - thick, w, thick, 2, segCol(3));
 
-  // Top-Left (5)
-  c.fillRect(x, y + gap, thick, halfH - gap - thick / 2, segCol(5));
-  // Top-Right (1)
-  c.fillRect(x + w - thick, y + gap, thick, halfH - gap - thick / 2, segCol(1));
-  // Bot-Left (4)
-  c.fillRect(x, y + halfH + thick / 2, thick, h - halfH - gap - thick / 2, segCol(4));
-  // Bot-Right (2)
-  c.fillRect(x + w - thick, y + halfH + thick / 2, thick, h - halfH - gap - thick / 2, segCol(2));
+  // Vertical segments (5: Top-L, 1: Top-R, 4: Bot-L, 2: Bot-R)
+  for (int k = 0; k < thick; ++k) {
+    int yTopStart = y + 2 + k;
+    int midInset = (k < 2) ? 2 : k;
+    int yTopEnd = midY - midInset;
+    int yBotStart = midY + midInset;
+    int yBotEnd = y + h - 3 - k;
+
+    drawVertSegCol(c, x + k, yTopStart, yTopEnd, segCol(5));
+    drawVertSegCol(c, x + w - 1 - k, yTopStart, yTopEnd, segCol(1));
+    drawVertSegCol(c, x + k, yBotStart, yBotEnd, segCol(4));
+    drawVertSegCol(c, x + w - 1 - k, yBotStart, yBotEnd, segCol(2));
+  }
 }
 
 static void drawColon(LiliumUI::Canvas & c, int x, int y, int h, int sz, uint32_t col) {
@@ -207,9 +243,9 @@ static void renderClockBody(LiliumUI::Canvas & c, ClockState * st, bool forceSta
   const int totalW = 6 * dw + 3 * gap + 2 * colonW + 4 * 8;
   int sx = (LiliumUI::kMainW - totalW) / 2;
   const int sy = 128;
-  const uint32_t onCol = LiliumUI::kColCharcoal;
-  const uint32_t secCol = LiliumUI::kColTealDark;
-  const uint32_t ghostCol = 0xEEF2F5;
+  const uint32_t onCol = 0x0C131B;
+  const uint32_t secCol = 0x0E5D52;
+  const uint32_t ghostCol = 0xF7F9FB;
 
   drawSevenSegDigit(c, sx, sy, dw, dh, thick, tm.wHour / 10, onCol, ghostCol);
   sx += dw + gap;
@@ -278,8 +314,8 @@ static void renderTimerBody(LiliumUI::Canvas & c, ClockState * st, bool forceSta
   const int totalW = 4 * dw + 2 * gap + colonW + 16;
   int sx = (LiliumUI::kMainW - totalW) / 2;
   const int sy = 112;
-  const uint32_t onCol = st->timerRunning ? LiliumUI::kColTealDark : LiliumUI::kColCharcoal;
-  const uint32_t ghostCol = 0xEEF2F5;
+  const uint32_t onCol = st->timerRunning ? 0x0E5D52 : 0x0C131B;
+  const uint32_t ghostCol = 0xF7F9FB;
 
   drawSevenSegDigit(c, sx, sy, dw, dh, thick, (mm / 10) % 10, onCol, ghostCol);
   sx += dw + gap;
@@ -366,8 +402,8 @@ static void renderStopwatchBody(LiliumUI::Canvas & c, ClockState * st, bool forc
   const int totalW = 5 * dw + 2 * gap + colonW + 30;
   int sx = (LiliumUI::kMainW - totalW) / 2;
   const int sy = 116;
-  const uint32_t onCol = st->swRunning ? LiliumUI::kColTealDark : LiliumUI::kColCharcoal;
-  const uint32_t ghostCol = 0xEEF2F5;
+  const uint32_t onCol = st->swRunning ? 0x0E5D52 : 0x0C131B;
+  const uint32_t ghostCol = 0xF7F9FB;
 
   drawSevenSegDigit(c, sx, sy, dw, dh, thick, mm / 10, onCol, ghostCol);
   sx += dw + gap;
