@@ -104,6 +104,7 @@ bool isLaunchedFromLauncherArg();
 
 void queryBattery(int & outPercent, bool & outCharging);
 void queryMemoryMB(int & outTotalMB, int & outAvailMB, int & outUsedPct);
+void queryCpuUsage(int & outPercent, bool & outSupported);
 void queryClockStr(wchar_t * outBuf, size_t maxLen);
 
 void hideBrainTaskBar();
@@ -156,6 +157,8 @@ struct AppCallbacks {
   void (*onClick)(int x, int y, void * userData);
   void (*onTimer)(Canvas & canvas, void * userData);
   bool (*onCloseRequest)(void * userData);
+  UINT timerIntervalMs;
+  bool timerAlwaysFire;
 };
 
 class AppWindow {
@@ -170,6 +173,7 @@ public:
   void requestRepaint(bool full = true);
   void requestQuit();
   void setVisible(bool visible);
+  void setTimerInterval(UINT intervalMs);
   void redrawNow();
   HWND hwnd() const { return m_hwnd; }
 

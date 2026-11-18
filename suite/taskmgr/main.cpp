@@ -10,6 +10,7 @@ namespace {
 constexpr int kMaxProcesses = 256;
 constexpr int kMaxWindows = 128;
 constexpr int kVisibleRows = 9;
+constexpr int kPerfHistoryLen = 60;
 
 enum class ProcProtection {
   OsCritical = 0, // Must never be terminated
@@ -51,7 +52,7 @@ struct TaskMgrState {
   bool manageTaskBar = false;
   LiliumUI::DictStatus dict = {};
 
-  int tab = 0; // 0: Processes, 1: Windows
+  int tab = 0; // 0: Processes, 1: Windows, 2: CPU/RAM Graph
   ProcInfo procs[kMaxProcesses];
   int procCount = 0;
   int procSel = 0;
@@ -65,6 +66,20 @@ struct TaskMgrState {
   int prevWinSel = 0;
   int winScroll = 0;
   int prevWinScroll = 0;
+
+  uint8_t cpuHist[kPerfHistoryLen] = {};
+  uint8_t ramHist[kPerfHistoryLen] = {};
+  int histHead = 0;
+  int histCount = 0;
+  bool cpuSupported = true;
+  int cpuNow = 0;
+  int cpuPeak = 0;
+  int ramNow = 0;
+  int ramPeak = 0;
+  int lastTotalMB = 0;
+  int lastAvailMB = 0;
+  int lastClockMin = -1;
+  int lastBatPct = -1;
 
   ModalMode modal = ModalMode::None;
   int modalFocus = 0;
@@ -417,6 +432,119 @@ static void executeDictRestart(TaskMgrState * st) {
   st->window.requestRepaint(true);
 }
 
+static void samplePerfMetrics(TaskMgrState * st) {
+  if (!st) return;
+  int totalMB = 0, availMB = 0, ramPct = 0;
+  LiliumUI::queryMemoryMB(totalMB, availMB, ramPct);
+  int cpuPct = 0;
+  bool cpuOk = false;
+  LiliumUI::queryCpuUsage(cpuPct, cpuOk);
+
+  st->lastTotalMB = totalMB;
+  st->lastAvailMB = availMB;
+  st->ramNow = ramPct;
+  if (ramPct > st->ramPeak) st->ramPeak = ramPct;
+  st->cpuSupported = cpuOk;
+  st->cpuNow = cpuOk ? cpuPct : 0;
+  if (st->cpuNow > st->cpuPeak) st->cpuPeak = st->cpuNow;
+
+  st->cpuHist[st->histHead] = static_cast<uint8_t>(st->cpuNow);
+  st->ramHist[st->histHead] = static_cast<uint8_t>(st->ramNow);
+  st->histHead = (st->histHead + 1) % kPerfHistoryLen;
+  if (st->histCount < kPerfHistoryLen) ++st->histCount;
+}
+
+static void drawPerfGraphCard(LiliumUI::Canvas & c, int x, int y, int w, int h,
+                              const wchar_t * title, const wchar_t * valText,
+                              const uint8_t * ring, int count, int head,
+                              uint32_t lineCol, uint32_t fillCol) {
+  c.drawBox(x, y, w, h, LiliumUI::kColWhite, LiliumUI::kColBorder);
+  c.drawBox(x, y, w, 26, LiliumUI::kColTealHeader, LiliumUI::kColBorder);
+  c.drawText(x + 10, y, 270, 26, LiliumUI::kColTealDeep, title, 2, LiliumUI::Align::Left, true);
+  c.drawText(x + 280, y, w - 290, 26, LiliumUI::kColText, valText, 2, LiliumUI::Align::Right, true);
+
+  const int gx = x + 42;
+  const int gy = y + 32;
+  const int gw = w - 54;
+  const int gh = h - 42;
+  c.drawBox(gx, gy, gw, gh, 0xFAFCFE, LiliumUI::kColBtnBorder);
+
+  c.drawText(x + 4, gy - 3, 34, 12, LiliumUI::kColMuted, L"100%", 1, LiliumUI::Align::Right, true);
+  c.drawText(x + 4, gy + gh / 2 - 5, 34, 12, LiliumUI::kColMuted, L"50%", 1, LiliumUI::Align::Right, true);
+  c.drawText(x + 4, gy + gh - 9, 34, 12, LiliumUI::kColMuted, L"0%", 1, LiliumUI::Align::Right, true);
+
+  // Horizontal dotted grid at 25%, 50%, 75%
+  for (int pct = 25; pct <= 75; pct += 25) {
+    int ly = gy + gh - 1 - (gh - 2) * pct / 100;
+    for (int px = gx + 2; px < gx + gw - 2; px += 4) {
+      c.fillRect(px, ly, 2, 1, 0xDCE3EC);
+    }
+  }
+
+  if (count <= 0) return;
+
+  const int plotX = gx + 1;
+  const int plotW = gw - 2;
+  const int plotTop = gy + 1;
+  const int plotBot = gy + gh - 2;
+  const int plotH = plotBot - plotTop;
+  if (plotW <= 2 || plotH <= 2) return;
+
+  // Map 60 slots right-aligned across plotW
+  auto sampleAtSlot = [&](int slot) -> int {
+    int startSlot = kPerfHistoryLen - count;
+    if (slot < startSlot) return 0;
+    int ageIdx = slot - startSlot; // 0 = oldest, count - 1 = newest
+    int ringIdx = (head - count + ageIdx + kPerfHistoryLen * 2) % kPerfHistoryLen;
+    return static_cast<int>(ring[ringIdx]);
+  };
+
+  const int firstSlot = kPerfHistoryLen - count;
+  for (int px = 0; px < plotW; ++px) {
+    int fNum = px * (kPerfHistoryLen - 1);
+    int s0 = fNum / (plotW - 1);
+    int rem = fNum % (plotW - 1);
+    if (s0 < firstSlot - 1) continue;
+    int v0 = sampleAtSlot(s0);
+    int v1 = (s0 + 1 < kPerfHistoryLen) ? sampleAtSlot(s0 + 1) : v0;
+    int v = (s0 < firstSlot) ? v1 : (v0 + ((v1 - v0) * rem) / (plotW - 1));
+    if (v < 0) v = 0;
+    if (v > 100) v = 100;
+
+    int yLine = plotBot - (plotH * v) / 100;
+    if (yLine < plotTop) yLine = plotTop;
+    int fillHeight = plotBot - yLine + 1;
+    if (fillHeight > 0) {
+      c.fillRect(plotX + px, yLine, 1, fillHeight, fillCol);
+    }
+    c.fillRect(plotX + px, yLine, 1, (yLine + 1 <= plotBot) ? 2 : 1, lineCol);
+  }
+}
+
+static void renderPerfPanel(LiliumUI::Canvas & c, const TaskMgrState * st) {
+  wchar_t cpuVal[48];
+  if (st->cpuSupported) {
+    _snwprintf(cpuVal, 48, L"%d%% (最大 %d%%)", st->cpuNow, st->cpuPeak);
+  } else {
+    wcsncpy(cpuVal, L"実機API非対応", 47);
+  }
+  cpuVal[47] = L'\0';
+  drawPerfGraphCard(c, 12, 114, LiliumUI::kMainW - 24, 152,
+                    L"CPU使用率 (1C1T)", cpuVal,
+                    st->cpuHist, st->histCount, st->histHead,
+                    LiliumUI::kColTealDark, LiliumUI::kColTealSoft);
+
+  wchar_t ramVal[48];
+  _snwprintf(ramVal, 48, L"%d%% (最大 %d%% / 空%dMB)", st->ramNow, st->ramPeak, st->lastAvailMB);
+  ramVal[47] = L'\0';
+  uint32_t ramLine = (st->ramNow >= 80) ? LiliumUI::kColDangerText : LiliumUI::kColWarnText;
+  uint32_t ramFill = (st->ramNow >= 80) ? LiliumUI::kColDangerBg : LiliumUI::kColWarnBg;
+  drawPerfGraphCard(c, 12, 274, LiliumUI::kMainW - 24, 152,
+                    L"RAM使用率 (60秒推移)", ramVal,
+                    st->ramHist, st->histCount, st->histHead,
+                    ramLine, ramFill);
+}
+
 static void renderProcessRow(LiliumUI::Canvas & c, const TaskMgrState * st, int r) {
   const int listX = 12, listY = 114, listW = LiliumUI::kMainW - 24, rowH = 34;
   int idx = st->procScroll + r;
@@ -480,15 +608,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
   int totalMB = 0, availMB = 0, usedPct = 0;
   LiliumUI::queryMemoryMB(totalMB, availMB, usedPct);
 
-  if (c.fullRedraw || st->modal != ModalMode::None) {
-    c.fillRect(0, 0, LiliumUI::kMainW, LiliumUI::kScreenH, LiliumUI::kColBgMain);
-
-    wchar_t badge[48];
-    _snwprintf(badge, 48, L"空き %d MB / %d MB", availMB, totalMB);
-    badge[47] = L'\0';
-    LiliumUI::renderTopHeader(c, L"LILIUM TASKMGR", badge);
-
-    // 1. Live Memory Gauge strip
+  auto renderRamStrip = [&]() {
     c.drawBox(12, 48, LiliumUI::kMainW - 24, 28, LiliumUI::kColWhite, LiliumUI::kColBorder);
     wchar_t ramText[64];
     _snwprintf(ramText, 64, L"RAM使用率: %d%% (使用 %d MB)", usedPct, totalMB - availMB);
@@ -503,56 +623,80 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     uint32_t barCol = (usedPct >= 80) ? LiliumUI::kColDangerFill :
                       (usedPct >= 60) ? LiliumUI::kColWarnBorder : LiliumUI::kColTeal;
     c.fillRect(barX + 1, barY + 1, fillW, barH - 2, barCol);
+  };
+
+  if (c.fullRedraw || st->modal != ModalMode::None) {
+    c.fillRect(0, 0, LiliumUI::kMainW, LiliumUI::kScreenH, LiliumUI::kColBgMain);
+
+    wchar_t badge[48];
+    _snwprintf(badge, 48, L"空き %d MB / %d MB", availMB, totalMB);
+    badge[47] = L'\0';
+    LiliumUI::renderTopHeader(c, L"LILIUM TASKMGR", badge);
+
+    // 1. Live Memory Gauge strip
+    renderRamStrip();
 
     // 2. Category Tabs & Dedicated Dictionary / Log Actions
-    wchar_t tab0[48], tab1[48];
-    _snwprintf(tab0, 48, L"プロセス(%d)", st->procCount);
-    _snwprintf(tab1, 48, L"ウィンドウ(%d)", st->winCount);
-    tab0[47] = L'\0';
-    tab1[47] = L'\0';
+    wchar_t tab0[32], tab1[32];
+    _snwprintf(tab0, 32, L"プロセス(%d)", st->procCount);
+    _snwprintf(tab1, 32, L"ウィンドウ(%d)", st->winCount);
+    tab0[31] = L'\0';
+    tab1[31] = L'\0';
 
-    const int tab0W = 146;
-    const int tab1W = 156;
-    c.drawBox(12, 82, tab0W, 28,
+    c.drawBox(12, 82, 120, 28,
               (st->tab == 0) ? LiliumUI::kColTeal : LiliumUI::kColWhite,
               (st->tab == 0) ? LiliumUI::kColTealDark : LiliumUI::kColBorder);
-    c.drawText(12, 82, tab0W, 28,
+    c.drawText(12, 82, 120, 28,
                (st->tab == 0) ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
                tab0, 2, LiliumUI::Align::Center, true);
 
-    c.drawBox(164, 82, tab1W, 28,
+    c.drawBox(136, 82, 124, 28,
               (st->tab == 1) ? LiliumUI::kColTeal : LiliumUI::kColWhite,
               (st->tab == 1) ? LiliumUI::kColTealDark : LiliumUI::kColBorder);
-    c.drawText(164, 82, tab1W, 28,
+    c.drawText(136, 82, 124, 28,
                (st->tab == 1) ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
                tab1, 2, LiliumUI::Align::Center, true);
+
+    c.drawBox(264, 82, 90, 28,
+              (st->tab == 2) ? LiliumUI::kColTeal : LiliumUI::kColWhite,
+              (st->tab == 2) ? LiliumUI::kColTealDark : LiliumUI::kColBorder);
+    c.drawText(264, 82, 90, 28,
+               (st->tab == 2) ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
+               L"CPU/RAM", 2, LiliumUI::Align::Center, true);
 
     const uint32_t dictBg = st->dict.running ? LiliumUI::kColWarnBg : LiliumUI::kColTealSoft;
     const uint32_t dictBd = st->dict.running ? LiliumUI::kColWarnBorder : LiliumUI::kColTeal;
     const uint32_t dictTx = st->dict.running ? LiliumUI::kColWarnText : LiliumUI::kColTealDeep;
-    const wchar_t * dictLbl = st->dict.running ? L"[F9] 辞書アプリ解放" : L"[F9] 辞書を再起動";
-    c.drawBox(326, 82, 206, 28, dictBg, dictBd);
-    c.drawText(326, 82, 206, 28, dictTx, dictLbl, 2, LiliumUI::Align::Center, true);
+    const wchar_t * dictLbl = st->dict.running ? L"[F9]辞書解放" : L"[F9]辞書起動";
+    c.drawBox(358, 82, 176, 28, dictBg, dictBd);
+    c.drawText(358, 82, 176, 28, dictTx, dictLbl, 2, LiliumUI::Align::Center, true);
 
     c.drawBox(538, 82, 90, 28, LiliumUI::kColWhite, LiliumUI::kColBorder);
     c.drawText(538, 82, 90, 28, LiliumUI::kColTextSub, L"[F8]ログ", 2, LiliumUI::Align::Center, true);
 
-    // 3. List Frame + rows
-    const int listX = 12, listY = 114, listW = LiliumUI::kMainW - 24, rowH = 34;
-    c.drawBox(listX, listY, listW, kVisibleRows * rowH + 8, LiliumUI::kColWhite, LiliumUI::kColBorder);
-    for (int r = 0; r < kVisibleRows; ++r) {
-      if (st->tab == 0) renderProcessRow(c, st, r);
-      else renderWindowRow(c, st, r);
+    // 3. List Frame or Performance Graphs
+    if (st->tab == 2) {
+      renderPerfPanel(c, st);
+    } else {
+      const int listX = 12, listY = 114, listW = LiliumUI::kMainW - 24, rowH = 34;
+      c.drawBox(listX, listY, listW, kVisibleRows * rowH + 8, LiliumUI::kColWhite, LiliumUI::kColBorder);
+      for (int r = 0; r < kVisibleRows; ++r) {
+        if (st->tab == 0) renderProcessRow(c, st, r);
+        else renderWindowRow(c, st, r);
+      }
     }
 
     // 4. Bottom hint strip
     c.fillRect(0, 440, LiliumUI::kMainW, 40, LiliumUI::kColSidebar);
     c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
+    const wchar_t * hint = L"[↑↓]選択 [Ent]詳細 [F5]終了 [F9]辞書 [F8]ログ";
+    if (st->tab == 1) hint = L"[↑↓]選択 [←→]タブ [Ent]前面 [F9]辞書 [Esc]戻る";
+    else if (st->tab == 2) hint = L"[←→/F2]タブ [F4]更新 [F9]辞書解放 [F8]ログ [Esc]戻る";
     c.drawText(14, 440, LiliumUI::kMainW - 28, 40, LiliumUI::kColTextSub,
-               (st->tab == 0)
-                 ? L"[↑↓]選択 [Ent]詳細 [F5]終了 [F9]辞書 [F8]ログ"
-                 : L"[↑↓]選択 [←→]タブ [Ent]前面 [F9]辞書 [Esc]戻る",
-               2, LiliumUI::Align::Left, true);
+               hint, 2, LiliumUI::Align::Left, true);
+  } else if (st->tab == 2) {
+    renderRamStrip();
+    renderPerfPanel(c, st);
   } else {
     // Fast differential redraw for row moves without re-blitting whole 800x480!
     if (st->tab == 0) {
@@ -607,12 +751,22 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                static_cast<unsigned long>(reinterpret_cast<uintptr_t>(w.hwnd)),
                w.title);
     cardBody[511] = L'\0';
+  } else if (st->tab == 2) {
+    cardTitle = L"CPU / RAM";
+    wchar_t cpuLine[32];
+    if (st->cpuSupported) _snwprintf(cpuLine, 32, L"%d%% (最大%d%%)", st->cpuNow, st->cpuPeak);
+    else wcsncpy(cpuLine, L"非対応", 31);
+    cpuLine[31] = L'\0';
+    _snwprintf(cardBody, 512,
+               L"【CPU (1C1T)】\n%s\n【RAM】\n%d%% (最大%d%%)\n使用 %dMB / 計%dMB\n空き %d MB",
+               cpuLine, st->ramNow, st->ramPeak,
+               st->lastTotalMB - st->lastAvailMB, st->lastTotalMB, st->lastAvailMB);
+    cardBody[511] = L'\0';
   }
 
   wchar_t sideStatus[48];
-  _snwprintf(sideStatus, 48, L"辞書:%s %d件",
-             st->dict.running ? L"稼働" : L"解放",
-             (st->tab == 0) ? st->procCount : st->winCount);
+  _snwprintf(sideStatus, 48, L"辞書:%s CPU:%d%%",
+             st->dict.running ? L"稼働" : L"解放", st->cpuNow);
   sideStatus[47] = L'\0';
 
   LiliumUI::renderSidebar(c, sideStatus, cardTitle, cardBody,
@@ -763,10 +917,13 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
 
   switch (vkCode) {
     case VK_LEFT:
+      st->tab = (st->tab + 2) % 3;
+      st->window.requestRepaint(true);
+      break;
     case VK_RIGHT:
     case VK_F2:
     case VK_TAB:
-      st->tab = (st->tab == 0) ? 1 : 0;
+      st->tab = (st->tab + 1) % 3;
       st->window.requestRepaint(true);
       break;
     case VK_UP:
@@ -958,17 +1115,22 @@ static void onClick(int x, int y, void * userData) {
   }
 
   if (y >= 82 && y < 110) {
-    if (x >= 12 && x < 158 && st->tab != 0) {
+    if (x >= 12 && x < 132 && st->tab != 0) {
       st->tab = 0;
       st->window.requestRepaint(true);
       return;
     }
-    if (x >= 164 && x < 320 && st->tab != 1) {
+    if (x >= 136 && x < 260 && st->tab != 1) {
       st->tab = 1;
       st->window.requestRepaint(true);
       return;
     }
-    if (x >= 326 && x < 532) {
+    if (x >= 264 && x < 354 && st->tab != 2) {
+      st->tab = 2;
+      st->window.requestRepaint(true);
+      return;
+    }
+    if (x >= 358 && x < 534) {
       st->dict = LiliumUI::queryDictStatus();
       if (st->dict.running) {
         st->modal = ModalMode::DictReleaseConfirm;
@@ -1004,12 +1166,27 @@ static void onClick(int x, int y, void * userData) {
 
 static void onTimer(LiliumUI::Canvas & c, void * userData) {
   TaskMgrState * st = static_cast<TaskMgrState *>(userData);
-  wchar_t sideStatus[48];
-  _snwprintf(sideStatus, 48, L"辞書:%s %d件",
-             st->dict.running ? L"稼働" : L"解放",
-             (st->tab == 0) ? st->procCount : st->winCount);
-  sideStatus[47] = L'\0';
-  LiliumUI::renderSidebarStatus(c, sideStatus);
+  samplePerfMetrics(st);
+
+  SYSTEMTIME tm;
+  GetLocalTime(&tm);
+  int batPct = 100;
+  bool batChg = false;
+  LiliumUI::queryBattery(batPct, batChg);
+
+  if (tm.wMinute != st->lastClockMin || batPct != st->lastBatPct) {
+    st->lastClockMin = tm.wMinute;
+    st->lastBatPct = batPct;
+    wchar_t sideStatus[48];
+    _snwprintf(sideStatus, 48, L"辞書:%s CPU:%d%%",
+               st->dict.running ? L"稼働" : L"解放", st->cpuNow);
+    sideStatus[47] = L'\0';
+    LiliumUI::renderSidebarStatus(c, sideStatus);
+  }
+
+  if (st->tab == 2 && st->modal == ModalMode::None) {
+    onRender(c, userData);
+  }
 }
 
 } // namespace
@@ -1017,12 +1194,15 @@ static void onTimer(LiliumUI::Canvas & c, void * userData) {
 int main(int /*argc*/, char * /*argv*/[]) {
   TaskMgrState state;
   state.manageTaskBar = !LiliumUI::isLaunchedFromLauncherArg();
+  samplePerfMetrics(&state);
 
   LiliumUI::AppCallbacks cb = {};
   cb.onRender = onRender;
   cb.onKeyDown = onKeyDown;
   cb.onClick = onClick;
   cb.onTimer = onTimer;
+  cb.timerIntervalMs = 1000;
+  cb.timerAlwaysFire = true;
 
   if (!state.window.create(L"LiliumTaskMgrWinClass",
                            L"Lilium TaskManager (SHARP Brain 800x480)",

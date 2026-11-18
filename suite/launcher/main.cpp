@@ -12,29 +12,47 @@ struct AppEntry {
   const wchar_t * relExePath;
   const wchar_t * sideTitle;
   const wchar_t * sideDesc;
-  int emblemKind; // 0 = Calc, 1 = TaskMgr
+  int emblemKind; // 0=Calc, 1=TaskMgr, 2=Clock, 3=Filer
 };
 
 static constexpr AppEntry kApps[] = {
   {
     L"Lilium Calc",
-    L"関数電卓・2D/3Dグラフ・KhyCAS・Python",
+    L"関数電卓・CAS・Python",
     L"apps\\LiliumCalc.exe",
     L"Lilium Calc",
     L"【機能】\n関数電卓・2D/3Dグラフ・KhyCAS・Pythonを統合した主力電卓。\n"
-    L"【分離構成】\n非電卓アプリを外出しし電卓へ特化。\n"
-    L"【操作】\n[Ent/F3]起動\n[↑↓/←→]選択",
+    L"【分離構成】\n時計・テキスト閲覧を分離し電卓性能へ特化。\n"
+    L"【操作】\n[Ent/F3]起動 / [↑↓←→]選択",
     0
   },
   {
     L"Lilium TaskMgr",
-    L"プロセス監視・RAM統計・電子辞書(wceprj)解放",
+    L"CPU/RAMグラフ・辞書解放",
     L"apps\\LiliumTaskMgr.exe",
     L"TaskManager",
-    L"【機能】\n起動中プロセス・ウィンドウ・RAM使用率を監視。\n"
-    L"【辞書解放】\n[F9] で純正辞書 (wceprj.exe) を安全に解放・再起動。\n"
-    L"【保護機構】\nOS必須プロセスは終了禁止。",
+    L"【機能】\nプロセス・ウィンドウ一覧、1C1T CPU＆RAM推移グラフを表示。\n"
+    L"【辞書解放】\n[F9] で純正辞書 (wceprj.exe) を解放・再起動。\n"
+    L"【保護】OS必須は保護",
     1
+  },
+  {
+    L"Lilium Clock",
+    L"7seg時計・タイマー・SW",
+    L"apps\\LiliumClock.exe",
+    L"Lilium Clock",
+    L"【機能】\n視認性の高い大型デジタル時計・カウントダウンタイマー・ストップウォッチ。\n"
+    L"【搭載】\nラップ記録(最大5件)、電池・RAM残量表示対応。",
+    2
+  },
+  {
+    L"Lilium Filer",
+    L"フォルダ・テキスト/HEX",
+    L"apps\\LiliumFiler.exe",
+    L"Lilium Filer",
+    L"【機能】\nSDカード/NANDの閲覧、UTF-8/16テキスト＆省メモリHEXビューア。\n"
+    L"【操作】\n[Ent]閲覧 [F8/F9]複写貼付 [F5]削除(保護付)",
+    3
   }
 };
 static constexpr int kAppCount = static_cast<int>(sizeof(kApps) / sizeof(kApps[0]));
@@ -71,6 +89,7 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, int kind, bool sel
   c.fillRect(x + 51, y + 46, 2, 7, LiliumUI::kColTeal);
 
   if (kind == 0) {
+    // Calculator
     c.drawBox(x + 13, y + 9, 30, 38, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
     c.drawThickFrame(x + 13, y + 9, 30, 38, 2, LiliumUI::kColCharcoal);
     c.fillRect(x + 17, y + 13, 22, 9, LiliumUI::kColTeal);
@@ -80,22 +99,50 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, int kind, bool sel
         c.fillRect(x + 17 + col * 8, y + 26 + row * 6, 6, 4, colBtn);
       }
     }
-  } else {
+  } else if (kind == 1) {
+    // TaskMgr bar chart
     c.drawBox(x + 11, y + 11, 34, 34, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
     c.drawThickFrame(x + 11, y + 11, 34, 34, 2, LiliumUI::kColCharcoal);
     c.fillRect(x + 15, y + 29, 5, 11, LiliumUI::kColCharcoal);
     c.fillRect(x + 22, y + 22, 5, 18, LiliumUI::kColTeal);
     c.fillRect(x + 29, y + 17, 5, 23, LiliumUI::kColCharcoal);
     c.fillRect(x + 36, y + 25, 5, 15, LiliumUI::kColTeal);
+  } else if (kind == 2) {
+    // Clock dial
+    c.drawBox(x + 11, y + 11, 34, 34, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
+    c.drawThickFrame(x + 11, y + 11, 34, 34, 2, LiliumUI::kColCharcoal);
+    c.fillRect(x + 27, y + 13, 2, 4, LiliumUI::kColTeal);
+    c.fillRect(x + 27, y + 39, 2, 4, LiliumUI::kColTeal);
+    c.fillRect(x + 13, y + 27, 4, 2, LiliumUI::kColTeal);
+    c.fillRect(x + 39, y + 27, 4, 2, LiliumUI::kColTeal);
+    // Hour/min hands
+    c.fillRect(x + 27, y + 17, 2, 12, LiliumUI::kColCharcoal);
+    c.fillRect(x + 27, y + 27, 10, 2, LiliumUI::kColTealDark);
+  } else {
+    // Filer folder icon
+    c.fillRect(x + 11, y + 13, 14, 5, LiliumUI::kColTeal);
+    c.drawBox(x + 11, y + 17, 34, 26, LiliumUI::kColTealSoft, LiliumUI::kColCharcoal);
+    c.drawThickFrame(x + 11, y + 17, 34, 26, 2, LiliumUI::kColCharcoal);
+    c.fillRect(x + 15, y + 22, 26, 3, LiliumUI::kColTeal);
   }
 }
 
+static void getCardRect(int i, int & outX, int & outY, int & outW, int & outH) {
+  const int cardW = 298;
+  const int cardH = 96;
+  const int colGap = 12;
+  const int rowGap = 12;
+  int col = i % 2;
+  int row = i / 2;
+  outX = 16 + col * (cardW + colGap);
+  outY = 88 + row * (cardH + rowGap);
+  outW = cardW;
+  outH = cardH;
+}
+
 static void renderAppCard(LiliumUI::Canvas & c, int i, bool sel) {
-  const int cardX = 16;
-  const int cardW = LiliumUI::kMainW - 32;
-  const int cardH = 82;
-  const int cardGap = 14;
-  int curY = 102 + i * (cardH + cardGap);
+  int cardX = 0, curY = 0, cardW = 0, cardH = 0;
+  getCardRect(i, cardX, curY, cardW, cardH);
 
   uint32_t bg = sel ? LiliumUI::kColTealSoft : LiliumUI::kColWhite;
   uint32_t bd = sel ? LiliumUI::kColTeal : LiliumUI::kColBorder;
@@ -104,24 +151,24 @@ static void renderAppCard(LiliumUI::Canvas & c, int i, bool sel) {
     c.drawThickFrame(cardX, curY, cardW, cardH, 2, LiliumUI::kColTeal);
   }
 
-  drawAppEmblem(c, cardX + 14, curY + 13, kApps[i].emblemKind, sel);
+  drawAppEmblem(c, cardX + 10, curY + 20, kApps[i].emblemKind, sel);
 
   wchar_t numLabel[16];
   _snwprintf(numLabel, 16, L"%d.", i + 1);
   numLabel[15] = L'\0';
-  c.drawText(cardX + 82, curY + 14, 34, 22, sel ? LiliumUI::kColTealDeep : LiliumUI::kColMuted,
+  c.drawText(cardX + 74, curY + 11, 26, 22, sel ? LiliumUI::kColTealDeep : LiliumUI::kColMuted,
              numLabel, 2, LiliumUI::Align::Left, true);
-  c.drawText(cardX + 112, curY + 14, 350, 22, LiliumUI::kColText,
+  c.drawText(cardX + 98, curY + 11, cardW - 108, 22, LiliumUI::kColText,
              kApps[i].name, 2, LiliumUI::Align::Left, true);
-  c.drawText(cardX + 82, curY + 46, 396, 20, LiliumUI::kColMuted,
+  c.drawText(cardX + 74, curY + 37, cardW - 84, 20, LiliumUI::kColMuted,
              kApps[i].subtitle, 2, LiliumUI::Align::Left, true);
 
   uint32_t pillBg = sel ? LiliumUI::kColTeal : 0xF2F4F7;
   uint32_t pillBd = sel ? LiliumUI::kColTealDark : LiliumUI::kColBtnBorder;
   uint32_t pillTx = sel ? LiliumUI::kColWhite : LiliumUI::kColTextSub;
-  c.drawBox(cardX + cardW - 110, curY + 23, 94, 36, pillBg, pillBd);
-  c.drawText(cardX + cardW - 110, curY + 23, 94, 36, pillTx,
-             L"起　動", 2, LiliumUI::Align::Center, true);
+  c.drawBox(cardX + cardW - 88, curY + 63, 78, 24, pillBg, pillBd);
+  c.drawText(cardX + cardW - 88, curY + 63, 78, 24, pillTx,
+             L"起 動", 2, LiliumUI::Align::Center, true);
 }
 
 static void launchSelectedApp(LauncherState * st) {
@@ -241,41 +288,41 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     badge[47] = L'\0';
     LiliumUI::renderTopHeader(c, L"LILIUM LAUNCHER", badge);
 
-    c.drawBox(16, 54, LiliumUI::kMainW - 32, 34, LiliumUI::kColWhite, LiliumUI::kColBorder);
-    c.drawText(26, 54, LiliumUI::kMainW - 52, 34, LiliumUI::kColTextSub,
+    c.drawBox(16, 48, LiliumUI::kMainW - 32, 30, LiliumUI::kColWhite, LiliumUI::kColBorder);
+    c.drawText(26, 48, LiliumUI::kMainW - 52, 30, LiliumUI::kColTextSub,
                L"起動する Lilium アプリを選択してください", 2, LiliumUI::Align::Left, true);
 
     for (int i = 0; i < kAppCount; ++i) {
       renderAppCard(c, i, i == st->selectedIndex);
     }
 
-    c.drawBox(16, 304, LiliumUI::kMainW - 32, 124, LiliumUI::kColWhite, LiliumUI::kColBorder);
-    c.drawBox(16, 304, LiliumUI::kMainW - 32, 28, LiliumUI::kColTealHeader, LiliumUI::kColBorder);
-    c.drawText(26, 304, LiliumUI::kMainW - 160, 28, LiliumUI::kColTealDeep,
-               L"■ Lilium Suite ステータス (Phase 2)", 2, LiliumUI::Align::Left, true);
+    c.drawBox(16, 302, LiliumUI::kMainW - 32, 126, LiliumUI::kColWhite, LiliumUI::kColBorder);
+    c.drawBox(16, 302, LiliumUI::kMainW - 32, 28, LiliumUI::kColTealHeader, LiliumUI::kColBorder);
+    c.drawText(26, 302, LiliumUI::kMainW - 160, 28, LiliumUI::kColTealDeep,
+               L"■ Lilium Suite ステータス (Phase 3)", 2, LiliumUI::Align::Left, true);
 
-    c.drawBox(LiliumUI::kMainW - 122, 307, 96, 22,
+    c.drawBox(LiliumUI::kMainW - 122, 305, 96, 22,
               st->dict.running ? LiliumUI::kColTealSoft : LiliumUI::kColWarnBg,
               st->dict.running ? LiliumUI::kColTealBorder : LiliumUI::kColWarnBorder);
-    c.drawText(LiliumUI::kMainW - 122, 307, 96, 22,
+    c.drawText(LiliumUI::kMainW - 122, 305, 96, 22,
                st->dict.running ? LiliumUI::kColTealDeep : LiliumUI::kColWarnText,
                st->dict.running ? L"辞書:稼働" : L"辞書:解放", 2, LiliumUI::Align::Center, true);
 
-    c.drawText(26, 338, LiliumUI::kMainW - 52, 22,
+    c.drawText(26, 336, LiliumUI::kMainW - 52, 22,
                st->dict.running ? LiliumUI::kColTextSub : LiliumUI::kColWarnText,
                st->dict.running
                  ? L"・純正辞書 (wceprj.exe): 稼働中 (通常終了可)"
                  : L"・純正辞書 (wceprj.exe): 解放中 (終了時自動起動)",
                2, LiliumUI::Align::Left, true);
-    c.drawText(26, 366, LiliumUI::kMainW - 52, 22, LiliumUI::kColMuted,
-               L"・TaskMgr [F9] で辞書解放／再起動を行えます", 2, LiliumUI::Align::Left, true);
-    c.drawText(26, 394, LiliumUI::kMainW - 52, 22, LiliumUI::kColLightMuted,
-               L"・次予定: Lilium Clock / Lilium Filer (apps/*.exe)", 2, LiliumUI::Align::Left, true);
+    c.drawText(26, 364, LiliumUI::kMainW - 52, 22, LiliumUI::kColMuted,
+               L"・全4アプリ構成: Calc / TaskMgr / Clock / Filer", 2, LiliumUI::Align::Left, true);
+    c.drawText(26, 392, LiliumUI::kMainW - 52, 22, LiliumUI::kColLightMuted,
+               L"・TaskMgr [F9]辞書解放・CPU/RAM推移グラフ対応", 2, LiliumUI::Align::Left, true);
 
     c.fillRect(0, 440, LiliumUI::kMainW, 40, LiliumUI::kColSidebar);
     c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
     c.drawText(16, 440, LiliumUI::kMainW - 32, 40, LiliumUI::kColTextSub,
-               L"[↑↓/1-2]:選択 [Ent/F3]:起動 [Esc/F5/HOME]:終了",
+               L"[↑↓←→/1-4]:選択 [Ent/F3]:起動 [Esc/HOME]:終了",
                2, LiliumUI::Align::Left, true);
   } else {
     // Differential partial redraw: only update previous & newly selected app cards
@@ -397,16 +444,24 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
   }
 
   switch (vkCode) {
-    case VK_UP:
     case VK_LEFT:
       st->prevSelectedIndex = st->selectedIndex;
       st->selectedIndex = (st->selectedIndex - 1 + kAppCount) % kAppCount;
       st->window.requestRepaint(false);
       break;
-    case VK_DOWN:
     case VK_RIGHT:
       st->prevSelectedIndex = st->selectedIndex;
       st->selectedIndex = (st->selectedIndex + 1) % kAppCount;
+      st->window.requestRepaint(false);
+      break;
+    case VK_UP:
+      st->prevSelectedIndex = st->selectedIndex;
+      st->selectedIndex = (st->selectedIndex - 2 + kAppCount) % kAppCount;
+      st->window.requestRepaint(false);
+      break;
+    case VK_DOWN:
+      st->prevSelectedIndex = st->selectedIndex;
+      st->selectedIndex = (st->selectedIndex + 2) % kAppCount;
       st->window.requestRepaint(false);
       break;
     case '1':
@@ -422,6 +477,22 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
       if (kAppCount > 1 && st->selectedIndex != 1) {
         st->prevSelectedIndex = st->selectedIndex;
         st->selectedIndex = 1;
+        st->window.requestRepaint(false);
+      }
+      break;
+    case '3':
+    case 'E':
+      if (kAppCount > 2 && st->selectedIndex != 2) {
+        st->prevSelectedIndex = st->selectedIndex;
+        st->selectedIndex = 2;
+        st->window.requestRepaint(false);
+      }
+      break;
+    case '4':
+    case 'R':
+      if (kAppCount > 3 && st->selectedIndex != 3) {
+        st->prevSelectedIndex = st->selectedIndex;
+        st->selectedIndex = 3;
         st->window.requestRepaint(false);
       }
       break;
@@ -496,11 +567,12 @@ static void onClick(int x, int y, void * userData) {
     return;
   }
 
-  int curY = 102;
   for (int i = 0; i < kAppCount; ++i) {
-    if (x >= 16 && x < LiliumUI::kMainW - 16 && y >= curY && y < curY + 82) {
+    int cx = 0, cy = 0, cw = 0, ch = 0;
+    getCardRect(i, cx, cy, cw, ch);
+    if (x >= cx && x < cx + cw && y >= cy && y < cy + ch) {
       bool alreadySelected = (st->selectedIndex == i);
-      bool clickedLaunchBtn = (x >= LiliumUI::kMainW - 16 - 114);
+      bool clickedLaunchBtn = (x >= cx + cw - 92 && y >= cy + 56);
       st->prevSelectedIndex = st->selectedIndex;
       st->selectedIndex = i;
       if (alreadySelected || clickedLaunchBtn) {
@@ -510,7 +582,6 @@ static void onClick(int x, int y, void * userData) {
       }
       return;
     }
-    curY += 82 + 14;
   }
 }
 

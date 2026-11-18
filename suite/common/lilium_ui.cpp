@@ -295,6 +295,98 @@ void queryMemoryMB(int & outTotalMB, int & outAvailMB, int & outUsedPct) {
   outUsedPct = static_cast<int>((usedBytes * 100ULL) / totalBytes);
 }
 
+void queryCpuUsage(int & outPercent, bool & outSupported) {
+#if defined(_WIN32_WCE) || defined(__MINGW32CE__)
+  typedef DWORD(WINAPI * PFN_GetIdleTime)(void);
+  static PFN_GetIdleTime s_pfnGetIdleTime = nullptr;
+  static bool s_probed = false;
+  if (!s_probed) {
+    s_probed = true;
+    HMODULE hCore = GetModuleHandleW(L"coredll.dll");
+    if (hCore) {
+      s_pfnGetIdleTime = reinterpret_cast<PFN_GetIdleTime>(GetProcAddress(hCore, L"GetIdleTime"));
+    }
+  }
+  if (!s_pfnGetIdleTime) {
+    outPercent = 0;
+    outSupported = false;
+    return;
+  }
+
+  DWORD nowIdle = s_pfnGetIdleTime();
+  if (nowIdle == 0xFFFFFFFFUL) {
+    outPercent = 0;
+    outSupported = false;
+    return;
+  }
+  DWORD nowTick = GetTickCount();
+
+  static DWORD s_lastTick = 0;
+  static DWORD s_lastIdle = 0;
+  static int s_cached = 0;
+  if (s_lastTick == 0) {
+    s_lastTick = nowTick;
+    s_lastIdle = nowIdle;
+    outPercent = 0;
+    outSupported = true;
+    return;
+  }
+  DWORD dTick = nowTick - s_lastTick;
+  if (dTick >= 400) {
+    DWORD dIdle = nowIdle - s_lastIdle;
+    if (dIdle > dTick) dIdle = dTick;
+    int pct = 100 - static_cast<int>((dIdle * 100UL) / dTick);
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    s_cached = pct;
+    s_lastTick = nowTick;
+    s_lastIdle = nowIdle;
+  }
+  outPercent = s_cached;
+  outSupported = true;
+#else
+  FILETIME ftIdle = {}, ftKernel = {}, ftUser = {};
+  if (!GetSystemTimes(&ftIdle, &ftKernel, &ftUser)) {
+    outPercent = 0;
+    outSupported = false;
+    return;
+  }
+  auto toU64 = [](const FILETIME & ft) -> uint64_t {
+    return (static_cast<uint64_t>(ft.dwHighDateTime) << 32) | static_cast<uint64_t>(ft.dwLowDateTime);
+  };
+  uint64_t idle = toU64(ftIdle);
+  uint64_t kern = toU64(ftKernel);
+  uint64_t user = toU64(ftUser);
+
+  static bool s_hasPrev = false;
+  static uint64_t s_prevIdle = 0, s_prevKern = 0, s_prevUser = 0;
+  static int s_cached = 0;
+  if (!s_hasPrev) {
+    s_hasPrev = true;
+    s_prevIdle = idle;
+    s_prevKern = kern;
+    s_prevUser = user;
+    outPercent = 0;
+    outSupported = true;
+    return;
+  }
+  uint64_t dIdle = idle - s_prevIdle;
+  uint64_t dSys = (kern - s_prevKern) + (user - s_prevUser);
+  if (dSys >= 100000ULL) {
+    uint64_t busy = (dSys > dIdle) ? (dSys - dIdle) : 0;
+    int pct = static_cast<int>((busy * 100ULL) / dSys);
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    s_cached = pct;
+    s_prevIdle = idle;
+    s_prevKern = kern;
+    s_prevUser = user;
+  }
+  outPercent = s_cached;
+  outSupported = true;
+#endif
+}
+
 void queryClockStr(wchar_t * outBuf, size_t maxLen) {
   SYSTEMTIME st;
   GetLocalTime(&st);
@@ -826,7 +918,8 @@ bool AppWindow::create(const wchar_t * className, const wchar_t * title,
   bool dummyChg = false;
   queryBattery(m_lastBatteryPct, dummyChg);
 
-  SetTimer(m_hwnd, 1, 1000, NULL);
+  UINT interval = (m_cb.timerIntervalMs > 0) ? m_cb.timerIntervalMs : 1000;
+  SetTimer(m_hwnd, 1, interval, NULL);
   m_fullRedrawPending = true;
   m_needsRepaint = true;
   redrawNow();
@@ -856,6 +949,15 @@ void AppWindow::setVisible(bool visible) {
   } else {
     ShowWindow(m_hwnd, SW_HIDE);
   }
+}
+
+void AppWindow::setTimerInterval(UINT intervalMs) {
+  if (!m_hwnd) return;
+  if (intervalMs == 0) intervalMs = 1000;
+  if (intervalMs == m_cb.timerIntervalMs) return;
+  m_cb.timerIntervalMs = intervalMs;
+  KillTimer(m_hwnd, 1);
+  SetTimer(m_hwnd, 1, intervalMs, NULL);
 }
 
 void AppWindow::blitDirtyToScreen(int x0, int y0, int x1, int y1) {
@@ -948,7 +1050,7 @@ LRESULT AppWindow::handleMsg(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
       int batPct = 100;
       bool batChg = false;
       queryBattery(batPct, batChg);
-      if (st.wMinute != m_lastClockMinute || batPct != m_lastBatteryPct) {
+      if (m_cb.timerAlwaysFire || st.wMinute != m_lastClockMinute || batPct != m_lastBatteryPct) {
         m_lastClockMinute = st.wMinute;
         m_lastBatteryPct = batPct;
         if (m_cb.onTimer && m_pixels) {

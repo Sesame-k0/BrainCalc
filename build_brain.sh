@@ -106,6 +106,14 @@ TASKMGR_OUT="${APPS_DIR}/LiliumTaskMgr.exe"
 echo "[INFO] Building Lilium TaskManager -> ${TASKMGR_OUT}..."
 ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/taskmgr/main.cpp ${SUITE_COMMON_SRCS} -o "${TASKMGR_OUT}" ${SUITE_LDFLAGS}
 
+CLOCK_OUT="${APPS_DIR}/LiliumClock.exe"
+echo "[INFO] Building Lilium Clock -> ${CLOCK_OUT}..."
+${SUITE_CXX} ${SUITE_CXXFLAGS} suite/clock/main.cpp ${SUITE_COMMON_SRCS} -o "${CLOCK_OUT}" ${SUITE_LDFLAGS}
+
+FILER_OUT="${APPS_DIR}/LiliumFiler.exe"
+echo "[INFO] Building Lilium Filer -> ${FILER_OUT}..."
+${SUITE_CXX} ${SUITE_CXXFLAGS} suite/filer/main.cpp ${SUITE_COMMON_SRCS} -o "${FILER_OUT}" ${SUITE_LDFLAGS}
+
 # PW-SB4 動作必須のローダー (188KB AppMain.exe) と AppMain.cfg (8バイト) をリポジトリ内から確実に配置
 LOADER_DIR="ion/src/simulator/brain/loader"
 if [[ "${TOOLCHAIN_OPT}" != "windows" ]]; then
@@ -146,10 +154,10 @@ echo "==========================================================================
 echo "[SUCCESS] Build completed!"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
   echo "  Launcher   : ${DIST_DIR}/AppMain.exe (LiliumLauncher.exe)"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, ${APPS_DIR}/LiliumTaskMgr.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe"
 else
   echo "  Launcher   : ${DIST_DIR}/AppMain_.exe"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, ${APPS_DIR}/LiliumTaskMgr.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe"
   echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe [loader], AppMain.cfg, AppMain_.exe [Launcher], index.din, font.ttf, apps/)"
 fi
 echo "=============================================================================="
