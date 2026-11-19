@@ -28,10 +28,10 @@ static constexpr AppEntry kApps[] = {
   },
   {
     L"Lilium TaskMgr",
-    L"CPU/RAMグラフ・辞書解放",
+    L"RAM推移・容量・辞書解放",
     L"apps\\LiliumTaskMgr.exe",
     L"TaskManager",
-    L"【機能】\nプロセス・ウィンドウ一覧、1C1T CPU＆RAM推移グラフを表示。\n"
+    L"【機能】\nプロセス・ウィンドウ一覧、RAM推移グラフ・ストレージ容量を表示。\n"
     L"【辞書解放】\n[F9] で純正辞書 (wceprj.exe) を解放・再起動。\n"
     L"【保護】OS必須は保護",
     1
@@ -317,7 +317,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     c.drawText(26, 364, LiliumUI::kMainW - 52, 22, LiliumUI::kColMuted,
                L"・全4アプリ構成: Calc / TaskMgr / Clock / Filer", 2, LiliumUI::Align::Left, true);
     c.drawText(26, 392, LiliumUI::kMainW - 52, 22, LiliumUI::kColLightMuted,
-               L"・TaskMgr [F9]辞書解放・CPU/RAM推移グラフ対応", 2, LiliumUI::Align::Left, true);
+               L"・TaskMgr [F9]辞書解放・RAM/容量確認対応", 2, LiliumUI::Align::Left, true);
 
     c.fillRect(0, 440, LiliumUI::kMainW, 40, LiliumUI::kColSidebar);
     c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);

@@ -11,6 +11,7 @@ constexpr int kMaxProcesses = 256;
 constexpr int kMaxWindows = 128;
 constexpr int kVisibleRows = 9;
 constexpr int kPerfHistoryLen = 60;
+constexpr int kMaxStorageVols = 4;
 
 enum class ProcProtection {
   OsCritical = 0, // Must never be terminated
@@ -47,12 +48,18 @@ enum class ModalMode {
   LogSaved
 };
 
+struct StorageVol {
+  wchar_t label[24];
+  uint64_t freeMB;
+  uint64_t totalMB;
+};
+
 struct TaskMgrState {
   LiliumUI::AppWindow window;
   bool manageTaskBar = false;
   LiliumUI::DictStatus dict = {};
 
-  int tab = 0; // 0: Processes, 1: Windows, 2: CPU/RAM Graph
+  int tab = 0; // 0: Processes, 1: Windows, 2: RAM & Storage
   ProcInfo procs[kMaxProcesses];
   int procCount = 0;
   int procSel = 0;
@@ -67,20 +74,21 @@ struct TaskMgrState {
   int winScroll = 0;
   int prevWinScroll = 0;
 
-  uint8_t cpuHist[kPerfHistoryLen] = {};
   uint8_t ramHist[kPerfHistoryLen] = {};
   int histHead = 0;
   int histCount = 0;
-  bool cpuSupported = true;
-  int cpuNow = 0;
-  int cpuPeak = 0;
   int ramNow = 0;
   int ramPeak = 0;
   int lastTotalMB = 0;
   int lastAvailMB = 0;
+  int prevAvailMB = -1;
+  int prevRamPct = -1;
   int lastClockMin = -1;
   int lastBatPct = -1;
-  int perfDrawCounter = 0;
+
+  StorageVol vols[kMaxStorageVols] = {};
+  int volCount = 0;
+  wchar_t selfVol[32] = L"";
 
   ModalMode modal = ModalMode::None;
   int modalFocus = 0;
@@ -192,6 +200,58 @@ static BOOL CALLBACK enumWinCallback(HWND hWnd, LPARAM lParam) {
   return TRUE;
 }
 
+static void refreshStorageSummary(TaskMgrState * st) {
+  if (!st) return;
+  st->volCount = 0;
+  st->selfVol[0] = L'\0';
+
+  wchar_t modPath[MAX_PATH] = L"";
+  GetModuleFileNameW(NULL, modPath, MAX_PATH);
+  modPath[MAX_PATH - 1] = L'\0';
+  if (modPath[0] == L'\\') {
+    const wchar_t * nextSlash = wcschr(modPath + 1, L'\\');
+    size_t len = nextSlash ? static_cast<size_t>(nextSlash - modPath) : 1;
+    if (len > 31) len = 31;
+    wcsncpy(st->selfVol, modPath, len);
+    st->selfVol[len] = L'\0';
+  } else if (modPath[0] && modPath[1] == L':') {
+    _snwprintf(st->selfVol, 32, L"%lc:\\", modPath[0]);
+    st->selfVol[31] = L'\0';
+  } else {
+    wcsncpy(st->selfVol, L"不明", 31);
+    st->selfVol[31] = L'\0';
+  }
+
+  auto tryAddVol = [&](const wchar_t * volPath) {
+    if (!volPath || !volPath[0] || st->volCount >= kMaxStorageVols) return;
+    for (int i = 0; i < st->volCount; ++i) {
+      if (_wcsicmp(st->vols[i].label, volPath) == 0) return;
+    }
+    ULARGE_INTEGER freeAvail = {}, totalBytes = {}, totalFree = {};
+    if (GetDiskFreeSpaceExW(volPath, &freeAvail, &totalBytes, &totalFree) && totalBytes.QuadPart > 0) {
+      StorageVol & v = st->vols[st->volCount++];
+      wcsncpy(v.label, volPath, 23);
+      v.label[23] = L'\0';
+      v.freeMB = freeAvail.QuadPart / (1024ULL * 1024ULL);
+      v.totalMB = totalBytes.QuadPart / (1024ULL * 1024ULL);
+    }
+  };
+
+#if defined(_WIN32_WCE) || defined(__MINGW32CE__)
+  static constexpr const wchar_t * kCeVols[] = {
+    L"\\Storage Card", L"\\NAND3", L"\\NAND2", L"\\NAND4", L"\\NAND", L"\\"
+  };
+  for (const wchar_t * vp : kCeVols) {
+    tryAddVol(vp);
+  }
+#else
+  if (st->selfVol[0]) tryAddVol(st->selfVol);
+  tryAddVol(L"C:\\");
+  tryAddVol(L"D:\\");
+  tryAddVol(L"E:\\");
+#endif
+}
+
 static void refreshSystemSnapshot(TaskMgrState * st) {
   if (!st) return;
   st->procCount = 0;
@@ -259,6 +319,7 @@ static void refreshSystemSnapshot(TaskMgrState * st) {
 
   EnumWindows(enumWinCallback, reinterpret_cast<LPARAM>(st));
   st->dict = LiliumUI::queryDictStatus();
+  refreshStorageSummary(st);
 
   if (st->procSel >= st->procCount) st->procSel = (st->procCount > 0) ? (st->procCount - 1) : 0;
   if (st->procScroll > st->procSel) st->procScroll = st->procSel;
@@ -335,16 +396,15 @@ static void exportDiagnosticLog(TaskMgrState * st) {
     writeUtf8(line);
   }
 
-  // Read-only System / CPU / USB / Storage Registry Telemetry (safe diagnostic probe)
+  // Read-only System / USB / Storage Registry Telemetry (safe diagnostic probe)
   SYSTEM_INFO sysInfo = {};
   GetSystemInfo(&sysInfo);
   wchar_t sysLine[192];
   _snwprintf(sysLine, 192,
-             L"\r\n[System Info]\r\ncpuCount=%lu  procType=%lu  arch=%u  cpuNow=%d%% (supported=%d)\r\n",
+             L"\r\n[System Info]\r\ncpuCount=%lu  procType=%lu  arch=%u\r\n",
              static_cast<unsigned long>(sysInfo.dwNumberOfProcessors),
              static_cast<unsigned long>(sysInfo.dwProcessorType),
-             static_cast<unsigned int>(sysInfo.wProcessorArchitecture),
-             st->cpuNow, st->cpuSupported ? 1 : 0);
+             static_cast<unsigned int>(sysInfo.wProcessorArchitecture));
   writeUtf8(sysLine);
 
   auto dumpRegBranch = [&](const wchar_t * label, const wchar_t * subKey) {
@@ -375,7 +435,7 @@ static void exportDiagnosticLog(TaskMgrState * st) {
       }
       writeUtf8(line);
     }
-    for (DWORD ki = 0; ki < 24; ++ki) {
+    for (DWORD ki = 0; ki < 64; ++ki) {
       wchar_t kName[96] = {};
       DWORD kNameLen = 95;
       if (RegEnumKeyExW(hKey, ki, kName, &kNameLen, NULL, NULL, NULL, NULL) != ERROR_SUCCESS) break;
@@ -535,26 +595,24 @@ static void executeDictRestart(TaskMgrState * st) {
   st->window.requestRepaint(true);
 }
 
-static void samplePerfMetrics(TaskMgrState * st) {
-  if (!st) return;
+static bool samplePerfMetrics(TaskMgrState * st) {
+  if (!st) return false;
   int totalMB = 0, availMB = 0, ramPct = 0;
   LiliumUI::queryMemoryMB(totalMB, availMB, ramPct);
-  int cpuPct = 0;
-  bool cpuOk = false;
-  LiliumUI::queryCpuUsage(cpuPct, cpuOk);
 
   st->lastTotalMB = totalMB;
   st->lastAvailMB = availMB;
   st->ramNow = ramPct;
   if (ramPct > st->ramPeak) st->ramPeak = ramPct;
-  st->cpuSupported = cpuOk;
-  st->cpuNow = cpuOk ? cpuPct : 0;
-  if (st->cpuNow > st->cpuPeak) st->cpuPeak = st->cpuNow;
 
-  st->cpuHist[st->histHead] = static_cast<uint8_t>(st->cpuNow);
   st->ramHist[st->histHead] = static_cast<uint8_t>(st->ramNow);
   st->histHead = (st->histHead + 1) % kPerfHistoryLen;
   if (st->histCount < kPerfHistoryLen) ++st->histCount;
+
+  bool changed = (availMB != st->prevAvailMB || ramPct != st->prevRamPct);
+  st->prevAvailMB = availMB;
+  st->prevRamPct = ramPct;
+  return changed;
 }
 
 static void drawPerfGraphCard(LiliumUI::Canvas & c, int x, int y, int w, int h,
@@ -635,28 +693,61 @@ static void drawPerfGraphCard(LiliumUI::Canvas & c, int x, int y, int w, int h,
   c.addDirty(plotX, plotTop, plotW, plotBot - plotTop + 1);
 }
 
-static void renderPerfPanel(LiliumUI::Canvas & c, const TaskMgrState * st, bool chromeRedraw) {
-  wchar_t cpuVal[48];
-  if (st->cpuSupported) {
-    _snwprintf(cpuVal, 48, L"%d%% (最大 %d%%)", st->cpuNow, st->cpuPeak);
-  } else {
-    wcsncpy(cpuVal, L"実機API非対応", 47);
-  }
-  cpuVal[47] = L'\0';
-  drawPerfGraphCard(c, 12, 114, LiliumUI::kMainW - 24, 152,
-                    L"CPU使用率 (1C1T)", cpuVal,
-                    st->cpuHist, st->histCount, st->histHead,
-                    LiliumUI::kColTealDark, LiliumUI::kColTealSoft, chromeRedraw);
+static void renderStorageCard(LiliumUI::Canvas & c, const TaskMgrState * st) {
+  const int x = 12, y = 274, w = LiliumUI::kMainW - 24, h = 152;
+  c.drawBox(x, y, w, h, LiliumUI::kColWhite, LiliumUI::kColBorder);
+  c.drawBox(x, y, w, 26, LiliumUI::kColTealHeader, LiliumUI::kColBorder);
+  c.drawText(x + 10, y, 220, 26, LiliumUI::kColTealDeep, L"ストレージ空き容量", 2, LiliumUI::Align::Left, true);
 
+  wchar_t selfHdr[48];
+  _snwprintf(selfHdr, 48, L"起動元: %ls", st->selfVol[0] ? st->selfVol : L"-");
+  selfHdr[47] = L'\0';
+  c.drawText(x + 236, y, w - 246, 26, LiliumUI::kColText, selfHdr, 2, LiliumUI::Align::Right, true);
+
+  if (st->volCount == 0) {
+    c.drawText(x + 20, y + 60, w - 40, 30, LiliumUI::kColMuted, L"ドライブ情報なし", 2, LiliumUI::Align::Center, true);
+    return;
+  }
+
+  for (int i = 0; i < st->volCount && i < kMaxStorageVols; ++i) {
+    const StorageVol & v = st->vols[i];
+    int ry = y + 32 + i * 28;
+    c.drawText(x + 10, ry, 128, 24, LiliumUI::kColText, v.label, 2, LiliumUI::Align::Left, true);
+
+    const int barX = x + 144, barY = ry + 6, barW = 216, barH = 12;
+    c.drawBox(barX, barY, barW, barH, 0xE6EAEF, LiliumUI::kColBtnBorder);
+    uint64_t used = (v.totalMB > v.freeMB) ? (v.totalMB - v.freeMB) : 0;
+    int fillW = (v.totalMB > 0) ? static_cast<int>((used * static_cast<uint64_t>(barW - 2)) / v.totalMB) : 0;
+    if (fillW < 0) fillW = 0;
+    if (fillW > barW - 2) fillW = barW - 2;
+    int usedPct = (v.totalMB > 0) ? static_cast<int>((used * 100ULL) / v.totalMB) : 0;
+    uint32_t barCol = (usedPct >= 90) ? LiliumUI::kColDangerFill :
+                      (usedPct >= 75) ? LiliumUI::kColWarnBorder : LiliumUI::kColTeal;
+    c.fillRect(barX + 1, barY + 1, fillW, barH - 2, barCol);
+
+    wchar_t capText[48];
+    _snwprintf(capText, 48, L"空%lu / %luMB",
+               static_cast<unsigned long>(v.freeMB),
+               static_cast<unsigned long>(v.totalMB));
+    capText[47] = L'\0';
+    c.drawText(x + 368, ry, w - 378, 24, LiliumUI::kColTextSub, capText, 2, LiliumUI::Align::Right, true);
+  }
+}
+
+static void renderPerfPanel(LiliumUI::Canvas & c, const TaskMgrState * st, bool chromeRedraw) {
   wchar_t ramVal[48];
   _snwprintf(ramVal, 48, L"%d%% (最大 %d%% / 空%dMB)", st->ramNow, st->ramPeak, st->lastAvailMB);
   ramVal[47] = L'\0';
-  uint32_t ramLine = (st->ramNow >= 80) ? LiliumUI::kColDangerText : LiliumUI::kColWarnText;
-  uint32_t ramFill = (st->ramNow >= 80) ? LiliumUI::kColDangerBg : LiliumUI::kColWarnBg;
-  drawPerfGraphCard(c, 12, 274, LiliumUI::kMainW - 24, 152,
+  uint32_t ramLine = (st->ramNow >= 80) ? LiliumUI::kColDangerText : LiliumUI::kColTealDark;
+  uint32_t ramFill = (st->ramNow >= 80) ? LiliumUI::kColDangerBg : LiliumUI::kColTealSoft;
+  drawPerfGraphCard(c, 12, 114, LiliumUI::kMainW - 24, 152,
                     L"RAM使用率 (60秒推移)", ramVal,
                     st->ramHist, st->histCount, st->histHead,
                     ramLine, ramFill, chromeRedraw);
+
+  if (chromeRedraw) {
+    renderStorageCard(c, st);
+  }
 }
 
 static void renderProcessRow(LiliumUI::Canvas & c, const TaskMgrState * st, int r) {
@@ -776,7 +867,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
               (st->tab == 2) ? LiliumUI::kColTealDark : LiliumUI::kColBorder);
     c.drawText(264, 82, 90, 28,
                (st->tab == 2) ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
-               L"CPU/RAM", 2, LiliumUI::Align::Center, true);
+               L"RAM/容量", 2, LiliumUI::Align::Center, true);
 
     const uint32_t dictBg = st->dict.running ? LiliumUI::kColWarnBg : LiliumUI::kColTealSoft;
     const uint32_t dictBd = st->dict.running ? LiliumUI::kColWarnBorder : LiliumUI::kColTeal;
@@ -866,21 +957,18 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                w.title);
     cardBody[511] = L'\0';
   } else if (st->tab == 2) {
-    cardTitle = L"CPU / RAM";
-    wchar_t cpuLine[32];
-    if (st->cpuSupported) _snwprintf(cpuLine, 32, L"%d%% (最大%d%%)", st->cpuNow, st->cpuPeak);
-    else wcsncpy(cpuLine, L"非対応", 31);
-    cpuLine[31] = L'\0';
+    cardTitle = L"RAM / 容量";
     _snwprintf(cardBody, 512,
-               L"【CPU (1C1T)】\n%s\n【RAM】\n%d%% (最大%d%%)\n使用 %dMB / 計%dMB\n空き %d MB",
-               cpuLine, st->ramNow, st->ramPeak,
-               st->lastTotalMB - st->lastAvailMB, st->lastTotalMB, st->lastAvailMB);
+               L"【RAM】\n%d%% (最大%d%%)\n使用 %dMB / 計%dMB\n空き %d MB\n【起動元】\n%ls",
+               st->ramNow, st->ramPeak,
+               st->lastTotalMB - st->lastAvailMB, st->lastTotalMB, st->lastAvailMB,
+               st->selfVol[0] ? st->selfVol : L"-");
     cardBody[511] = L'\0';
   }
 
   wchar_t sideStatus[48];
-  _snwprintf(sideStatus, 48, L"辞書:%s CPU:%d%%",
-             st->dict.running ? L"稼働" : L"解放", st->cpuNow);
+  _snwprintf(sideStatus, 48, L"辞書:%s RAM:%d%%",
+             st->dict.running ? L"稼働" : L"解放", st->ramNow);
   sideStatus[47] = L'\0';
 
   LiliumUI::renderSidebar(c, sideStatus, cardTitle, cardBody,
@@ -1280,7 +1368,7 @@ static void onClick(int x, int y, void * userData) {
 
 static void onTimer(LiliumUI::Canvas & c, void * userData) {
   TaskMgrState * st = static_cast<TaskMgrState *>(userData);
-  samplePerfMetrics(st);
+  bool ramChanged = samplePerfMetrics(st);
 
   SYSTEMTIME tm;
   GetLocalTime(&tm);
@@ -1292,17 +1380,14 @@ static void onTimer(LiliumUI::Canvas & c, void * userData) {
     st->lastClockMin = tm.wMinute;
     st->lastBatPct = batPct;
     wchar_t sideStatus[48];
-    _snwprintf(sideStatus, 48, L"辞書:%s CPU:%d%%",
-               st->dict.running ? L"稼働" : L"解放", st->cpuNow);
+    _snwprintf(sideStatus, 48, L"辞書:%s RAM:%d%%",
+               st->dict.running ? L"稼働" : L"解放", st->ramNow);
     sideStatus[47] = L'\0';
     LiliumUI::renderSidebarStatus(c, sideStatus);
   }
 
-  if (st->tab == 2 && st->modal == ModalMode::None) {
-    ++st->perfDrawCounter;
-    if ((st->perfDrawCounter & 1) == 0) {
-      onRender(c, userData);
-    }
+  if (st->tab == 2 && st->modal == ModalMode::None && ramChanged) {
+    onRender(c, userData);
   }
 }
 
