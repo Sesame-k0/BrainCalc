@@ -86,13 +86,17 @@ fi
 SUITE_COMMON_SRCS="suite/common/lilium_ui.cpp ion/src/simulator/brain/misaki_font_data.cpp"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
   SUITE_CXX="g++"
+  DOOM_CC="gcc"
   SUITE_CXXFLAGS="-O2 -std=gnu++17 -Wall -Wextra -DNOMINMAX -DUNICODE -D_UNICODE -fno-exceptions -fno-rtti"
-  SUITE_LDFLAGS="-mwindows -static -s -lgdi32 -luser32 -lcomctl32"
+  SUITE_LDFLAGS="-mwindows -static -s -lgdi32 -luser32 -lcomctl32 -lshell32"
+  DOOM_CFLAGS="-O2 -w -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200 -D_DEFAULT_SOURCE -Isuite/doom -Isuite/doom/src -include suite/doom/wince_compat.h"
   LAUNCHER_OUT="${DIST_DIR}/AppMain.exe"
 else
   SUITE_CXX="arm-mingw32ce-g++"
+  DOOM_CC="arm-mingw32ce-gcc"
   SUITE_CXXFLAGS="-O3 -std=gnu++17 -Wall -Wextra -march=armv5tej -mcpu=arm926ej-s -DNOMINMAX -DUNICODE -D_UNICODE -fno-exceptions -fno-rtti"
   SUITE_LDFLAGS="-march=armv5tej -mcpu=arm926ej-s -static -s -lcommctrl -lcommdlg -ltoolhelp"
+  DOOM_CFLAGS="-O3 -w -march=armv5tej -mcpu=arm926ej-s -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200 -D_DEFAULT_SOURCE -Isuite/doom -Isuite/doom/src -include suite/doom/wince_compat.h"
   LAUNCHER_OUT="${DIST_DIR}/AppMain_.exe"
 fi
 
@@ -113,6 +117,61 @@ ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/clock/main.cpp ${SUITE_COMMON_SRCS} -o "${C
 FILER_OUT="${APPS_DIR}/LiliumFiler.exe"
 echo "[INFO] Building Lilium Filer -> ${FILER_OUT}..."
 ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/filer/main.cpp ${SUITE_COMMON_SRCS} -o "${FILER_OUT}" ${SUITE_LDFLAGS}
+
+# 3. OSS DOOM (doomgeneric + Freedoom Phase 1) -> DIST_DIR/apps/doom.exe
+DOOM_OBJ_DIR="${OUT_DIR}/doom_obj"
+mkdir -p "${DOOM_OBJ_DIR}"
+DOOM_MODS=(
+  dummy am_map doomdef doomstat dstrings d_event d_items d_iwad d_loop d_main
+  d_mode d_net f_finale f_wipe g_game hu_lib hu_stuff info i_cdmus i_endoom
+  i_joystick i_scale i_sound i_system i_timer memio m_argv m_bbox m_cheat m_config
+  m_controls m_fixed m_menu m_misc m_random p_ceilng p_doors p_enemy p_floor
+  p_inter p_lights p_map p_maputl p_mobj p_plats p_pspr p_saveg p_setup p_sight
+  p_spec p_switch p_telept p_tick p_user r_bsp r_data r_draw r_main r_plane
+  r_segs r_sky r_things sha1 sounds statdump st_lib st_stuff s_sound tables
+  v_video wi_stuff w_checksum w_file w_main w_wad z_zone w_file_stdc i_input
+  i_video doomgeneric
+)
+DOOM_OBJS=()
+echo "[INFO] Building Lilium DOOM C objects (${TOOLCHAIN_OPT})..."
+for mod in "${DOOM_MODS[@]}"; do
+  src="suite/doom/src/${mod}.c"
+  obj="${DOOM_OBJ_DIR}/${mod}.o"
+  if [[ ! -f "$obj" ]] || [[ "$src" -nt "$obj" ]] || [[ "suite/doom/wince_compat.h" -nt "$obj" ]]; then
+    ${DOOM_CC} ${DOOM_CFLAGS} -c "$src" -o "$obj"
+  fi
+  DOOM_OBJS+=("$obj")
+done
+
+COMPAT_OBJ="${DOOM_OBJ_DIR}/wince_compat.o"
+COMPAT_CFLAGS="-O2 -Wall -Wextra -Isuite/doom"
+if [[ "${TOOLCHAIN_OPT}" != "windows" ]]; then
+  COMPAT_CFLAGS="-O3 -Wall -Wextra -march=armv5tej -mcpu=arm926ej-s -Isuite/doom"
+fi
+if [[ ! -f "$COMPAT_OBJ" ]] || [[ "suite/doom/wince_compat.c" -nt "$COMPAT_OBJ" ]] || [[ "suite/doom/wince_compat.h" -nt "$COMPAT_OBJ" ]]; then
+  ${DOOM_CC} ${COMPAT_CFLAGS} -c suite/doom/wince_compat.c -o "$COMPAT_OBJ"
+fi
+DOOM_OBJS+=("$COMPAT_OBJ")
+
+DOOM_OUT="${APPS_DIR}/doom.exe"
+echo "[INFO] Linking Lilium DOOM -> ${DOOM_OUT}..."
+${SUITE_CXX} ${SUITE_CXXFLAGS} -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200 -Isuite/doom -Isuite/doom/src \
+  suite/doom/doomgeneric_lilium.cpp ${SUITE_COMMON_SRCS} "${DOOM_OBJS[@]}" -o "${DOOM_OUT}" ${SUITE_LDFLAGS} -lm
+
+# Freedoom Phase 1 IWAD -> DIST_DIR/apps/freedoom1.wad
+WAD_SRC="suite/doom/wad/freedoom1.wad"
+if [[ ! -f "$WAD_SRC" ]] && command -v curl >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+  echo "[INFO] Downloading Freedoom v0.13.0 (freedoom1.wad)..."
+  mkdir -p "suite/doom/wad"
+  curl -L -f -o "${DOOM_OBJ_DIR}/freedoom.zip" "https://github.com/freedoom/freedoom/releases/download/v0.13.0/freedoom-0.13.0.zip"
+  python3 -c 'import zipfile; z=zipfile.ZipFile("'"${DOOM_OBJ_DIR}/freedoom.zip"'"); n=[x for x in z.namelist() if x.lower().endswith("freedoom1.wad")][0]; open("'"${WAD_SRC}"'","wb").write(z.read(n))'
+  rm -f "${DOOM_OBJ_DIR}/freedoom.zip"
+fi
+if [[ -f "$WAD_SRC" ]]; then
+  if [[ ! -f "${APPS_DIR}/freedoom1.wad" ]] || [[ "$WAD_SRC" -nt "${APPS_DIR}/freedoom1.wad" ]]; then
+    cp -f "$WAD_SRC" "${APPS_DIR}/freedoom1.wad"
+  fi
+fi
 
 # PW-SB4 動作必須のローダー (188KB AppMain.exe) と AppMain.cfg (8バイト) をリポジトリ内から確実に配置
 LOADER_DIR="ion/src/simulator/brain/loader"
@@ -154,10 +213,10 @@ echo "==========================================================================
 echo "[SUCCESS] Build completed!"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
   echo "  Launcher   : ${DIST_DIR}/AppMain.exe (LiliumLauncher.exe)"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, doom.exe"
 else
   echo "  Launcher   : ${DIST_DIR}/AppMain_.exe"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, doom.exe"
   echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe [loader], AppMain.cfg, AppMain_.exe [Launcher], index.din, font.ttf, apps/)"
 fi
 echo "=============================================================================="

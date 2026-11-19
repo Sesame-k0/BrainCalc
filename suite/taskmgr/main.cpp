@@ -967,12 +967,13 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
   }
 
   wchar_t sideStatus[48];
-  _snwprintf(sideStatus, 48, L"辞書:%s RAM:%d%%",
+  _snwprintf(sideStatus, 48, L"辞書:%s %d%%",
              st->dict.running ? L"稼働" : L"解放", st->ramNow);
   sideStatus[47] = L'\0';
 
   LiliumUI::renderSidebar(c, sideStatus, cardTitle, cardBody,
-                          L"[F9]:辞書解放/再起動", L"[F4]:更新 [F8]:ログ",
+                          st->dict.running ? L"[F9]辞書解放" : L"[F9]辞書起動",
+                          L"[F4]更新 [F8]ログ",
                           L"戻　る", false);
 
   if (st->modal == ModalMode::ProtectedWarn) {
@@ -1380,7 +1381,7 @@ static void onTimer(LiliumUI::Canvas & c, void * userData) {
     st->lastClockMin = tm.wMinute;
     st->lastBatPct = batPct;
     wchar_t sideStatus[48];
-    _snwprintf(sideStatus, 48, L"辞書:%s RAM:%d%%",
+    _snwprintf(sideStatus, 48, L"辞書:%s %d%%",
                st->dict.running ? L"稼働" : L"解放", st->ramNow);
     sideStatus[47] = L'\0';
     LiliumUI::renderSidebarStatus(c, sideStatus);

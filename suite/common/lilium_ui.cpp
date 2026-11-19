@@ -698,7 +698,7 @@ void renderTopHeader(Canvas & c, const wchar_t * title, const wchar_t * badgeTex
 void renderSidebarStatus(Canvas & c, const wchar_t * statusLine) {
   const int sx = kSidebarX;
   const int sw = kSidebarW;
-  c.drawBox(sx + 5, 6, sw - 10, 50, kColWhite, kColBtnBorder);
+  c.drawBox(sx + 5, 6, sw - 10, 56, kColWhite, kColBtnBorder);
 
   wchar_t clockBuf[16];
   queryClockStr(clockBuf, 16);
@@ -709,10 +709,13 @@ void renderSidebarStatus(Canvas & c, const wchar_t * statusLine) {
   wchar_t topMeta[48];
   _snwprintf(topMeta, 48, L"%s  %s%d%%", clockBuf, batChg ? L"+" : L"", batPct);
   topMeta[47] = L'\0';
-  c.drawText(sx + 9, 10, sw - 18, 16, kColTealDeep, topMeta, 2, Align::Center, true);
+  c.drawText(sx + 7, 10, sw - 14, 18, kColTealDeep, topMeta, 2, Align::Center, true);
+
+  c.fillRect(sx + 10, 32, sw - 20, 1, 0xE2E8EE);
 
   if (statusLine && statusLine[0]) {
-    c.drawText(sx + 9, 32, sw - 18, 18, kColMuted, statusLine, 1, Align::Center, true);
+    int stScale = (c.measureWidth(statusLine, 2) <= sw - 14) ? 2 : 1;
+    c.drawText(sx + 7, 36, sw - 14, 22, kColTextSub, statusLine, stScale, Align::Center, true);
   }
 }
 
@@ -732,12 +735,14 @@ void renderSidebar(Canvas & c,
     c.fillRect(sx, 0, 1, kScreenH, kColBorder);
     renderSidebarStatus(c, statusLine);
 
-    c.drawBox(sx + 5, 392, sw - 10, 36, kColWhite, kColBtnBorder);
+    c.drawBox(sx + 5, 380, sw - 10, 48, kColWhite, kColBtnBorder);
     if (hintLine1 && hintLine1[0]) {
-      c.drawText(sx + 8, 396, sw - 16, 12, kColTextSub, hintLine1, 1, Align::Left, true);
+      int s1 = (c.measureWidth(hintLine1, 2) <= sw - 14) ? 2 : 1;
+      c.drawText(sx + 7, 384, sw - 14, 20, kColTextSub, hintLine1, s1, Align::Center, true);
     }
     if (hintLine2 && hintLine2[0]) {
-      c.drawText(sx + 8, 411, sw - 16, 12, kColMuted, hintLine2, 1, Align::Left, true);
+      int s2 = (c.measureWidth(hintLine2, 2) <= sw - 14) ? 2 : 1;
+      c.drawText(sx + 7, 405, sw - 14, 20, kColMuted, hintLine2, s2, Align::Center, true);
     }
 
     uint32_t btnBg = bottomBtnDanger ? kColDangerBg : kColBtnBg;
@@ -751,9 +756,9 @@ void renderSidebar(Canvas & c,
   }
 
   const int cardX = sx + 5;
-  const int cardY = 62;
+  const int cardY = 66;
   const int cardW = sw - 10;
-  const int cardH = 324;
+  const int cardH = 308;
   c.drawBox(cardX, cardY, cardW, cardH, kColWhite, kColTealBorder);
   c.drawBox(cardX, cardY, cardW, 30, kColTealHeader, kColTealBorder);
 

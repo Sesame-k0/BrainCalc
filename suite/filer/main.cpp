@@ -680,8 +680,8 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
   statusLine[47] = L'\0';
 
   LiliumUI::renderSidebar(c, statusLine, cardTitle, cardBody,
-                          st->viewing ? L"[F2]:HEX切替" : L"[F8]:複写 [F9]:貼付",
-                          st->viewing ? L"[Esc]:一覧に戻る" : L"[F5]:削除 [F4]:更新",
+                          st->viewing ? L"[F2]HEX切替" : L"[F8]複写[F9]貼付",
+                          st->viewing ? L"[Esc]一覧へ" : L"[F5]削除[F4]更新",
                           st->viewing ? L"一覧へ" : L"戻　る", false);
 
   if (st->modal == ModalMode::DeleteConfirm) {

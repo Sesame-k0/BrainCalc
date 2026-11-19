@@ -1,61 +1,35 @@
 #include "../common/lilium_ui.h"
 
+#include <shellapi.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
 
 namespace {
 
-struct AppEntry {
-  const wchar_t * name;
-  const wchar_t * subtitle;
-  const wchar_t * relExePath;
-  const wchar_t * sideTitle;
-  const wchar_t * sideDesc;
-  int emblemKind; // 0=Calc, 1=TaskMgr, 2=Clock, 3=Filer
-};
+static constexpr int kMaxApps = 64;
+static constexpr int kIconSize = 48;
+static constexpr int kGridCols = 4;
+static constexpr int kGridRows = 3;
+static constexpr int kAppsPerPage = kGridCols * kGridRows;
 
-static constexpr AppEntry kApps[] = {
-  {
-    L"Lilium Calc",
-    L"関数電卓・CAS・Python",
-    L"apps\\LiliumCalc.exe",
-    L"Lilium Calc",
-    L"【機能】\n関数電卓・2D/3Dグラフ・KhyCAS・Pythonを統合した主力電卓。\n"
-    L"【分離構成】\n時計・テキスト閲覧を分離し電卓性能へ特化。\n"
-    L"【操作】\n[Ent/F3]起動 / [↑↓←→]選択",
-    0
-  },
-  {
-    L"Lilium TaskMgr",
-    L"RAM推移・容量・辞書解放",
-    L"apps\\LiliumTaskMgr.exe",
-    L"TaskManager",
-    L"【機能】\nプロセス・ウィンドウ一覧、RAM推移グラフ・ストレージ容量を表示。\n"
-    L"【辞書解放】\n[F9] で純正辞書 (wceprj.exe) を解放・再起動。\n"
-    L"【保護】OS必須は保護",
-    1
-  },
-  {
-    L"Lilium Clock",
-    L"7seg時計・タイマー・SW",
-    L"apps\\LiliumClock.exe",
-    L"Lilium Clock",
-    L"【機能】\n視認性の高い大型デジタル時計・カウントダウンタイマー・ストップウォッチ。\n"
-    L"【搭載】\nラップ記録(最大5件)、電池・RAM残量表示対応。",
-    2
-  },
-  {
-    L"Lilium Filer",
-    L"フォルダ・テキスト/HEX",
-    L"apps\\LiliumFiler.exe",
-    L"Lilium Filer",
-    L"【機能】\nSDカード/NANDの閲覧、UTF-8/16テキスト＆省メモリHEXビューア。\n"
-    L"【操作】\n[Ent]閲覧 [F8/F9]複写貼付 [F5]削除(保護付)",
-    3
-  }
+static constexpr int kLaunchExitX = 678;
+static constexpr int kLaunchExitY = 440;
+static constexpr int kLaunchExitW = 104;
+static constexpr int kLaunchExitH = 34;
+
+struct AppEntry {
+  wchar_t name[48];
+  wchar_t exePath[MAX_PATH];
+  wchar_t workDir[MAX_PATH];
+  wchar_t relDesc[96];
+  int builtInKind; // 0=Calc, 1=TaskMgr, 2=Clock, 3=Filer, 4=DOOM, -1=External
+  bool isLiliumSuite;
+  bool isFolderApp;
+  bool hasCustomIcon;
+  uint32_t * cachedIcon; // kIconSize * kIconSize (0xAARRGGBB)
 };
-static constexpr int kAppCount = static_cast<int>(sizeof(kApps) / sizeof(kApps[0]));
 
 enum class ModalState {
   None = 0,
@@ -68,6 +42,8 @@ enum class ModalState {
 struct LauncherState {
   LiliumUI::AppWindow window;
   LiliumUI::DictStatus dict = {};
+  AppEntry apps[kMaxApps] = {};
+  int appCount = 0;
   int selectedIndex = 0;
   int prevSelectedIndex = 0;
   ModalState modal = ModalState::None;
@@ -76,7 +52,380 @@ struct LauncherState {
   wchar_t errLine2[96] = L"";
 };
 
-static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, int kind, bool selected) {
+static bool fileExists(const wchar_t * path) {
+  DWORD attr = GetFileAttributesW(path);
+  return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+static bool hasExeSuffix(const wchar_t * name) {
+  size_t len = wcslen(name);
+  return len >= 4 && _wcsicmp(name + len - 4, L".exe") == 0;
+}
+
+static bool isBuiltInRelName(const wchar_t * fileName) {
+  static constexpr const wchar_t * kBuiltInFiles[5] = {
+    L"LiliumCalc.exe",
+    L"LiliumTaskMgr.exe",
+    L"LiliumClock.exe",
+    L"LiliumFiler.exe",
+    L"doom.exe"
+  };
+  for (int i = 0; i < 5; ++i) {
+    if (_wcsicmp(fileName, kBuiltInFiles[i]) == 0) return true;
+  }
+  return false;
+}
+
+static void freeAppEntries(LauncherState * st) {
+  if (!st) return;
+  for (int i = 0; i < st->appCount; ++i) {
+    if (st->apps[i].cachedIcon) {
+      free(st->apps[i].cachedIcon);
+      st->apps[i].cachedIcon = nullptr;
+    }
+    st->apps[i].hasCustomIcon = false;
+  }
+  st->appCount = 0;
+}
+
+static uint32_t * createScratchDib32(HDC hdcRef, int size, HDC & outDc, HBITMAP & outBmp, HGDIOBJ & outOld) {
+  outDc = CreateCompatibleDC(hdcRef);
+  if (!outDc) return nullptr;
+  BITMAPINFO bmi = {};
+  bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  bmi.bmiHeader.biWidth = size;
+  bmi.bmiHeader.biHeight = -size;
+  bmi.bmiHeader.biPlanes = 1;
+  bmi.bmiHeader.biBitCount = 32;
+  bmi.bmiHeader.biCompression = BI_RGB;
+
+  void * bits = nullptr;
+  outBmp = CreateDIBSection(hdcRef, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
+  if (!outBmp || !bits) {
+    DeleteDC(outDc);
+    outDc = NULL;
+    return nullptr;
+  }
+  outOld = SelectObject(outDc, outBmp);
+  return static_cast<uint32_t *>(bits);
+}
+
+static bool extractExeIconToCache(const wchar_t * exePath, uint32_t ** outPixels) {
+  if (!exePath || !exePath[0] || !outPixels) return false;
+  *outPixels = nullptr;
+
+  HICON hLarge = NULL;
+  HICON hSmall = NULL;
+  UINT got = ExtractIconExW(exePath, 0, &hLarge, &hSmall, 1);
+  if (got == 0 || (!hLarge && !hSmall)) {
+    if (hLarge) DestroyIcon(hLarge);
+    if (hSmall) DestroyIcon(hSmall);
+    return false;
+  }
+
+  HICON hUse = hLarge ? hLarge : hSmall;
+  HDC hdcRef = GetDC(NULL);
+  HDC dcBlack = NULL, dcWhite = NULL;
+  HBITMAP bmpBlack = NULL, bmpWhite = NULL;
+  HGDIOBJ oldBlack = NULL, oldWhite = NULL;
+  uint32_t * pixBlack = createScratchDib32(hdcRef, kIconSize, dcBlack, bmpBlack, oldBlack);
+  uint32_t * pixWhite = createScratchDib32(hdcRef, kIconSize, dcWhite, bmpWhite, oldWhite);
+  bool ok = false;
+
+  if (pixBlack && pixWhite) {
+    const int total = kIconSize * kIconSize;
+    for (int i = 0; i < total; ++i) {
+      pixBlack[i] = 0x00000000;
+      pixWhite[i] = 0x00FFFFFF;
+    }
+
+    if (DrawIconEx(dcBlack, 0, 0, hUse, kIconSize, kIconSize, 0, NULL, DI_NORMAL) &&
+        DrawIconEx(dcWhite, 0, 0, hUse, kIconSize, kIconSize, 0, NULL, DI_NORMAL)) {
+      uint32_t * dst = static_cast<uint32_t *>(malloc(static_cast<size_t>(total) * sizeof(uint32_t)));
+      if (dst) {
+        int nonTransparent = 0;
+        for (int i = 0; i < total; ++i) {
+          uint32_t pb = pixBlack[i];
+          uint32_t pw = pixWhite[i];
+          int rb = static_cast<int>((pb >> 16) & 0xFF);
+          int gb = static_cast<int>((pb >> 8) & 0xFF);
+          int bb = static_cast<int>(pb & 0xFF);
+          int rw = static_cast<int>((pw >> 16) & 0xFF);
+          int gw = static_cast<int>((pw >> 8) & 0xFF);
+          int bw = static_cast<int>(pw & 0xFF);
+
+          int diff = ((rw - rb) + (gw - gb) + (bw - bb)) / 3;
+          if (diff < 0) diff = 0;
+          if (diff > 255) diff = 255;
+          int alpha = 255 - diff;
+          if (alpha > 0) {
+            ++nonTransparent;
+            int r = (rb * 255) / alpha;
+            int g = (gb * 255) / alpha;
+            int b = (bb * 255) / alpha;
+            if (r > 255) r = 255;
+            if (g > 255) g = 255;
+            if (b > 255) b = 255;
+            dst[i] = (static_cast<uint32_t>(alpha) << 24) |
+                     (static_cast<uint32_t>(r) << 16) |
+                     (static_cast<uint32_t>(g) << 8) |
+                     static_cast<uint32_t>(b);
+          } else {
+            dst[i] = 0;
+          }
+        }
+        if (nonTransparent > 0) {
+          *outPixels = dst;
+          ok = true;
+        } else {
+          free(dst);
+        }
+      }
+    }
+  }
+
+  if (dcBlack) {
+    if (oldBlack) SelectObject(dcBlack, oldBlack);
+    DeleteObject(bmpBlack);
+    DeleteDC(dcBlack);
+  }
+  if (dcWhite) {
+    if (oldWhite) SelectObject(dcWhite, oldWhite);
+    DeleteObject(bmpWhite);
+    DeleteDC(dcWhite);
+  }
+  if (hdcRef) ReleaseDC(NULL, hdcRef);
+  if (hLarge) DestroyIcon(hLarge);
+  if (hSmall) DestroyIcon(hSmall);
+  return ok;
+}
+
+static bool resolveFolderAppExe(const wchar_t * folderPath, const wchar_t * folderName,
+                                wchar_t * outExePath, wchar_t * outIconFallbackExe) {
+  outExePath[0] = L'\0';
+  if (outIconFallbackExe) outIconFallbackExe[0] = L'\0';
+
+  wchar_t appMainExe[MAX_PATH] = L"";
+  LiliumUI::joinPath(folderPath, L"AppMain.exe", appMainExe, MAX_PATH);
+  if (outIconFallbackExe && fileExists(appMainExe)) {
+    wcsncpy(outIconFallbackExe, appMainExe, MAX_PATH - 1);
+    outIconFallbackExe[MAX_PATH - 1] = L'\0';
+  }
+
+  // 1. PW-SB4 style AppMain.cfg target
+  wchar_t cfgPath[MAX_PATH] = L"";
+  LiliumUI::joinPath(folderPath, L"AppMain.cfg", cfgPath, MAX_PATH);
+  if (fileExists(cfgPath)) {
+    FILE * fp = _wfopen(cfgPath, L"rb");
+    if (fp) {
+      char buf[128] = {};
+      size_t n = fread(buf, 1, sizeof(buf) - 1, fp);
+      fclose(fp);
+      buf[n] = '\0';
+      char * p = buf;
+      while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') ++p;
+      char * end = p;
+      while (*end && *end != '\r' && *end != '\n' && *end != '\t') ++end;
+      while (end > p && end[-1] == ' ') --end;
+      *end = '\0';
+      if (*p) {
+        wchar_t targetW[96] = L"";
+        MultiByteToWideChar(CP_UTF8, 0, p, -1, targetW, 88);
+        targetW[87] = L'\0';
+        if (!hasExeSuffix(targetW)) {
+          wcsncat(targetW, L".exe", 95 - wcslen(targetW));
+        }
+        wchar_t cand[MAX_PATH] = L"";
+        LiliumUI::joinPath(folderPath, targetW, cand, MAX_PATH);
+        if (fileExists(cand)) {
+          wcsncpy(outExePath, cand, MAX_PATH - 1);
+          outExePath[MAX_PATH - 1] = L'\0';
+          return true;
+        }
+      }
+    }
+  }
+
+  // 2. AppMain_.exe -> 3. AppMain.exe -> 4. <FolderName>.exe
+  wchar_t cand[MAX_PATH] = L"";
+  LiliumUI::joinPath(folderPath, L"AppMain_.exe", cand, MAX_PATH);
+  if (fileExists(cand)) {
+    wcsncpy(outExePath, cand, MAX_PATH - 1);
+    outExePath[MAX_PATH - 1] = L'\0';
+    return true;
+  }
+  if (fileExists(appMainExe)) {
+    wcsncpy(outExePath, appMainExe, MAX_PATH - 1);
+    outExePath[MAX_PATH - 1] = L'\0';
+    return true;
+  }
+
+  wchar_t sameName[64] = L"";
+  _snwprintf(sameName, 64, L"%s.exe", folderName);
+  sameName[63] = L'\0';
+  LiliumUI::joinPath(folderPath, sameName, cand, MAX_PATH);
+  if (fileExists(cand)) {
+    wcsncpy(outExePath, cand, MAX_PATH - 1);
+    outExePath[MAX_PATH - 1] = L'\0';
+    return true;
+  }
+
+  // 5. First *.exe in the folder
+  wchar_t pat[MAX_PATH] = L"";
+  LiliumUI::joinPath(folderPath, L"*.exe", pat, MAX_PATH);
+  WIN32_FIND_DATAW fd = {};
+  HANDLE hFind = FindFirstFileW(pat, &fd);
+  if (hFind != INVALID_HANDLE_VALUE) {
+    do {
+      if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+        LiliumUI::joinPath(folderPath, fd.cFileName, cand, MAX_PATH);
+        wcsncpy(outExePath, cand, MAX_PATH - 1);
+        outExePath[MAX_PATH - 1] = L'\0';
+        FindClose(hFind);
+        return true;
+      }
+    } while (FindNextFileW(hFind, &fd));
+    FindClose(hFind);
+  }
+  return false;
+}
+
+static void addBuiltInEntry(LauncherState * st, const wchar_t * appsDir,
+                            const wchar_t * displayName, const wchar_t * fileName, int kind) {
+  if (!st || st->appCount >= kMaxApps) return;
+  AppEntry & e = st->apps[st->appCount++];
+  memset(&e, 0, sizeof(e));
+  wcsncpy(e.name, displayName, 47);
+  LiliumUI::joinPath(appsDir, fileName, e.exePath, MAX_PATH);
+  wcsncpy(e.workDir, appsDir, MAX_PATH - 1);
+  _snwprintf(e.relDesc, 96, L"apps\\%s", fileName);
+  e.relDesc[95] = L'\0';
+  e.builtInKind = kind;
+  e.isLiliumSuite = true;
+}
+
+static void scanApps(LauncherState * st) {
+  if (!st) return;
+  freeAppEntries(st);
+
+  wchar_t rootDir[MAX_PATH] = L"";
+  LiliumUI::getLiliumRootDir(rootDir, MAX_PATH);
+  wchar_t appsDir[MAX_PATH] = L"";
+  LiliumUI::joinPath(rootDir, L"apps", appsDir, MAX_PATH);
+
+  // 1. Canonical built-in Lilium Suite apps first
+  addBuiltInEntry(st, appsDir, L"Lilium Calc", L"LiliumCalc.exe", 0);
+  addBuiltInEntry(st, appsDir, L"Lilium TaskMgr", L"LiliumTaskMgr.exe", 1);
+  addBuiltInEntry(st, appsDir, L"Lilium Clock", L"LiliumClock.exe", 2);
+  addBuiltInEntry(st, appsDir, L"Lilium Filer", L"LiliumFiler.exe", 3);
+  addBuiltInEntry(st, appsDir, L"DOOM", L"doom.exe", 4);
+  const int extStart = st->appCount;
+
+  // 2. Dynamic scan of apps\* for additional EXEs and Brain app subfolders
+  wchar_t pat[MAX_PATH] = L"";
+  LiliumUI::joinPath(appsDir, L"*", pat, MAX_PATH);
+  WIN32_FIND_DATAW fd = {};
+  HANDLE hFind = FindFirstFileW(pat, &fd);
+  if (hFind != INVALID_HANDLE_VALUE) {
+    do {
+      if (st->appCount >= kMaxApps) break;
+      if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) continue;
+
+      bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+      if (!isDir) {
+        if (!hasExeSuffix(fd.cFileName) || isBuiltInRelName(fd.cFileName)) continue;
+
+        AppEntry & e = st->apps[st->appCount++];
+        memset(&e, 0, sizeof(e));
+        wcsncpy(e.name, fd.cFileName, 47);
+        e.name[47] = L'\0';
+        size_t nl = wcslen(e.name);
+        if (nl >= 4 && _wcsicmp(e.name + nl - 4, L".exe") == 0) {
+          e.name[nl - 4] = L'\0';
+        }
+        LiliumUI::joinPath(appsDir, fd.cFileName, e.exePath, MAX_PATH);
+        wcsncpy(e.workDir, appsDir, MAX_PATH - 1);
+        _snwprintf(e.relDesc, 96, L"apps\\%s", fd.cFileName);
+        e.relDesc[95] = L'\0';
+        e.builtInKind = -1;
+        e.isLiliumSuite = (_wcsnicmp(fd.cFileName, L"Lilium", 6) == 0);
+        e.hasCustomIcon = extractExeIconToCache(e.exePath, &e.cachedIcon);
+      } else {
+        wchar_t folderPath[MAX_PATH] = L"";
+        LiliumUI::joinPath(appsDir, fd.cFileName, folderPath, MAX_PATH);
+        wchar_t targetExe[MAX_PATH] = L"";
+        wchar_t iconFallbackExe[MAX_PATH] = L"";
+        if (!resolveFolderAppExe(folderPath, fd.cFileName, targetExe, iconFallbackExe)) {
+          continue;
+        }
+
+        AppEntry & e = st->apps[st->appCount++];
+        memset(&e, 0, sizeof(e));
+        wcsncpy(e.name, fd.cFileName, 47);
+        e.name[47] = L'\0';
+        wcsncpy(e.exePath, targetExe, MAX_PATH - 1);
+        wcsncpy(e.workDir, folderPath, MAX_PATH - 1);
+        _snwprintf(e.relDesc, 96, L"apps\\%s", fd.cFileName);
+        e.relDesc[95] = L'\0';
+        e.builtInKind = -1;
+        e.isLiliumSuite = false;
+        e.isFolderApp = true;
+        e.hasCustomIcon = extractExeIconToCache(targetExe, &e.cachedIcon);
+        if (!e.hasCustomIcon && iconFallbackExe[0] && _wcsicmp(iconFallbackExe, targetExe) != 0) {
+          e.hasCustomIcon = extractExeIconToCache(iconFallbackExe, &e.cachedIcon);
+        }
+      }
+    } while (FindNextFileW(hFind, &fd));
+    FindClose(hFind);
+  }
+
+  // Sort dynamically discovered apps alphabetically while preserving built-in order
+  for (int i = extStart + 1; i < st->appCount; ++i) {
+    AppEntry tmp = st->apps[i];
+    int j = i - 1;
+    while (j >= extStart && _wcsicmp(st->apps[j].name, tmp.name) > 0) {
+      st->apps[j + 1] = st->apps[j];
+      --j;
+    }
+    st->apps[j + 1] = tmp;
+  }
+
+  if (st->selectedIndex < 0) st->selectedIndex = 0;
+  if (st->selectedIndex >= st->appCount && st->appCount > 0) {
+    st->selectedIndex = st->appCount - 1;
+  }
+  st->prevSelectedIndex = st->selectedIndex;
+}
+
+static void blitCachedIcon(LiliumUI::Canvas & c, int dx, int dy, const uint32_t * argb) {
+  if (!c.pixels || !argb) return;
+  for (int y = 0; y < kIconSize; ++y) {
+    int py = dy + y;
+    if (py < 0 || py >= c.height) continue;
+    uint32_t * dstRow = c.pixels + py * c.width;
+    const uint32_t * srcRow = argb + y * kIconSize;
+    for (int x = 0; x < kIconSize; ++x) {
+      int px = dx + x;
+      if (px < 0 || px >= c.width) continue;
+      uint32_t sp = srcRow[x];
+      uint32_t a = (sp >> 24) & 0xFF;
+      if (a == 0) continue;
+      if (a == 255) {
+        dstRow[px] = sp & 0x00FFFFFF;
+      } else {
+        uint32_t dp = dstRow[px];
+        uint32_t inv = 255 - a;
+        uint32_t r = (((sp >> 16) & 0xFF) * a + ((dp >> 16) & 0xFF) * inv) / 255;
+        uint32_t g = (((sp >> 8) & 0xFF) * a + ((dp >> 8) & 0xFF) * inv) / 255;
+        uint32_t b = ((sp & 0xFF) * a + (dp & 0xFF) * inv) / 255;
+        dstRow[px] = (r << 16) | (g << 8) | b;
+      }
+    }
+  }
+  c.addDirty(dx, dy, kIconSize, kIconSize);
+}
+
+static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, const AppEntry & app, bool selected) {
   uint32_t frameCol = selected ? LiliumUI::kColTeal : LiliumUI::kColBorder;
   c.drawBox(x, y, 56, 56, 0xF4F7F6, frameCol);
   c.fillRect(x + 3, y + 3, 7, 2, LiliumUI::kColTeal);
@@ -88,7 +437,7 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, int kind, bool sel
   c.fillRect(x + 46, y + 51, 7, 2, LiliumUI::kColTeal);
   c.fillRect(x + 51, y + 46, 2, 7, LiliumUI::kColTeal);
 
-  if (kind == 0) {
+  if (app.builtInKind == 0) {
     // Calculator
     c.drawBox(x + 13, y + 9, 30, 38, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
     c.drawThickFrame(x + 13, y + 9, 30, 38, 2, LiliumUI::kColCharcoal);
@@ -99,7 +448,7 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, int kind, bool sel
         c.fillRect(x + 17 + col * 8, y + 26 + row * 6, 6, 4, colBtn);
       }
     }
-  } else if (kind == 1) {
+  } else if (app.builtInKind == 1) {
     // TaskMgr bar chart
     c.drawBox(x + 11, y + 11, 34, 34, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
     c.drawThickFrame(x + 11, y + 11, 34, 34, 2, LiliumUI::kColCharcoal);
@@ -107,7 +456,7 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, int kind, bool sel
     c.fillRect(x + 22, y + 22, 5, 18, LiliumUI::kColTeal);
     c.fillRect(x + 29, y + 17, 5, 23, LiliumUI::kColCharcoal);
     c.fillRect(x + 36, y + 25, 5, 15, LiliumUI::kColTeal);
-  } else if (kind == 2) {
+  } else if (app.builtInKind == 2) {
     // Clock dial
     c.drawBox(x + 11, y + 11, 34, 34, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
     c.drawThickFrame(x + 11, y + 11, 34, 34, 2, LiliumUI::kColCharcoal);
@@ -115,75 +464,118 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, int kind, bool sel
     c.fillRect(x + 27, y + 39, 2, 4, LiliumUI::kColTeal);
     c.fillRect(x + 13, y + 27, 4, 2, LiliumUI::kColTeal);
     c.fillRect(x + 39, y + 27, 4, 2, LiliumUI::kColTeal);
-    // Hour/min hands
     c.fillRect(x + 27, y + 17, 2, 12, LiliumUI::kColCharcoal);
     c.fillRect(x + 27, y + 27, 10, 2, LiliumUI::kColTealDark);
-  } else {
+  } else if (app.builtInKind == 3) {
     // Filer folder icon
     c.fillRect(x + 11, y + 13, 14, 5, LiliumUI::kColTeal);
     c.drawBox(x + 11, y + 17, 34, 26, LiliumUI::kColTealSoft, LiliumUI::kColCharcoal);
     c.drawThickFrame(x + 11, y + 17, 34, 26, 2, LiliumUI::kColCharcoal);
     c.fillRect(x + 15, y + 22, 26, 3, LiliumUI::kColTeal);
+  } else if (app.builtInKind == 4) {
+    // DOOM helmet/visor flat emblem
+    c.drawBox(x + 10, y + 10, 36, 36, LiliumUI::kColCharcoal, LiliumUI::kColDangerFill);
+    c.drawThickFrame(x + 10, y + 10, 36, 36, 2, LiliumUI::kColDangerFill);
+    c.fillRect(x + 14, y + 16, 28, 10, LiliumUI::kColTeal);
+    c.fillRect(x + 17, y + 19, 8, 4, LiliumUI::kColWhite);
+    c.fillRect(x + 31, y + 19, 8, 4, LiliumUI::kColWhite);
+    c.fillRect(x + 20, y + 31, 16, 3, LiliumUI::kColDangerFill);
+    c.fillRect(x + 17, y + 36, 22, 5, 0x444E58);
+  } else if (app.hasCustomIcon && app.cachedIcon) {
+    // Extracted 48x48 EXE icon inside crisp 56x56 frame
+    c.drawBox(x, y, 56, 56, LiliumUI::kColWhite, selected ? LiliumUI::kColTeal : LiliumUI::kColBorder);
+    blitCachedIcon(c, x + 4, y + 4, app.cachedIcon);
+  } else {
+    // Fallback emblem for external EXE / subfolder without extractable icon
+    if (app.isFolderApp) {
+      c.fillRect(x + 11, y + 12, 14, 5, LiliumUI::kColTeal);
+    }
+    c.drawBox(x + 11, y + 16, 34, 28, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
+    c.drawThickFrame(x + 11, y + 16, 34, 28, 2, LiliumUI::kColCharcoal);
+    wchar_t ini[2] = { app.name[0] ? app.name[0] : L'?', L'\0' };
+    if (ini[0] >= L'a' && ini[0] <= L'z') ini[0] = static_cast<wchar_t>(ini[0] - L'a' + L'A');
+    c.drawText(x + 11, y + 16, 34, 28, LiliumUI::kColTealDeep, ini, 2, LiliumUI::Align::Center, true);
   }
 }
 
-static void getCardRect(int i, int & outX, int & outY, int & outW, int & outH) {
-  const int cardW = 298;
-  const int cardH = 96;
-  const int colGap = 12;
+static void getTileRect(int slotOnPage, int & outX, int & outY, int & outW, int & outH) {
+  const int tileW = 178;
+  const int tileH = 112;
+  const int colGap = 16;
   const int rowGap = 12;
-  int col = i % 2;
-  int row = i / 2;
-  outX = 16 + col * (cardW + colGap);
-  outY = 88 + row * (cardH + rowGap);
-  outW = cardW;
-  outH = cardH;
+  int col = slotOnPage % kGridCols;
+  int row = slotOnPage / kGridCols;
+  outX = 20 + col * (tileW + colGap);
+  outY = 56 + row * (tileH + rowGap);
+  outW = tileW;
+  outH = tileH;
 }
 
-static void renderAppCard(LiliumUI::Canvas & c, int i, bool sel) {
-  int cardX = 0, curY = 0, cardW = 0, cardH = 0;
-  getCardRect(i, cardX, curY, cardW, cardH);
+static void renderAppTile(LiliumUI::Canvas & c, const LauncherState * st, int appIndex, bool selected) {
+  if (!st || appIndex < 0 || appIndex >= st->appCount) return;
+  int slot = appIndex % kAppsPerPage;
+  int tx = 0, ty = 0, tw = 0, th = 0;
+  getTileRect(slot, tx, ty, tw, th);
 
-  uint32_t bg = sel ? LiliumUI::kColTealSoft : LiliumUI::kColWhite;
-  uint32_t bd = sel ? LiliumUI::kColTeal : LiliumUI::kColBorder;
-  c.drawBox(cardX, curY, cardW, cardH, bg, bd);
-  if (sel) {
-    c.drawThickFrame(cardX, curY, cardW, cardH, 2, LiliumUI::kColTeal);
+  uint32_t bg = selected ? LiliumUI::kColTealSoft : LiliumUI::kColWhite;
+  uint32_t bd = selected ? LiliumUI::kColTeal : 0xD4DCE6;
+  c.drawBox(tx, ty, tw, th, bg, bd);
+  if (selected) {
+    c.drawThickFrame(tx, ty, tw, th, 2, LiliumUI::kColTeal);
+    c.fillRect(tx, ty, tw, 4, LiliumUI::kColTeal);
   }
 
-  drawAppEmblem(c, cardX + 10, curY + 20, kApps[i].emblemKind, sel);
+  const AppEntry & app = st->apps[appIndex];
+  drawAppEmblem(c, tx + (tw - 56) / 2, ty + 14, app, selected);
 
-  wchar_t numLabel[16];
-  _snwprintf(numLabel, 16, L"%d.", i + 1);
-  numLabel[15] = L'\0';
-  c.drawText(cardX + 74, curY + 11, 26, 22, sel ? LiliumUI::kColTealDeep : LiliumUI::kColMuted,
-             numLabel, 2, LiliumUI::Align::Left, true);
-  c.drawText(cardX + 98, curY + 11, cardW - 108, 22, LiliumUI::kColText,
-             kApps[i].name, 2, LiliumUI::Align::Left, true);
-  c.drawText(cardX + 74, curY + 37, cardW - 84, 20, LiliumUI::kColMuted,
-             kApps[i].subtitle, 2, LiliumUI::Align::Left, true);
+  c.drawText(tx + 6, ty + 78, tw - 12, 26,
+             selected ? LiliumUI::kColTealDeep : LiliumUI::kColText,
+             app.name, 2, LiliumUI::Align::Center, true);
+}
 
-  uint32_t pillBg = sel ? LiliumUI::kColTeal : 0xF2F4F7;
-  uint32_t pillBd = sel ? LiliumUI::kColTealDark : LiliumUI::kColBtnBorder;
-  uint32_t pillTx = sel ? LiliumUI::kColWhite : LiliumUI::kColTextSub;
-  c.drawBox(cardX + cardW - 88, curY + 63, 78, 24, pillBg, pillBd);
-  c.drawText(cardX + cardW - 88, curY + 63, 78, 24, pillTx,
-             L"起 動", 2, LiliumUI::Align::Center, true);
+static void renderTopStatusPills(LiliumUI::Canvas & c, const LauncherState * st) {
+  // Repaint only the right status region of the 800x42 top teal bar
+  c.fillRect(336, 0, 464, LiliumUI::kHeaderH - 2, LiliumUI::kColTeal);
+  c.fillRect(336, LiliumUI::kHeaderH - 2, 464, 2, LiliumUI::kColTealDark);
+
+  // 1. Dictionary status pill
+  c.drawBox(340, 8, 116, 26,
+            st->dict.running ? LiliumUI::kColTealHeader : LiliumUI::kColWarnBg,
+            st->dict.running ? LiliumUI::kColWhite : LiliumUI::kColWarnBorder);
+  c.drawText(340, 8, 116, 26,
+             st->dict.running ? LiliumUI::kColTealDeep : LiliumUI::kColWarnText,
+             st->dict.running ? L"辞書:稼働" : L"辞書:解放",
+             2, LiliumUI::Align::Center, true);
+
+  // 2. RAM free pill
+  int totalMB = 0, availMB = 0, usedPct = 0;
+  LiliumUI::queryMemoryMB(totalMB, availMB, usedPct);
+  wchar_t ramBuf[32];
+  _snwprintf(ramBuf, 32, L"RAM空 %d/%dMB", availMB, totalMB);
+  ramBuf[31] = L'\0';
+  c.drawBox(464, 8, 166, 26, LiliumUI::kColWhite, LiliumUI::kColTealDark);
+  c.drawText(464, 8, 166, 26, LiliumUI::kColText, ramBuf, 2, LiliumUI::Align::Center, true);
+
+  // 3. Clock & battery pill
+  wchar_t clockBuf[16];
+  LiliumUI::queryClockStr(clockBuf, 16);
+  int batPct = 100;
+  bool batChg = false;
+  LiliumUI::queryBattery(batPct, batChg);
+  wchar_t metaBuf[32];
+  _snwprintf(metaBuf, 32, L"%s %s%d%%", clockBuf, batChg ? L"+" : L"", batPct);
+  metaBuf[31] = L'\0';
+  c.drawBox(638, 8, 146, 26, LiliumUI::kColWhite, LiliumUI::kColTealDark);
+  c.drawText(638, 8, 146, 26, LiliumUI::kColTealDeep, metaBuf, 2, LiliumUI::Align::Center, true);
 }
 
 static void launchSelectedApp(LauncherState * st) {
-  if (!st || st->selectedIndex < 0 || st->selectedIndex >= kAppCount) return;
-  const AppEntry & app = kApps[st->selectedIndex];
+  if (!st || st->selectedIndex < 0 || st->selectedIndex >= st->appCount) return;
+  const AppEntry & app = st->apps[st->selectedIndex];
 
-  wchar_t rootDir[MAX_PATH] = L"";
-  LiliumUI::getLiliumRootDir(rootDir, MAX_PATH);
-  wchar_t exePath[MAX_PATH] = L"";
-  LiliumUI::joinPath(rootDir, app.relExePath, exePath, MAX_PATH);
-
-  DWORD attr = GetFileAttributesW(exePath);
-  if (attr == INVALID_FILE_ATTRIBUTES) {
+  if (!fileExists(app.exePath)) {
     _snwprintf(st->errLine1, 96, L"%s が見つかりません", app.name);
-    _snwprintf(st->errLine2, 96, L"%s", app.relExePath);
+    _snwprintf(st->errLine2, 96, L"%s", app.relDesc);
     st->errLine1[95] = L'\0';
     st->errLine2[95] = L'\0';
     st->modal = ModalState::LaunchError;
@@ -193,30 +585,30 @@ static void launchSelectedApp(LauncherState * st) {
   }
 
 #ifdef _WIN32_WCE
-  wchar_t cmdLine[64] = L"--from-launcher";
+  wchar_t cmdLineBuf[64] = L"--from-launcher";
+  LPWSTR cmdLinePtr = app.isLiliumSuite ? cmdLineBuf : NULL;
   PROCESS_INFORMATION pi = {};
-  BOOL ok = CreateProcessW(exePath, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi);
+  BOOL ok = CreateProcessW(app.exePath, cmdLinePtr, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi);
 #else
-  wchar_t workDir[MAX_PATH] = L"";
-  wcsncpy(workDir, exePath, MAX_PATH - 1);
-  workDir[MAX_PATH - 1] = L'\0';
-  wchar_t * lastSlash = wcsrchr(workDir, L'\\');
-  if (lastSlash) *(lastSlash + 1) = L'\0';
-
-  wchar_t cmdLine[MAX_PATH + 48] = L"";
-  _snwprintf(cmdLine, MAX_PATH + 47, L"\"%s\" --from-launcher", exePath);
-  cmdLine[MAX_PATH + 47] = L'\0';
+  wchar_t cmdLineBuf[MAX_PATH + 48] = L"";
+  LPWSTR cmdLinePtr = NULL;
+  if (app.isLiliumSuite) {
+    _snwprintf(cmdLineBuf, MAX_PATH + 47, L"\"%s\" --from-launcher", app.exePath);
+    cmdLineBuf[MAX_PATH + 47] = L'\0';
+    cmdLinePtr = cmdLineBuf;
+  }
 
   STARTUPINFOW si = {};
   si.cb = sizeof(si);
   PROCESS_INFORMATION pi = {};
-  BOOL ok = CreateProcessW(exePath, cmdLine, NULL, NULL, FALSE, 0, NULL, workDir, &si, &pi);
+  const wchar_t * workDirPtr = app.workDir[0] ? app.workDir : NULL;
+  BOOL ok = CreateProcessW(app.exePath, cmdLinePtr, NULL, NULL, FALSE, 0, NULL, workDirPtr, &si, &pi);
 #endif
 
   if (!ok) {
     DWORD err = GetLastError();
     _snwprintf(st->errLine1, 96, L"起動に失敗しました (Code: %lu)", static_cast<unsigned long>(err));
-    _snwprintf(st->errLine2, 96, L"%s", app.relExePath);
+    _snwprintf(st->errLine2, 96, L"%s", app.relDesc);
     st->errLine1[95] = L'\0';
     st->errLine2[95] = L'\0';
     st->modal = ModalState::LaunchError;
@@ -277,75 +669,73 @@ static void executeSafeLauncherExit(LauncherState * st) {
 static void onRender(LiliumUI::Canvas & c, void * userData) {
   LauncherState * st = static_cast<LauncherState *>(userData);
 
-  int totalMB = 0, availMB = 0, usedPct = 0;
-  LiliumUI::queryMemoryMB(totalMB, availMB, usedPct);
+  const int totalPages = (st->appCount + kAppsPerPage - 1) / kAppsPerPage;
+  const int curPage = (st->appCount > 0) ? (st->selectedIndex / kAppsPerPage) : 0;
+  const int prevPage = (st->appCount > 0) ? (st->prevSelectedIndex / kAppsPerPage) : 0;
 
-  if (c.fullRedraw || st->modal != ModalState::None) {
-    c.fillRect(0, 0, LiliumUI::kMainW, LiliumUI::kScreenH, LiliumUI::kColBgMain);
+  if (c.fullRedraw || st->modal != ModalState::None || curPage != prevPage) {
+    // Full 800x480 macOS Launchpad Home (NO right sidebar)
+    c.fillRect(0, 0, LiliumUI::kScreenW, LiliumUI::kScreenH, LiliumUI::kColBgMain);
 
-    wchar_t badge[48];
-    _snwprintf(badge, 48, L"RAM空き: %d/%d MB", availMB, totalMB);
-    badge[47] = L'\0';
-    LiliumUI::renderTopHeader(c, L"LILIUM LAUNCHER", badge);
+    c.fillRect(0, 0, LiliumUI::kScreenW, LiliumUI::kHeaderH, LiliumUI::kColTeal);
+    c.fillRect(0, LiliumUI::kHeaderH - 2, LiliumUI::kScreenW, 2, LiliumUI::kColTealDark);
+    c.drawText(18, 0, 310, LiliumUI::kHeaderH - 2, LiliumUI::kColWhite,
+               L"LILIUM LAUNCHER", 2, LiliumUI::Align::Left, true);
+    renderTopStatusPills(c, st);
 
-    c.drawBox(16, 48, LiliumUI::kMainW - 32, 30, LiliumUI::kColWhite, LiliumUI::kColBorder);
-    c.drawText(26, 48, LiliumUI::kMainW - 52, 30, LiliumUI::kColTextSub,
-               L"起動する Lilium アプリを選択してください", 2, LiliumUI::Align::Left, true);
-
-    for (int i = 0; i < kAppCount; ++i) {
-      renderAppCard(c, i, i == st->selectedIndex);
+    const int pageStart = curPage * kAppsPerPage;
+    int pageEnd = pageStart + kAppsPerPage;
+    if (pageEnd > st->appCount) pageEnd = st->appCount;
+    for (int i = pageStart; i < pageEnd; ++i) {
+      renderAppTile(c, st, i, i == st->selectedIndex);
     }
 
-    c.drawBox(16, 302, LiliumUI::kMainW - 32, 126, LiliumUI::kColWhite, LiliumUI::kColBorder);
-    c.drawBox(16, 302, LiliumUI::kMainW - 32, 28, LiliumUI::kColTealHeader, LiliumUI::kColBorder);
-    c.drawText(26, 302, LiliumUI::kMainW - 160, 28, LiliumUI::kColTealDeep,
-               L"■ Lilium Suite ステータス (Phase 3)", 2, LiliumUI::Align::Left, true);
-
-    c.drawBox(LiliumUI::kMainW - 122, 305, 96, 22,
-              st->dict.running ? LiliumUI::kColTealSoft : LiliumUI::kColWarnBg,
-              st->dict.running ? LiliumUI::kColTealBorder : LiliumUI::kColWarnBorder);
-    c.drawText(LiliumUI::kMainW - 122, 305, 96, 22,
-               st->dict.running ? LiliumUI::kColTealDeep : LiliumUI::kColWarnText,
-               st->dict.running ? L"辞書:稼働" : L"辞書:解放", 2, LiliumUI::Align::Center, true);
-
-    c.drawText(26, 336, LiliumUI::kMainW - 52, 22,
-               st->dict.running ? LiliumUI::kColTextSub : LiliumUI::kColWarnText,
-               st->dict.running
-                 ? L"・純正辞書 (wceprj.exe): 稼働中 (通常終了可)"
-                 : L"・純正辞書 (wceprj.exe): 解放中 (終了時自動起動)",
-               2, LiliumUI::Align::Left, true);
-    c.drawText(26, 364, LiliumUI::kMainW - 52, 22, LiliumUI::kColMuted,
-               L"・全4アプリ構成: Calc / TaskMgr / Clock / Filer", 2, LiliumUI::Align::Left, true);
-    c.drawText(26, 392, LiliumUI::kMainW - 52, 22, LiliumUI::kColLightMuted,
-               L"・TaskMgr [F9]辞書解放・RAM/容量確認対応", 2, LiliumUI::Align::Left, true);
-
-    c.fillRect(0, 440, LiliumUI::kMainW, 40, LiliumUI::kColSidebar);
-    c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
-    c.drawText(16, 440, LiliumUI::kMainW - 32, 40, LiliumUI::kColTextSub,
-               L"[↑↓←→/1-4]:選択 [Ent/F3]:起動 [Esc/HOME]:終了",
-               2, LiliumUI::Align::Left, true);
-  } else {
-    // Differential partial redraw: only update previous & newly selected app cards
-    if (st->prevSelectedIndex != st->selectedIndex) {
-      if (st->prevSelectedIndex >= 0 && st->prevSelectedIndex < kAppCount) {
-        renderAppCard(c, st->prevSelectedIndex, false);
+    // Page indicator dots when multiple pages exist
+    if (totalPages > 1) {
+      int totalDotW = 0;
+      for (int p = 0; p < totalPages; ++p) {
+        totalDotW += (p == curPage) ? 14 : 6;
+        if (p + 1 < totalPages) totalDotW += 8;
       }
-      if (st->selectedIndex >= 0 && st->selectedIndex < kAppCount) {
-        renderAppCard(c, st->selectedIndex, true);
+      int dx = (LiliumUI::kScreenW - totalDotW) / 2;
+      for (int p = 0; p < totalPages; ++p) {
+        int dw = (p == curPage) ? 14 : 6;
+        c.fillRect(dx, 421, dw, 6, (p == curPage) ? LiliumUI::kColTeal : LiliumUI::kColBorderStrong);
+        dx += dw + 8;
+      }
+    }
+
+    // Full-width bottom control bar + touchable Exit button
+    c.fillRect(0, 434, LiliumUI::kScreenW, 46, LiliumUI::kColSidebar);
+    c.fillRect(0, 434, LiliumUI::kScreenW, 1, LiliumUI::kColBorder);
+
+    wchar_t hintBuf[96];
+    if (totalPages > 1) {
+      _snwprintf(hintBuf, 96, L"[↑↓←→]:選択 [Ent/F3]:起動 [PgUp/Dn]:頁(%d/%d) [F4]:再読込",
+                 curPage + 1, totalPages);
+    } else {
+      _snwprintf(hintBuf, 96, L"[↑↓←→]:選択  [Ent/F3]:起動  [F4]:再読込  [Esc/HOME]:終了");
+    }
+    hintBuf[95] = L'\0';
+    c.drawText(18, 435, 650, 45, LiliumUI::kColTextSub, hintBuf, 2, LiliumUI::Align::Left, true);
+
+    c.drawBox(kLaunchExitX, kLaunchExitY, kLaunchExitW, kLaunchExitH,
+              LiliumUI::kColDangerBg, LiliumUI::kColDangerBorder);
+    c.drawText(kLaunchExitX, kLaunchExitY, kLaunchExitW, kLaunchExitH,
+               LiliumUI::kColDangerText, L"終　了", 2, LiliumUI::Align::Center, true);
+  } else {
+    // Differential partial redraw of only previously selected & newly selected tiles
+    if (st->prevSelectedIndex != st->selectedIndex) {
+      if (st->prevSelectedIndex >= 0 && st->prevSelectedIndex < st->appCount) {
+        renderAppTile(c, st, st->prevSelectedIndex, false);
+      }
+      if (st->selectedIndex >= 0 && st->selectedIndex < st->appCount) {
+        renderAppTile(c, st, st->selectedIndex, true);
       }
     }
   }
 
   st->prevSelectedIndex = st->selectedIndex;
-
-  const AppEntry & cur = kApps[st->selectedIndex];
-  wchar_t statusLine[48];
-  _snwprintf(statusLine, 48, L"アプリ: %d/%d  メモリ:%d%%", st->selectedIndex + 1, kAppCount, usedPct);
-  statusLine[47] = L'\0';
-
-  LiliumUI::renderSidebar(c, statusLine, cur.sideTitle, cur.sideDesc,
-                          L"[↑↓]:選択 [Ent/F3]:起動", L"[Esc/HOME]:終了確認",
-                          L"終　了", true);
 
   if (st->modal == ModalState::ExitConfirm) {
     static constexpr LiliumUI::ModalButton kExitBtns[2] = {
@@ -443,60 +833,80 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
     return;
   }
 
+  if (st->appCount <= 0) {
+    if (vkCode == VK_F4) {
+      scanApps(st);
+      st->dict = LiliumUI::queryDictStatus();
+      st->window.requestRepaint(true);
+    } else if (vkCode == VK_ESCAPE || vkCode == VK_HOME || vkCode == VK_F10) {
+      st->dict = LiliumUI::queryDictStatus();
+      st->modal = ModalState::ExitConfirm;
+      st->modalFocus = 1;
+      st->window.requestRepaint(true);
+    }
+    return;
+  }
+
+  const int totalPages = (st->appCount + kAppsPerPage - 1) / kAppsPerPage;
+  const int curPage = st->selectedIndex / kAppsPerPage;
+
   switch (vkCode) {
     case VK_LEFT:
       st->prevSelectedIndex = st->selectedIndex;
-      st->selectedIndex = (st->selectedIndex - 1 + kAppCount) % kAppCount;
-      st->window.requestRepaint(false);
+      st->selectedIndex = (st->selectedIndex - 1 + st->appCount) % st->appCount;
+      st->window.requestRepaint((st->prevSelectedIndex / kAppsPerPage) != (st->selectedIndex / kAppsPerPage));
       break;
     case VK_RIGHT:
       st->prevSelectedIndex = st->selectedIndex;
-      st->selectedIndex = (st->selectedIndex + 1) % kAppCount;
-      st->window.requestRepaint(false);
+      st->selectedIndex = (st->selectedIndex + 1) % st->appCount;
+      st->window.requestRepaint((st->prevSelectedIndex / kAppsPerPage) != (st->selectedIndex / kAppsPerPage));
       break;
-    case VK_UP:
+    case VK_UP: {
       st->prevSelectedIndex = st->selectedIndex;
-      st->selectedIndex = (st->selectedIndex - 2 + kAppCount) % kAppCount;
-      st->window.requestRepaint(false);
+      int next = st->selectedIndex - kGridCols;
+      if (next < 0) next = st->appCount - 1;
+      st->selectedIndex = next;
+      st->window.requestRepaint((st->prevSelectedIndex / kAppsPerPage) != (st->selectedIndex / kAppsPerPage));
       break;
-    case VK_DOWN:
+    }
+    case VK_DOWN: {
       st->prevSelectedIndex = st->selectedIndex;
-      st->selectedIndex = (st->selectedIndex + 2) % kAppCount;
-      st->window.requestRepaint(false);
+      int next = st->selectedIndex + kGridCols;
+      if (next >= st->appCount) {
+        next = (st->selectedIndex + 1 < st->appCount) ? (st->appCount - 1) : 0;
+      }
+      st->selectedIndex = next;
+      st->window.requestRepaint((st->prevSelectedIndex / kAppsPerPage) != (st->selectedIndex / kAppsPerPage));
       break;
-    case '1':
-    case 'Q':
-      if (st->selectedIndex != 0) {
+    }
+    case VK_PRIOR:
+      if (totalPages > 1) {
         st->prevSelectedIndex = st->selectedIndex;
-        st->selectedIndex = 0;
+        int prevP = (curPage - 1 + totalPages) % totalPages;
+        st->selectedIndex = prevP * kAppsPerPage;
+        st->window.requestRepaint(true);
+      }
+      break;
+    case VK_NEXT:
+      if (totalPages > 1) {
+        st->prevSelectedIndex = st->selectedIndex;
+        int nextP = (curPage + 1) % totalPages;
+        st->selectedIndex = nextP * kAppsPerPage;
+        st->window.requestRepaint(true);
+      }
+      break;
+    case '1': case '2': case '3': case '4': case '5':
+    case '6': case '7': case '8': case '9': {
+      int target = curPage * kAppsPerPage + static_cast<int>(vkCode - '1');
+      if (target < st->appCount && target != st->selectedIndex) {
+        st->prevSelectedIndex = st->selectedIndex;
+        st->selectedIndex = target;
         st->window.requestRepaint(false);
       }
       break;
-    case '2':
-    case 'W':
-      if (kAppCount > 1 && st->selectedIndex != 1) {
-        st->prevSelectedIndex = st->selectedIndex;
-        st->selectedIndex = 1;
-        st->window.requestRepaint(false);
-      }
-      break;
-    case '3':
-    case 'E':
-      if (kAppCount > 2 && st->selectedIndex != 2) {
-        st->prevSelectedIndex = st->selectedIndex;
-        st->selectedIndex = 2;
-        st->window.requestRepaint(false);
-      }
-      break;
-    case '4':
-    case 'R':
-      if (kAppCount > 3 && st->selectedIndex != 3) {
-        st->prevSelectedIndex = st->selectedIndex;
-        st->selectedIndex = 3;
-        st->window.requestRepaint(false);
-      }
-      break;
+    }
     case VK_F4:
+      scanApps(st);
       st->dict = LiliumUI::queryDictStatus();
       st->window.requestRepaint(true);
       break;
@@ -558,8 +968,8 @@ static void onClick(int x, int y, void * userData) {
     return;
   }
 
-  if (x >= LiliumUI::kExitBtnX && x < LiliumUI::kExitBtnX + LiliumUI::kExitBtnW &&
-      y >= LiliumUI::kExitBtnY && y < LiliumUI::kExitBtnY + LiliumUI::kExitBtnH) {
+  if (x >= kLaunchExitX && x < kLaunchExitX + kLaunchExitW &&
+      y >= kLaunchExitY && y < kLaunchExitY + kLaunchExitH) {
     st->dict = LiliumUI::queryDictStatus();
     st->modal = ModalState::ExitConfirm;
     st->modalFocus = 1;
@@ -567,15 +977,19 @@ static void onClick(int x, int y, void * userData) {
     return;
   }
 
-  for (int i = 0; i < kAppCount; ++i) {
-    int cx = 0, cy = 0, cw = 0, ch = 0;
-    getCardRect(i, cx, cy, cw, ch);
-    if (x >= cx && x < cx + cw && y >= cy && y < cy + ch) {
+  const int curPage = (st->appCount > 0) ? (st->selectedIndex / kAppsPerPage) : 0;
+  const int pageStart = curPage * kAppsPerPage;
+  int pageEnd = pageStart + kAppsPerPage;
+  if (pageEnd > st->appCount) pageEnd = st->appCount;
+
+  for (int i = pageStart; i < pageEnd; ++i) {
+    int tx = 0, ty = 0, tw = 0, th = 0;
+    getTileRect(i - pageStart, tx, ty, tw, th);
+    if (x >= tx && x < tx + tw && y >= ty && y < ty + th) {
       bool alreadySelected = (st->selectedIndex == i);
-      bool clickedLaunchBtn = (x >= cx + cw - 92 && y >= cy + 56);
       st->prevSelectedIndex = st->selectedIndex;
       st->selectedIndex = i;
-      if (alreadySelected || clickedLaunchBtn) {
+      if (alreadySelected) {
         launchSelectedApp(st);
       } else {
         st->window.requestRepaint(false);
@@ -587,12 +1001,8 @@ static void onClick(int x, int y, void * userData) {
 
 static void onTimer(LiliumUI::Canvas & c, void * userData) {
   LauncherState * st = static_cast<LauncherState *>(userData);
-  int totalMB = 0, availMB = 0, usedPct = 0;
-  LiliumUI::queryMemoryMB(totalMB, availMB, usedPct);
-  wchar_t statusLine[48];
-  _snwprintf(statusLine, 48, L"アプリ: %d/%d  メモリ:%d%%", st->selectedIndex + 1, kAppCount, usedPct);
-  statusLine[47] = L'\0';
-  LiliumUI::renderSidebarStatus(c, statusLine);
+  if (st->modal != ModalState::None) return;
+  renderTopStatusPills(c, st);
 }
 
 static bool onCloseRequest(void * userData) {
@@ -608,8 +1018,10 @@ static bool onCloseRequest(void * userData) {
 } // namespace
 
 int main(int /*argc*/, char * /*argv*/[]) {
-  LauncherState state;
-  state.dict = LiliumUI::queryDictStatus();
+  LauncherState * state = new LauncherState();
+  state->dict = LiliumUI::queryDictStatus();
+  scanApps(state);
+
   LiliumUI::AppCallbacks cb = {};
   cb.onRender = onRender;
   cb.onKeyDown = onKeyDown;
@@ -617,11 +1029,14 @@ int main(int /*argc*/, char * /*argv*/[]) {
   cb.onTimer = onTimer;
   cb.onCloseRequest = onCloseRequest;
 
-  if (!state.window.create(L"LiliumLauncherWinClass",
+  int rc = 1;
+  if (state->window.create(L"LiliumLauncherWinClass",
                            L"Lilium Launcher (SHARP Brain 800x480)",
-                           cb, &state, true)) {
-    return 1;
+                           cb, state, true)) {
+    rc = state->window.runLoop();
   }
 
-  return state.window.runLoop();
+  freeAppEntries(state);
+  delete state;
+  return rc;
 }

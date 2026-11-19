@@ -533,7 +533,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
   statusLine[47] = L'\0';
 
   LiliumUI::renderSidebar(c, statusLine, sideTitle, sideBody,
-                          L"[←/→/F2]:モード切替", L"[Esc/HOME]:戻る",
+                          L"[←→/F2]切替", L"[Esc/HM]戻る",
                           L"戻　る", false);
 
   if (st->alarmModal) {
