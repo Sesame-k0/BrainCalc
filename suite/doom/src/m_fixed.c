@@ -25,20 +25,7 @@
 
 #include "m_fixed.h"
 
-
-
-
-// Fixme. __USE_C_FIXED__ or something.
-
-fixed_t
-FixedMul
-( fixed_t	a,
-  fixed_t	b )
-{
-    return ((int64_t) a * (int64_t) b) >> FRACBITS;
-}
-
-
+// FixedMul is static inline in m_fixed.h (fast inline SMULL on ARM9)
 
 //
 // FixedDiv, C version.

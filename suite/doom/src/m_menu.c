@@ -74,7 +74,11 @@ int			showMessages = 1;
 	
 
 // Blocky mode, has default, 0 = high, 1 = normal
+#if defined(_WIN32_WCE) || defined(__MINGW32CE__)
+int			detailLevel = 1;
+#else
 int			detailLevel = 0;
+#endif
 int			screenblocks = 10;
 
 // temp for screenblocks (0-9)
@@ -1205,6 +1209,16 @@ void M_ChangeDetail(int choice)
 	players[consoleplayer].message = DEH_String(DETAILHI);
     else
 	players[consoleplayer].message = DEH_String(DETAILLO);
+}
+
+void LiliumDoom_ToggleDetail(void)
+{
+    M_ChangeDetail(0);
+}
+
+int LiliumDoom_GetDetail(void)
+{
+    return detailLevel;
 }
 
 

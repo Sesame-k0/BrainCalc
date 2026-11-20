@@ -44,6 +44,7 @@ struct lumpinfo_s
     wad_file_t *wad_file;
     int		position;
     int		size;
+    int		comp_size;
     void       *cache;
 
     // Used for hash table lookups

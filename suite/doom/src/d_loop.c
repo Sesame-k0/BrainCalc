@@ -761,6 +761,8 @@ void TryRunTics (void)
 
     if (counts < 1)
 	counts = 1;
+    if (counts > 3)
+	counts = 3;
 
     // wait for new tics if needed
 

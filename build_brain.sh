@@ -118,7 +118,11 @@ FILER_OUT="${APPS_DIR}/LiliumFiler.exe"
 echo "[INFO] Building Lilium Filer -> ${FILER_OUT}..."
 ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/filer/main.cpp ${SUITE_COMMON_SRCS} -o "${FILER_OUT}" ${SUITE_LDFLAGS}
 
-# 3. OSS DOOM (doomgeneric + Freedoom Phase 1) -> DIST_DIR/apps/doom.exe
+LIFE_OUT="${APPS_DIR}/LiliumLife.exe"
+echo "[INFO] Building Lilium Life -> ${LIFE_OUT}..."
+${SUITE_CXX} ${SUITE_CXXFLAGS} suite/life/main.cpp ${SUITE_COMMON_SRCS} -o "${LIFE_OUT}" ${SUITE_LDFLAGS}
+
+# 3. OSS DOOM (doomgeneric + Freedoom Phase 1 Mini ZWAD) -> DIST_DIR/apps/doom.exe
 DOOM_OBJ_DIR="${OUT_DIR}/doom_obj"
 mkdir -p "${DOOM_OBJ_DIR}"
 DOOM_MODS=(
@@ -137,8 +141,20 @@ echo "[INFO] Building Lilium DOOM C objects (${TOOLCHAIN_OPT})..."
 for mod in "${DOOM_MODS[@]}"; do
   src="suite/doom/src/${mod}.c"
   obj="${DOOM_OBJ_DIR}/${mod}.o"
-  if [[ ! -f "$obj" ]] || [[ "$src" -nt "$obj" ]] || [[ "suite/doom/wince_compat.h" -nt "$obj" ]]; then
-    ${DOOM_CC} ${DOOM_CFLAGS} -c "$src" -o "$obj"
+  EXTRA_OPT=""
+  if [[ "${TOOLCHAIN_OPT}" != "windows" ]]; then
+    case "$mod" in
+      r_draw|r_segs|r_plane|r_things|r_bsp|r_main)
+        EXTRA_OPT="-funroll-loops -fomit-frame-pointer"
+        ;;
+    esac
+  fi
+  if [[ ! -f "$obj" ]] || [[ "$src" -nt "$obj" ]] || \
+     [[ "suite/doom/wince_compat.h" -nt "$obj" ]] || \
+     [[ "suite/doom/src/m_fixed.h" -nt "$obj" ]] || \
+     [[ "suite/doom/src/w_wad.h" -nt "$obj" ]] || \
+     [[ "suite/doom/lilium_inflate.h" -nt "$obj" ]]; then
+    ${DOOM_CC} ${DOOM_CFLAGS} ${EXTRA_OPT} -c "$src" -o "$obj"
   fi
   DOOM_OBJS+=("$obj")
 done
@@ -153,24 +169,40 @@ if [[ ! -f "$COMPAT_OBJ" ]] || [[ "suite/doom/wince_compat.c" -nt "$COMPAT_OBJ" 
 fi
 DOOM_OBJS+=("$COMPAT_OBJ")
 
+INFLATE_OBJ="${DOOM_OBJ_DIR}/lilium_inflate.o"
+if [[ ! -f "$INFLATE_OBJ" ]] || [[ "suite/doom/lilium_inflate.c" -nt "$INFLATE_OBJ" ]] || [[ "suite/doom/lilium_inflate.h" -nt "$INFLATE_OBJ" ]]; then
+  ${DOOM_CC} ${COMPAT_CFLAGS} -c suite/doom/lilium_inflate.c -o "$INFLATE_OBJ"
+fi
+DOOM_OBJS+=("$INFLATE_OBJ")
+
 DOOM_OUT="${APPS_DIR}/doom.exe"
 echo "[INFO] Linking Lilium DOOM -> ${DOOM_OUT}..."
 ${SUITE_CXX} ${SUITE_CXXFLAGS} -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200 -Isuite/doom -Isuite/doom/src \
   suite/doom/doomgeneric_lilium.cpp ${SUITE_COMMON_SRCS} "${DOOM_OBJS[@]}" -o "${DOOM_OUT}" ${SUITE_LDFLAGS} -lm
 
-# Freedoom Phase 1 IWAD -> DIST_DIR/apps/freedoom1.wad
-WAD_SRC="suite/doom/wad/freedoom1.wad"
-if [[ ! -f "$WAD_SRC" ]] && command -v curl >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+# Freedoom Phase 1 Mini ZWAD (~4.6 MB Episode 1 + per-lump DEFLATE) -> DIST_DIR/apps/freedoom1.zwad
+RAW_WAD="suite/doom/wad/freedoom1.wad"
+ZWAD_SRC="suite/doom/wad/freedoom1.zwad"
+if [[ ! -f "$RAW_WAD" ]] && command -v curl >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
   echo "[INFO] Downloading Freedoom v0.13.0 (freedoom1.wad)..."
   mkdir -p "suite/doom/wad"
   curl -L -f -o "${DOOM_OBJ_DIR}/freedoom.zip" "https://github.com/freedoom/freedoom/releases/download/v0.13.0/freedoom-0.13.0.zip"
-  python3 -c 'import zipfile; z=zipfile.ZipFile("'"${DOOM_OBJ_DIR}/freedoom.zip"'"); n=[x for x in z.namelist() if x.lower().endswith("freedoom1.wad")][0]; open("'"${WAD_SRC}"'","wb").write(z.read(n))'
+  python3 -c 'import zipfile; z=zipfile.ZipFile("'"${DOOM_OBJ_DIR}/freedoom.zip"'"); n=[x for x in z.namelist() if x.lower().endswith("freedoom1.wad")][0]; open("'"${RAW_WAD}"'","wb").write(z.read(n))'
   rm -f "${DOOM_OBJ_DIR}/freedoom.zip"
 fi
-if [[ -f "$WAD_SRC" ]]; then
-  if [[ ! -f "${APPS_DIR}/freedoom1.wad" ]] || [[ "$WAD_SRC" -nt "${APPS_DIR}/freedoom1.wad" ]]; then
-    cp -f "$WAD_SRC" "${APPS_DIR}/freedoom1.wad"
+if [[ -f "$RAW_WAD" ]] && command -v python3 >/dev/null 2>&1; then
+  if [[ ! -f "$ZWAD_SRC" ]] || [[ "$RAW_WAD" -nt "$ZWAD_SRC" ]] || [[ "suite/doom/build_freedoom_mini.py" -nt "$ZWAD_SRC" ]]; then
+    echo "[INFO] Generating compressed Episode 1 ZWAD -> ${ZWAD_SRC}..."
+    python3 suite/doom/build_freedoom_mini.py "$RAW_WAD" "$ZWAD_SRC"
   fi
+fi
+if [[ -f "$ZWAD_SRC" ]]; then
+  if [[ ! -f "${APPS_DIR}/freedoom1.zwad" ]] || [[ "$ZWAD_SRC" -nt "${APPS_DIR}/freedoom1.zwad" ]]; then
+    cp -f "$ZWAD_SRC" "${APPS_DIR}/freedoom1.zwad"
+  fi
+  rm -f "${APPS_DIR}/freedoom1.wad" 2>/dev/null || true
+elif [[ -f "$RAW_WAD" ]]; then
+  cp -f "$RAW_WAD" "${APPS_DIR}/freedoom1.wad"
 fi
 
 # PW-SB4 動作必須のローダー (188KB AppMain.exe) と AppMain.cfg (8バイト) をリポジトリ内から確実に配置
@@ -213,10 +245,10 @@ echo "==========================================================================
 echo "[SUCCESS] Build completed!"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
   echo "  Launcher   : ${DIST_DIR}/AppMain.exe (LiliumLauncher.exe)"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, doom.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, doom.exe, LiliumLife.exe"
 else
   echo "  Launcher   : ${DIST_DIR}/AppMain_.exe"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, doom.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, doom.exe, LiliumLife.exe"
   echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe [loader], AppMain.cfg, AppMain_.exe [Launcher], index.din, font.ttf, apps/)"
 fi
 echo "=============================================================================="

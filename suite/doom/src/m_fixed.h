@@ -23,6 +23,8 @@
 
 
 
+#include <stdint.h>
+
 //
 // Fixed point, 32bit as 16.16.
 //
@@ -31,7 +33,11 @@
 
 typedef int fixed_t;
 
-fixed_t FixedMul	(fixed_t a, fixed_t b);
+static inline fixed_t FixedMul(fixed_t a, fixed_t b)
+{
+    return (fixed_t)(((int64_t) a * (int64_t) b) >> FRACBITS);
+}
+
 fixed_t FixedDiv	(fixed_t a, fixed_t b);
 
 

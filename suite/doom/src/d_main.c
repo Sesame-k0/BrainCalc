@@ -548,7 +548,10 @@ void D_DoAdvanceDemo (void)
 	pagename = DEH_String("CREDIT");
 	break;
       case 3:
-	G_DeferedPlayDemo(DEH_String("demo2"));
+	if (W_CheckNumForName(DEH_String("demo2")) >= 0)
+	    G_DeferedPlayDemo(DEH_String("demo2"));
+	else
+	    G_DeferedPlayDemo(DEH_String("demo1"));
 	break;
       case 4:
 	gamestate = GS_DEMOSCREEN;
@@ -562,18 +565,24 @@ void D_DoAdvanceDemo (void)
 	{
 	    pagetic = 200;
 
-	    if ( gamemode == retail )
+	    if ( gamemode == retail || W_CheckNumForName(DEH_String("HELP2")) < 0 )
 	      pagename = DEH_String("CREDIT");
 	    else
 	      pagename = DEH_String("HELP2");
 	}
 	break;
       case 5:
-	G_DeferedPlayDemo(DEH_String("demo3"));
+	if (W_CheckNumForName(DEH_String("demo3")) >= 0)
+	    G_DeferedPlayDemo(DEH_String("demo3"));
+	else
+	    G_DeferedPlayDemo(DEH_String("demo1"));
 	break;
         // THE DEFINITIVE DOOM Special Edition demo
       case 6:
-	G_DeferedPlayDemo(DEH_String("demo4"));
+	if (W_CheckNumForName(DEH_String("demo4")) >= 0)
+	    G_DeferedPlayDemo(DEH_String("demo4"));
+	else
+	    G_DeferedPlayDemo(DEH_String("demo1"));
 	break;
     }
 

@@ -10,6 +10,10 @@
 extern "C" {
 void LiliumDoom_OnQuit(void);
 void LiliumDoom_OnError(const char * msg);
+void LiliumDoom_SetPalette(const unsigned char * rgb768);
+void LiliumDoom_Present8Bit(const unsigned char * videoBuf);
+void LiliumDoom_ToggleDetail(void);
+int LiliumDoom_GetDetail(void);
 }
 
 namespace {
@@ -81,6 +85,14 @@ static HGDIOBJ sOldBitmap = NULL;
 static uint32_t * sPixels = nullptr;
 static LiliumUI::Canvas sCanvas = {};
 
+// Native 16bpp RGB565 game viewport DIB (eliminates 32->16 BitBlt conversion on ARM9!)
+static HDC sGameDC = NULL;
+static HBITMAP sGameBmp = NULL;
+static HGDIOBJ sGameOldBmp = NULL;
+static uint16_t * sGamePixels = nullptr;
+static uint32_t sPal565Pair[256] = {};
+static bool sGameReady = false;
+
 static bool sManageTaskBar = false;
 static volatile bool sQuitRequested = false;
 static bool sModalWaiting = false;
@@ -100,7 +112,7 @@ static int sLastBatPct = -1;
 static void pushDoomKey(int pressed, unsigned char doomKey) {
   if (doomKey == 0) return;
   int next = (sQueueWrite + 1) % kKeyQueueSize;
-  if (next == sQueueRead) return; // avoid overwriting oldest unhandled key
+  if (next == sQueueRead) return;
   sKeyQueue[sQueueWrite] = static_cast<uint16_t>(((pressed ? 1 : 0) << 8) | doomKey);
   sQueueWrite = next;
 }
@@ -134,7 +146,6 @@ static unsigned char mapVirtualKeyToDoom(WPARAM vk) {
     case VK_F1:
     case 'B':
     case 'N': return KEY_TAB;
-    case VK_F2: return KEY_F2;
     case VK_F4: return KEY_F4;
     case VK_F8: return KEY_F8;
     case VK_F9: return KEY_F9;
@@ -198,19 +209,20 @@ static void drawKeyGridBlock(int startX, int startY, const DoomKeyCap grid[3][5]
 static void renderLeftHeader() {
   sCanvas.fillRect(0, 0, LiliumUI::kMainW, kViewY, LiliumUI::kColCharcoal);
   sCanvas.fillRect(0, kViewY - 2, LiliumUI::kMainW, 2, LiliumUI::kColTeal);
-  sCanvas.drawText(14, 0, 220, kViewY - 2, LiliumUI::kColWhite,
+  sCanvas.drawText(14, 0, 200, kViewY - 2, LiliumUI::kColWhite,
                    L"LILIUM DOOM", 2, LiliumUI::Align::Left, true);
 
-  wchar_t badge[48];
+  const wchar_t * detailStr = LiliumDoom_GetDetail() ? L"LOW" : L"HI";
+  wchar_t badge[64];
   if (sCurrentFps > 0) {
-    _snwprintf(badge, 48, L"%s  %d FPS", sWadTitle, sCurrentFps);
+    _snwprintf(badge, 64, L"%s %s %d FPS", sWadTitle, detailStr, sCurrentFps);
   } else {
-    _snwprintf(badge, 48, L"%s", sWadTitle);
+    _snwprintf(badge, 64, L"%s %s", sWadTitle, detailStr);
   }
-  badge[47] = L'\0';
+  badge[63] = L'\0';
   int bw = sCanvas.measureWidth(badge, 2) + 18;
-  if (bw < 120) bw = 120;
-  if (bw > 280) bw = 280;
+  if (bw < 130) bw = 130;
+  if (bw > 340) bw = 340;
   sCanvas.drawBox(LiliumUI::kMainW - bw - 10, 7, bw, 24, 0x2E3840, LiliumUI::kColTeal);
   sCanvas.drawText(LiliumUI::kMainW - bw - 10, 7, bw, 24, LiliumUI::kColTealSoft,
                    badge, 2, LiliumUI::Align::Center, true);
@@ -253,7 +265,7 @@ static void renderFullChrome() {
   sCanvas.fillRect(0, 440, LiliumUI::kMainW, 40, LiliumUI::kColCharcoal);
   sCanvas.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColTealDark);
   sCanvas.drawText(10, 441, LiliumUI::kMainW - 20, 39, LiliumUI::kColTealSoft,
-                   L"[↑↓←→/WASD]移動 [Spc/F]撃 [E/F3]開 [HOME]終了",
+                   L"[↑↓←→]移動 [Spc/F]撃 [E/F3]開 [F2]画質 [HOME]終了",
                    2, LiliumUI::Align::Left, true);
 
   // Right 160x480 LiliumCalc-style Keyboard Guide Sidebar
@@ -266,9 +278,9 @@ static void renderFullChrome() {
 
   // Special keys summary card (y=66..136)
   sCanvas.drawBox(sx + 5, 66, sw - 10, 70, LiliumUI::kColWhite, LiliumUI::kColBorder);
-  sCanvas.drawText(sx + 8, 70,  sw - 16, 20, LiliumUI::kColText,     L"矢印:移動旋回",  2, LiliumUI::Align::Left, true);
-  sCanvas.drawText(sx + 8, 91,  sw - 16, 20, LiliumUI::kColTextSub,  L"Spc/F:撃 E:開", 2, LiliumUI::Align::Left, true);
-  sCanvas.drawText(sx + 8, 112, sw - 16, 20, LiliumUI::kColTealDeep, L"F1:図 Esc:Menu", 2, LiliumUI::Align::Left, true);
+  sCanvas.drawText(sx + 8, 70,  sw - 16, 20, LiliumUI::kColText,     L"矢印:移動旋回",   2, LiliumUI::Align::Left, true);
+  sCanvas.drawText(sx + 8, 91,  sw - 16, 20, LiliumUI::kColTextSub,  L"Spc/F:撃 E:開",  2, LiliumUI::Align::Left, true);
+  sCanvas.drawText(sx + 8, 112, sw - 16, 20, LiliumUI::kColTealDeep, L"F1:図 F2:画質",   2, LiliumUI::Align::Left, true);
 
   // Left-hand grid (y=142..276)
   sCanvas.drawText(sx + 6, 142, sw - 12, 18, LiliumUI::kColTealDark,
@@ -293,6 +305,20 @@ static void blitRectToScreen(int x, int y, int w, int h) {
   if (hdc) {
     BitBlt(hdc, x, y, w, h, sMemDC, x, y, SRCCOPY);
     ReleaseDC(sHwnd, hdc);
+  }
+}
+
+static void compositeToTargetDC(HDC hdcTarget, int px, int py, int pw, int ph) {
+  if (!sMemDC || !hdcTarget || pw <= 0 || ph <= 0) return;
+  BitBlt(hdcTarget, px, py, pw, ph, sMemDC, px, py, SRCCOPY);
+  if (sGameReady && !sModalWaiting && sGameDC) {
+    int ix0 = (px > kViewX) ? px : kViewX;
+    int iy0 = (py > kViewY) ? py : kViewY;
+    int ix1 = (px + pw < kViewX + kViewW) ? (px + pw) : (kViewX + kViewW);
+    int iy1 = (py + ph < kViewY + kViewH) ? (py + ph) : (kViewY + kViewH);
+    if (ix1 > ix0 && iy1 > iy0) {
+      BitBlt(hdcTarget, ix0, iy0, ix1 - ix0, iy1 - iy0, sGameDC, ix0 - kViewX, iy0 - kViewY, SRCCOPY);
+    }
   }
 }
 
@@ -334,6 +360,15 @@ static LRESULT CALLBACK DoomWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
 
       if (wParam == VK_HOME || wParam == VK_F10 || wParam == VK_F5 || wParam == VK_F7) {
         sQuitRequested = true;
+        return 0;
+      }
+
+      if (wParam == VK_F2) {
+        if (!isRepeat) {
+          LiliumDoom_ToggleDetail();
+          renderLeftHeader();
+          blitRectToScreen(0, 0, LiliumUI::kMainW, kViewY);
+        }
         return 0;
       }
 
@@ -389,15 +424,11 @@ static LRESULT CALLBACK DoomWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
     case WM_PAINT: {
       PAINTSTRUCT ps;
       HDC hdc = BeginPaint(hWnd, &ps);
-      if (sMemDC) {
-        int px = ps.rcPaint.left;
-        int py = ps.rcPaint.top;
-        int pw = ps.rcPaint.right - ps.rcPaint.left;
-        int ph = ps.rcPaint.bottom - ps.rcPaint.top;
-        if (pw > 0 && ph > 0) {
-          BitBlt(hdc, px, py, pw, ph, sMemDC, px, py, SRCCOPY);
-        }
-      }
+      int px = ps.rcPaint.left;
+      int py = ps.rcPaint.top;
+      int pw = ps.rcPaint.right - ps.rcPaint.left;
+      int ph = ps.rcPaint.bottom - ps.rcPaint.top;
+      compositeToTargetDC(hdc, px, py, pw, ph);
       EndPaint(hWnd, &ps);
       return 0;
     }
@@ -405,9 +436,7 @@ static LRESULT CALLBACK DoomWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
     case WM_PRINT:
     case WM_PRINTCLIENT: {
       HDC hdcTarget = reinterpret_cast<HDC>(wParam);
-      if (sMemDC && hdcTarget) {
-        BitBlt(hdcTarget, 0, 0, LiliumUI::kScreenW, LiliumUI::kScreenH, sMemDC, 0, 0, SRCCOPY);
-      }
+      compositeToTargetDC(hdcTarget, 0, 0, LiliumUI::kScreenW, LiliumUI::kScreenH);
       return 0;
     }
 
@@ -462,6 +491,8 @@ static bool initWindowAndCanvas() {
   if (!sHwnd) return false;
 
   HDC hdcScreen = GetDC(sHwnd);
+
+  // 1. 800x480 32bpp chrome/sidebar DIB
   sMemDC = CreateCompatibleDC(hdcScreen);
   BITMAPINFO bmi = {};
   bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -477,6 +508,31 @@ static bool initWindowAndCanvas() {
   if (sMemDC && sDibBitmap) {
     sOldBitmap = SelectObject(sMemDC, sDibBitmap);
   }
+
+  // 2. Native 16bpp RGB565 640x400 game viewport DIB
+  sGameDC = CreateCompatibleDC(hdcScreen);
+  struct {
+    BITMAPINFOHEADER hdr;
+    DWORD masks[3];
+  } bmi16 = {};
+  bmi16.hdr.biSize = sizeof(BITMAPINFOHEADER);
+  bmi16.hdr.biWidth = kViewW;
+  bmi16.hdr.biHeight = -kViewH;
+  bmi16.hdr.biPlanes = 1;
+  bmi16.hdr.biBitCount = 16;
+  bmi16.hdr.biCompression = BI_BITFIELDS;
+  bmi16.masks[0] = 0xF800;
+  bmi16.masks[1] = 0x07E0;
+  bmi16.masks[2] = 0x001F;
+
+  void * bits16 = nullptr;
+  sGameBmp = CreateDIBSection(hdcScreen, reinterpret_cast<BITMAPINFO *>(&bmi16),
+                              DIB_RGB_COLORS, &bits16, NULL, 0);
+  sGamePixels = static_cast<uint16_t *>(bits16);
+  if (sGameDC && sGameBmp) {
+    sGameOldBmp = SelectObject(sGameDC, sGameBmp);
+  }
+
   ReleaseDC(sHwnd, hdcScreen);
 
   sCanvas.pixels = sPixels;
@@ -495,6 +551,20 @@ static bool initWindowAndCanvas() {
 }
 
 static void shutdownWindowAndCanvas() {
+  sGameReady = false;
+  if (sGameDC) {
+    if (sGameOldBmp) {
+      SelectObject(sGameDC, sGameOldBmp);
+      sGameOldBmp = NULL;
+    }
+    DeleteDC(sGameDC);
+    sGameDC = NULL;
+  }
+  if (sGameBmp) {
+    DeleteObject(sGameBmp);
+    sGameBmp = NULL;
+    sGamePixels = nullptr;
+  }
   if (sMemDC) {
     if (sOldBitmap) {
       SelectObject(sMemDC, sOldBitmap);
@@ -522,9 +592,9 @@ static void showFatalModalAndWait(const wchar_t * title, const wchar_t * line1, 
   static constexpr LiliumUI::ModalButton kOkBtns[1] = { { L"戻る", false } };
   LiliumUI::renderConfirmModal(sCanvas, title, line1, line2, kOkBtns, 1, 0,
                                L"[Enter / Esc / タッチ]: 戻る");
+  sModalWaiting = true;
   blitRectToScreen(0, 0, LiliumUI::kScreenW, LiliumUI::kScreenH);
 
-  sModalWaiting = true;
   MSG msg;
   while (sModalWaiting && !sQuitRequested) {
     BOOL got = GetMessageW(&msg, NULL, 0, 0);
@@ -543,6 +613,7 @@ static bool findIwadFile(wchar_t * outPath, wchar_t * outName) {
   static constexpr const wchar_t * kCandidates[] = {
     L"doom1.wad",
     L"doom.wad",
+    L"freedoom1.zwad",
     L"freedoom1.wad",
     L"doom2.wad",
     L"freedoom2.wad"
@@ -555,7 +626,7 @@ static bool findIwadFile(wchar_t * outPath, wchar_t * outName) {
   const wchar_t * dirs[2] = { exeDir, rootDir };
   for (int d = 0; d < 2; ++d) {
     if (!dirs[d][0]) continue;
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 6; ++i) {
       wchar_t cand[MAX_PATH] = L"";
       LiliumUI::joinPath(dirs[d], kCandidates[i], cand, MAX_PATH);
       if (fileExistsW(cand)) {
@@ -588,27 +659,39 @@ void DG_Init(void) {
   sCurrentFps = 0;
 }
 
-void DG_DrawFrame(void) {
-  pumpWindowMessages();
-  if (sQuitRequested || !sPixels || !DG_ScreenBuffer) return;
+void LiliumDoom_SetPalette(const unsigned char * rgb768) {
+  if (!rgb768) return;
+  for (int i = 0; i < 256; ++i) {
+    uint32_t r = rgb768[i * 3 + 0];
+    uint32_t g = rgb768[i * 3 + 1];
+    uint32_t b = rgb768[i * 3 + 2];
+    uint16_t c16 = static_cast<uint16_t>(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+    sPal565Pair[i] = (static_cast<uint32_t>(c16) << 16) | static_cast<uint32_t>(c16);
+  }
+}
 
-  // Fast 2x integer expansion: 320x200 0x00RRGGBB -> 640x400 at (0, 40)
-  const uint32_t * src = DG_ScreenBuffer;
+void LiliumDoom_Present8Bit(const unsigned char * videoBuf) {
+  pumpWindowMessages();
+  if (sQuitRequested || !sGamePixels || !videoBuf || !sHwnd || !sGameDC) return;
+
+  // Single-pass 32-bit aligned pair expansion: 320x200 8-bit -> 640x400 16bpp RGB565
   for (int y = 0; y < DOOMGENERIC_RESY; ++y) {
-    const uint32_t * srcRow = src + y * DOOMGENERIC_RESX;
-    uint32_t * dstRow0 = sPixels + (kViewY + y * 2) * LiliumUI::kScreenW + kViewX;
-    uint32_t * dstRow1 = dstRow0 + LiliumUI::kScreenW;
+    const unsigned char * src = videoBuf + y * DOOMGENERIC_RESX;
+    uint16_t * row0 = sGamePixels + (y * 2) * kViewW;
+    uint16_t * row1 = row0 + kViewW;
+    uint32_t * dst32 = reinterpret_cast<uint32_t *>(row0);
     for (int x = 0; x < DOOMGENERIC_RESX; ++x) {
-      uint32_t rgb = srcRow[x];
-      int dx = x * 2;
-      dstRow0[dx]     = rgb;
-      dstRow0[dx + 1] = rgb;
-      dstRow1[dx]     = rgb;
-      dstRow1[dx + 1] = rgb;
+      dst32[x] = sPal565Pair[src[x]];
     }
+    memcpy(row1, row0, kViewW * sizeof(uint16_t));
   }
 
-  blitRectToScreen(kViewX, kViewY, kViewW, kViewH);
+  sGameReady = true;
+  HDC hdc = GetDC(sHwnd);
+  if (hdc) {
+    BitBlt(hdc, kViewX, kViewY, kViewW, kViewH, sGameDC, 0, 0, SRCCOPY);
+    ReleaseDC(sHwnd, hdc);
+  }
 
   ++sFpsFrames;
   DWORD now = GetTickCount();
@@ -632,6 +715,9 @@ void DG_DrawFrame(void) {
       blitRectToScreen(LiliumUI::kSidebarX, 0, LiliumUI::kSidebarW, 66);
     }
   }
+}
+
+void DG_DrawFrame(void) {
 }
 
 void DG_SleepMs(uint32_t ms) {
@@ -681,10 +767,10 @@ int main(int /*argc*/, char * /*argv*/[]) {
   sManageTaskBar = !LiliumUI::isLaunchedFromLauncherArg();
 
   wchar_t wadPathW[MAX_PATH] = L"";
-  wchar_t wadNameW[32] = L"freedoom1.wad";
+  wchar_t wadNameW[32] = L"freedoom1.zwad";
   if (!findIwadFile(wadPathW, wadNameW)) {
     showFatalModalAndWait(L"【 WAD ファイルが見つかりません 】",
-                          L"apps\\freedoom1.wad または doom1.wad が必要です",
+                          L"apps\\freedoom1.zwad または doom1.wad が必要です",
                           L"SDカード/NANDの apps\\ に WAD を配置してください。");
     shutdownWindowAndCanvas();
     return 1;
@@ -708,7 +794,6 @@ int main(int /*argc*/, char * /*argv*/[]) {
     saveDirW[sl + 1] = L'\0';
   }
 
-  char exeUtf8[MAX_PATH * 3] = "doom.exe";
   char wadUtf8[MAX_PATH * 3] = "";
   char saveUtf8[MAX_PATH * 3] = "";
   wideToUtf8(wadPathW, wadUtf8, sizeof(wadUtf8));
@@ -723,7 +808,6 @@ int main(int /*argc*/, char * /*argv*/[]) {
     argSave, saveUtf8,
     nullptr
   };
-  (void)exeUtf8;
 
   doomgeneric_Create(5, doomArgv);
 

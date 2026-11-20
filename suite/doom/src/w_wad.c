@@ -35,10 +35,11 @@
 #include "z_zone.h"
 
 #include "w_wad.h"
+#include "lilium_inflate.h"
 
 typedef struct
 {
-    // Should be "IWAD" or "PWAD".
+    // Should be "IWAD" or "PWAD" or "ZWAD".
     char		identification[4];		
     int			numlumps;
     int			infotableofs;
@@ -51,6 +52,14 @@ typedef struct
     int			size;
     char		name[8];
 } PACKEDATTR filelump_t;
+
+typedef struct
+{
+    int			filepos;
+    int			orig_size;
+    int			comp_size;
+    char		name[8];
+} PACKEDATTR zfilelump_t;
 
 //
 // GLOBALS
@@ -144,9 +153,14 @@ wad_file_t *W_AddFile (char *filename)
     wad_file_t *wad_file;
     int length;
     int startlump;
-    filelump_t *fileinfo;
+    filelump_t *fileinfo = NULL;
     filelump_t *filerover;
+    zfilelump_t *zfileinfo = NULL;
+    zfilelump_t *zfilerover;
+    boolean isZwad = false;
     int newnumlumps;
+    size_t fnlen;
+    boolean isWadExt;
 
     // open the file and add to directory
 
@@ -159,8 +173,11 @@ wad_file_t *W_AddFile (char *filename)
     }
 
     newnumlumps = numlumps;
+    fnlen = strlen(filename);
+    isWadExt = (fnlen >= 4 && !strcasecmp(filename + fnlen - 4, ".wad")) ||
+               (fnlen >= 5 && !strcasecmp(filename + fnlen - 5, ".zwad"));
 
-    if (strcasecmp(filename+strlen(filename)-3 , "wad" ) )
+    if (!isWadExt)
     {
     	// single lump file
 
@@ -181,27 +198,33 @@ wad_file_t *W_AddFile (char *filename)
     }
     else 
     {
-    	// WAD file
+    	// WAD / ZWAD file
         W_Read(wad_file, 0, &header, sizeof(header));
 
-		if (strncmp(header.identification,"IWAD",4))
+		if (strncmp(header.identification,"ZWAD",4) == 0)
 		{
-			// Homebrew levels?
-			if (strncmp(header.identification,"PWAD",4))
-			{
-			I_Error ("Wad file %s doesn't have IWAD "
-				 "or PWAD id\n", filename);
-			}
-
-			// ???modifiedgame = true;
+			isZwad = true;
+		}
+		else if (strncmp(header.identification,"IWAD",4) &&
+		         strncmp(header.identification,"PWAD",4))
+		{
+			I_Error ("Wad file %s doesn't have IWAD, PWAD, or ZWAD id\n", filename);
 		}
 
 		header.numlumps = LONG(header.numlumps);
 		header.infotableofs = LONG(header.infotableofs);
-		length = header.numlumps*sizeof(filelump_t);
-		fileinfo = Z_Malloc(length, PU_STATIC, 0);
-
-        W_Read(wad_file, header.infotableofs, fileinfo, length);
+		if (isZwad)
+		{
+			length = header.numlumps * sizeof(zfilelump_t);
+			zfileinfo = Z_Malloc(length, PU_STATIC, 0);
+			W_Read(wad_file, header.infotableofs, zfileinfo, length);
+		}
+		else
+		{
+			length = header.numlumps * sizeof(filelump_t);
+			fileinfo = Z_Malloc(length, PU_STATIC, 0);
+			W_Read(wad_file, header.infotableofs, fileinfo, length);
+		}
         newnumlumps += header.numlumps;
     }
 
@@ -211,21 +234,38 @@ wad_file_t *W_AddFile (char *filename)
 
     lump_p = &lumpinfo[startlump];
 
-    filerover = fileinfo;
-
-    for (i=startlump; i<numlumps; ++i)
+    if (isZwad)
     {
-		lump_p->wad_file = wad_file;
-		lump_p->position = LONG(filerover->filepos);
-		lump_p->size = LONG(filerover->size);
-			lump_p->cache = NULL;
-		strncpy(lump_p->name, filerover->name, 8);
-
-			++lump_p;
-			++filerover;
+        zfilerover = zfileinfo;
+        for (i=startlump; i<numlumps; ++i)
+        {
+            lump_p->wad_file = wad_file;
+            lump_p->position = LONG(zfilerover->filepos);
+            lump_p->size = LONG(zfilerover->orig_size);
+            lump_p->comp_size = LONG(zfilerover->comp_size);
+            lump_p->cache = NULL;
+            strncpy(lump_p->name, zfilerover->name, 8);
+            ++lump_p;
+            ++zfilerover;
+        }
+        Z_Free(zfileinfo);
     }
-
-    Z_Free(fileinfo);
+    else
+    {
+        filerover = fileinfo;
+        for (i=startlump; i<numlumps; ++i)
+        {
+            lump_p->wad_file = wad_file;
+            lump_p->position = LONG(filerover->filepos);
+            lump_p->size = LONG(filerover->size);
+            lump_p->comp_size = lump_p->size;
+            lump_p->cache = NULL;
+            strncpy(lump_p->name, filerover->name, 8);
+            ++lump_p;
+            ++filerover;
+        }
+        Z_Free(fileinfo);
+    }
 
     if (lumphash != NULL)
     {
@@ -352,13 +392,37 @@ void W_ReadLump(unsigned int lump, void *dest)
     l = lumpinfo+lump;
 	
     I_BeginRead ();
-	
-    c = W_Read(l->wad_file, l->position, dest, l->size);
 
-    if (c < l->size)
+    if (l->comp_size > 0 && l->comp_size < l->size)
     {
-	I_Error ("W_ReadLump: only read %i of %i on lump %i",
-		 c, l->size, lump);	
+        uint8_t *compBuf = (uint8_t *)malloc((size_t)l->comp_size);
+        if (!compBuf)
+        {
+            I_Error ("W_ReadLump: out of memory (%i) on lump %u", l->comp_size, lump);
+        }
+        c = W_Read(l->wad_file, l->position, compBuf, (size_t)l->comp_size);
+        if (c < l->comp_size)
+        {
+            free(compBuf);
+            I_Error ("W_ReadLump: only read %i of %i on lump %i",
+                     c, l->comp_size, lump);
+        }
+        if (lilium_inflate_raw(compBuf, (size_t)l->comp_size, (uint8_t *)dest, (size_t)l->size) != l->size)
+        {
+            free(compBuf);
+            I_Error ("W_ReadLump: inflate failed on lump %i", lump);
+        }
+        free(compBuf);
+    }
+    else
+    {
+        c = W_Read(l->wad_file, l->position, dest, l->size);
+
+        if (c < l->size)
+        {
+            I_Error ("W_ReadLump: only read %i of %i on lump %i",
+                     c, l->size, lump);
+        }
     }
 
     I_EndRead ();

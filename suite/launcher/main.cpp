@@ -63,14 +63,15 @@ static bool hasExeSuffix(const wchar_t * name) {
 }
 
 static bool isBuiltInRelName(const wchar_t * fileName) {
-  static constexpr const wchar_t * kBuiltInFiles[5] = {
+  static constexpr const wchar_t * kBuiltInFiles[6] = {
     L"LiliumCalc.exe",
     L"LiliumTaskMgr.exe",
     L"LiliumClock.exe",
     L"LiliumFiler.exe",
-    L"doom.exe"
+    L"doom.exe",
+    L"LiliumLife.exe"
   };
-  for (int i = 0; i < 5; ++i) {
+  for (int i = 0; i < 6; ++i) {
     if (_wcsicmp(fileName, kBuiltInFiles[i]) == 0) return true;
   }
   return false;
@@ -319,6 +320,7 @@ static void scanApps(LauncherState * st) {
   addBuiltInEntry(st, appsDir, L"Lilium Clock", L"LiliumClock.exe", 2);
   addBuiltInEntry(st, appsDir, L"Lilium Filer", L"LiliumFiler.exe", 3);
   addBuiltInEntry(st, appsDir, L"DOOM", L"doom.exe", 4);
+  addBuiltInEntry(st, appsDir, L"Lilium Life", L"LiliumLife.exe", 5);
   const int extStart = st->appCount;
 
   // 2. Dynamic scan of apps\* for additional EXEs and Brain app subfolders
@@ -481,6 +483,17 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, const AppEntry & a
     c.fillRect(x + 31, y + 19, 8, 4, LiliumUI::kColWhite);
     c.fillRect(x + 20, y + 31, 16, 3, LiliumUI::kColDangerFill);
     c.fillRect(x + 17, y + 36, 22, 5, 0x444E58);
+  } else if (app.builtInKind == 5) {
+    // Lilium Life 5-cell Conway Glider emblem on dark background
+    c.drawBox(x + 10, y + 10, 36, 36, 0x141B20, LiliumUI::kColTealDark);
+    c.drawThickFrame(x + 10, y + 10, 36, 36, 2, LiliumUI::kColCharcoal);
+    static constexpr int kGliderCells[5][2] = { {1,0}, {2,1}, {0,2}, {1,2}, {2,2} };
+    for (int g = 0; g < 5; ++g) {
+      int gx = x + 16 + kGliderCells[g][0] * 8;
+      int gy = y + 16 + kGliderCells[g][1] * 8;
+      uint32_t col = (g == 1) ? 0xA8ECE2 : LiliumUI::kColTeal;
+      c.fillRect(gx, gy, 7, 7, col);
+    }
   } else if (app.hasCustomIcon && app.cachedIcon) {
     // Extracted 48x48 EXE icon inside crisp 56x56 frame
     c.drawBox(x, y, 56, 56, LiliumUI::kColWhite, selected ? LiliumUI::kColTeal : LiliumUI::kColBorder);
