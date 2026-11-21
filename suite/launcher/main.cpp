@@ -63,15 +63,16 @@ static bool hasExeSuffix(const wchar_t * name) {
 }
 
 static bool isBuiltInRelName(const wchar_t * fileName) {
-  static constexpr const wchar_t * kBuiltInFiles[6] = {
+  static constexpr const wchar_t * kBuiltInFiles[7] = {
     L"LiliumCalc.exe",
     L"LiliumTaskMgr.exe",
     L"LiliumClock.exe",
     L"LiliumFiler.exe",
     L"doom.exe",
-    L"LiliumLife.exe"
+    L"LiliumLife.exe",
+    L"LiliumTimeTable.exe"
   };
-  for (int i = 0; i < 6; ++i) {
+  for (int i = 0; i < 7; ++i) {
     if (_wcsicmp(fileName, kBuiltInFiles[i]) == 0) return true;
   }
   return false;
@@ -321,6 +322,7 @@ static void scanApps(LauncherState * st) {
   addBuiltInEntry(st, appsDir, L"Lilium Filer", L"LiliumFiler.exe", 3);
   addBuiltInEntry(st, appsDir, L"DOOM", L"doom.exe", 4);
   addBuiltInEntry(st, appsDir, L"Lilium Life", L"LiliumLife.exe", 5);
+  addBuiltInEntry(st, appsDir, L"Lilium TimeTable", L"LiliumTimeTable.exe", 6);
   const int extStart = st->appCount;
 
   // 2. Dynamic scan of apps\* for additional EXEs and Brain app subfolders
@@ -493,6 +495,21 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, const AppEntry & a
       int gy = y + 16 + kGliderCells[g][1] * 8;
       uint32_t col = (g == 1) ? 0xA8ECE2 : LiliumUI::kColTeal;
       c.fillRect(gx, gy, 7, 7, col);
+    }
+  } else if (app.builtInKind == 6) {
+    // Lilium TimeTable colorful 3x3 schedule grid emblem
+    c.drawBox(x + 10, y + 10, 36, 36, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
+    c.drawThickFrame(x + 10, y + 10, 36, 36, 2, LiliumUI::kColCharcoal);
+    c.fillRect(x + 12, y + 12, 32, 6, LiliumUI::kColTealDark);
+    static constexpr uint32_t kCellCols[3][3] = {
+      { 0x3578D4, 0xE2F5F2, 0xD44864 },
+      { 0xE2F5F2, 0x2E9B56, 0xCC8218 },
+      { 0x7A54C8, 0x3578D4, 0x1B95B0 }
+    };
+    for (int row = 0; row < 3; ++row) {
+      for (int col = 0; col < 3; ++col) {
+        c.fillRect(x + 14 + col * 10, y + 21 + row * 7, 8, 5, kCellCols[row][col]);
+      }
     }
   } else if (app.hasCustomIcon && app.cachedIcon) {
     // Extracted 48x48 EXE icon inside crisp 56x56 frame

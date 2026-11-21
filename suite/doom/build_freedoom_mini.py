@@ -173,8 +173,9 @@ def main():
         elif name not in MAP_SUBLUMPS:
             cur_map = None
 
-        # Strip audio lumps
-        if name.startswith("DS") or name.startswith("DP") or name.startswith("D_"):
+        # Strip all audio & unused MIDI/GUS synth lookup lumps (keep M_MUSVOL menu graphic!)
+        if (name.startswith("DS") or name.startswith("DP") or name.startswith("D_") or
+                name in ("GENMIDI", "DMXGUS", "DMXGUSC", "SNDCURVE")):
             continue
         # Strip E2..E4 levels & multi-episode demos
         if cur_map is not None and cur_map not in e1_maps:

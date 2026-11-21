@@ -122,6 +122,10 @@ LIFE_OUT="${APPS_DIR}/LiliumLife.exe"
 echo "[INFO] Building Lilium Life -> ${LIFE_OUT}..."
 ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/life/main.cpp ${SUITE_COMMON_SRCS} -o "${LIFE_OUT}" ${SUITE_LDFLAGS}
 
+TIMETABLE_OUT="${APPS_DIR}/LiliumTimeTable.exe"
+echo "[INFO] Building Lilium TimeTable -> ${TIMETABLE_OUT}..."
+${SUITE_CXX} ${SUITE_CXXFLAGS} suite/timetable/main.cpp ${SUITE_COMMON_SRCS} -o "${TIMETABLE_OUT}" ${SUITE_LDFLAGS}
+
 # 3. OSS DOOM (doomgeneric + Freedoom Phase 1 Mini ZWAD) -> DIST_DIR/apps/doom.exe
 DOOM_OBJ_DIR="${OUT_DIR}/doom_obj"
 mkdir -p "${DOOM_OBJ_DIR}"
@@ -245,10 +249,10 @@ echo "==========================================================================
 echo "[SUCCESS] Build completed!"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
   echo "  Launcher   : ${DIST_DIR}/AppMain.exe (LiliumLauncher.exe)"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, doom.exe, LiliumLife.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, doom.exe"
 else
   echo "  Launcher   : ${DIST_DIR}/AppMain_.exe"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, doom.exe, LiliumLife.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, doom.exe"
   echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe [loader], AppMain.cfg, AppMain_.exe [Launcher], index.din, font.ttf, apps/)"
 fi
 echo "=============================================================================="

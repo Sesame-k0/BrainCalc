@@ -1,5 +1,6 @@
 #include "../common/lilium_ui.h"
 
+#include <new>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +15,17 @@ constexpr int kViewerVisibleLines = 15;
 constexpr DWORD kMaxTextLoadBytes = 64 * 1024;
 constexpr int kHexBytesPerRow = 12;
 constexpr int kHexRowsPerPage = 15;
+constexpr int kToolCount = 7;
+
+enum ToolAction {
+  ToolRoot = 0,
+  ToolLilium = 1,
+  ToolCopy = 2,
+  ToolPaste = 3,
+  ToolNewFolder = 4,
+  ToolDelete = 5,
+  ToolRefresh = 6
+};
 
 struct FileEntry {
   wchar_t name[MAX_PATH];
@@ -43,6 +55,10 @@ struct FilerState {
   int scroll = 0;
   int prevScroll = 0;
 
+  // Icon-only top toolbar focus state (1-7 / Q-U focus, Esc/BS/Down returns to list)
+  bool toolbarFocused = false;
+  int toolbarSel = 0;
+
   // Clipboard copy mark
   wchar_t copySrcPath[MAX_PATH] = L"";
   wchar_t copySrcName[128] = L"";
@@ -68,16 +84,6 @@ struct FilerState {
   wchar_t msgLine1[96] = L"";
   wchar_t msgLine2[96] = L"";
 };
-
-static bool containsNoCase(const wchar_t * hay, const wchar_t * needle) {
-  if (!hay || !needle || !needle[0]) return false;
-  size_t hLen = wcslen(hay), nLen = wcslen(needle);
-  if (nLen > hLen) return false;
-  for (size_t i = 0; i + nLen <= hLen; ++i) {
-    if (_wcsnicmp(hay + i, needle, nLen) == 0) return true;
-  }
-  return false;
-}
 
 static void formatSizeStr(const FileEntry & e, wchar_t * out, size_t maxLen) {
   if (e.isParent) {
@@ -384,8 +390,57 @@ static void openFileInViewer(FilerState * st, const FileEntry & e) {
   st->window.requestRepaint(true);
 }
 
-static bool isProtectedFile(const wchar_t * fullPath, const wchar_t * name) {
-  if (containsNoCase(fullPath, L"\\Windows")) return true;
+static bool pathMatchesPrefixDir(const wchar_t * path, const wchar_t * dirPrefix) {
+  if (!path || !dirPrefix || !dirPrefix[0]) return false;
+  size_t pLen = wcslen(dirPrefix);
+  if (_wcsnicmp(path, dirPrefix, pLen) != 0) return false;
+  wchar_t nextCh = path[pLen];
+  return nextCh == L'\0' || nextCh == L'\\' || nextCh == L'/';
+}
+
+static bool isProtectedSystemDir(const wchar_t * dirPath) {
+  if (!dirPath || !dirPath[0]) return true;
+  if (wcscmp(dirPath, L"\\") == 0) return true;
+
+  static constexpr const wchar_t * kCeProtectedDirs[] = {
+    L"\\Windows",
+    L"\\NAND",
+    L"\\NAND1",
+    L"\\NAND2",
+    L"\\NAND4",
+    L"\\NAND5",
+    L"\\NAND6",
+    L"\\NAND8",
+    L"\\Program Files",
+    L"\\Application Data",
+    L"\\Profiles"
+  };
+  for (int i = 0; i < static_cast<int>(sizeof(kCeProtectedDirs) / sizeof(kCeProtectedDirs[0])); ++i) {
+    if (pathMatchesPrefixDir(dirPath, kCeProtectedDirs[i])) return true;
+  }
+
+  // Host Windows system directories (X:\Windows, X:\Program Files, etc.)
+  if (((dirPath[0] >= L'A' && dirPath[0] <= L'Z') || (dirPath[0] >= L'a' && dirPath[0] <= L'z')) &&
+      dirPath[1] == L':') {
+    const wchar_t * sub = dirPath + 2;
+    static constexpr const wchar_t * kHostProtectedDirs[] = {
+      L"\\Windows",
+      L"\\Program Files",
+      L"\\Program Files (x86)",
+      L"\\ProgramData",
+      L"\\System Volume Information",
+      L"\\$Recycle.Bin"
+    };
+    for (int i = 0; i < static_cast<int>(sizeof(kHostProtectedDirs) / sizeof(kHostProtectedDirs[0])); ++i) {
+      if (pathMatchesPrefixDir(sub, kHostProtectedDirs[i])) return true;
+    }
+  }
+  return false;
+}
+
+static bool isEntryProtectedForDelete(const FilerState * st, const wchar_t * fullPath, const wchar_t * name) {
+  if (!st || st->atDriveList) return true;
+  if (isProtectedSystemDir(st->curDir) || isProtectedSystemDir(fullPath)) return true;
   if (_wcsicmp(name, L"AppMain.exe") == 0 ||
       _wcsicmp(name, L"AppMain.cfg") == 0 ||
       _wcsicmp(name, L"AppMain_.exe") == 0 ||
@@ -395,15 +450,51 @@ static bool isProtectedFile(const wchar_t * fullPath, const wchar_t * name) {
   return false;
 }
 
-static void executeDeleteSelected(FilerState * st) {
+static void showFilerModal(FilerState * st, ModalMode mode,
+                           const wchar_t * title, const wchar_t * l1, const wchar_t * l2) {
+  wcsncpy(st->msgTitle, title, 63);
+  st->msgTitle[63] = L'\0';
+  wcsncpy(st->msgLine1, l1, 95);
+  st->msgLine1[95] = L'\0';
+  wcsncpy(st->msgLine2, l2, 95);
+  st->msgLine2[95] = L'\0';
+  st->modal = mode;
+  st->modalFocus = 0;
+  st->window.requestRepaint(true);
+}
+
+static void copySelectedEntry(FilerState * st) {
   if (st->sel < 0 || st->sel >= st->entryCount) return;
   const FileEntry & e = st->entries[st->sel];
+  if (e.isParent || e.isDriveRoot || e.isDir) {
+    showFilerModal(st, ModalMode::MessageBox,
+                   L"【 コピー指定不可 】",
+                   L"フォルダ等はコピー指定できません。",
+                   L"コピー対象のファイルを選択してから実行してください。");
+    return;
+  }
+  buildFullEntryPath(st, e, st->copySrcPath, MAX_PATH);
+  wcsncpy(st->copySrcName, e.name, 127);
+  st->copySrcName[127] = L'\0';
+  st->window.requestRepaint(true);
+}
+
+static void executeDeleteSelected(FilerState * st) {
+  if (st->sel < 0 || st->sel >= st->entryCount) return;
+  const FileEntry e = st->entries[st->sel];
   if (e.isParent || e.isDriveRoot) return;
 
   wchar_t fullPath[MAX_PATH];
   buildFullEntryPath(st, e, fullPath, MAX_PATH);
-  BOOL ok = e.isDir ? RemoveDirectoryW(fullPath) : DeleteFileW(fullPath);
+  if (isEntryProtectedForDelete(st, fullPath, e.name)) {
+    showFilerModal(st, ModalMode::ProtectedWarn,
+                   L"【 削除保護領域 】",
+                   e.name,
+                   L"OS・NANDシステム領域や必須ファイルは削除できません。");
+    return;
+  }
 
+  BOOL ok = e.isDir ? RemoveDirectoryW(fullPath) : DeleteFileW(fullPath);
   if (ok) {
     int oldSel = st->sel;
     wchar_t curCopy[MAX_PATH];
@@ -413,31 +504,102 @@ static void executeDeleteSelected(FilerState * st) {
     if (oldSel < st->entryCount) st->sel = oldSel;
     else if (st->entryCount > 0) st->sel = st->entryCount - 1;
     adjustListScroll(st->sel, st->entryCount, st->scroll);
-    wcsncpy(st->msgTitle, L"【 削除完了 】", 63);
-    wcsncpy(st->msgLine1, e.name, 95);
-    wcsncpy(st->msgLine2, L"削除しました。", 95);
+    showFilerModal(st, ModalMode::MessageBox, L"【 削除完了 】", e.name, L"削除しました。");
   } else {
-    wcsncpy(st->msgTitle, L"【 削除失敗 】", 63);
-    wcsncpy(st->msgLine1, e.name, 95);
-    wcsncpy(st->msgLine2, e.isDir ? L"空でないフォルダは削除できません。" : L"使用中または保護されています。", 95);
+    showFilerModal(st, ModalMode::MessageBox,
+                   L"【 削除失敗 】",
+                   e.name,
+                   e.isDir ? L"空でないフォルダは削除できません。" : L"使用中または保護されています。");
   }
-  st->msgTitle[63] = L'\0';
-  st->msgLine1[95] = L'\0';
-  st->msgLine2[95] = L'\0';
-  st->modal = ModalMode::MessageBox;
-  st->modalFocus = 0;
-  st->window.requestRepaint(true);
+}
+
+static void requestDeleteSelected(FilerState * st) {
+  if (st->sel < 0 || st->sel >= st->entryCount) return;
+  const FileEntry & e = st->entries[st->sel];
+  if (e.isParent || e.isDriveRoot) return;
+  wchar_t fullPath[MAX_PATH];
+  buildFullEntryPath(st, e, fullPath, MAX_PATH);
+  if (isEntryProtectedForDelete(st, fullPath, e.name)) {
+    showFilerModal(st, ModalMode::ProtectedWarn,
+                   L"【 削除保護領域 】",
+                   e.name,
+                   L"OS・NANDシステム領域や必須ファイルは削除できません。");
+  } else {
+    st->modal = ModalMode::DeleteConfirm;
+    st->modalFocus = 1; // Cancel default
+    st->window.requestRepaint(true);
+  }
+}
+
+static void executeCreateFolder(FilerState * st) {
+  if (st->atDriveList || isProtectedSystemDir(st->curDir)) {
+    showFilerModal(st, ModalMode::ProtectedWarn,
+                   L"【 書き込み保護領域 】",
+                   L"システム保護領域には新規作成できません。",
+                   L"\\Storage Card や \\NAND3 等で実行してください。");
+    return;
+  }
+
+  wchar_t newName[64] = L"";
+  wchar_t candPath[MAX_PATH] = L"";
+  bool foundFree = false;
+  for (int i = 1; i <= 99; ++i) {
+    if (i == 1) wcscpy(newName, L"NewFolder");
+    else _snwprintf(newName, 64, L"NewFolder_%d", i);
+    newName[63] = L'\0';
+
+    FileEntry dummy = {};
+    wcsncpy(dummy.name, newName, MAX_PATH - 1);
+    buildFullEntryPath(st, dummy, candPath, MAX_PATH);
+    if (GetFileAttributesW(candPath) == INVALID_FILE_ATTRIBUTES) {
+      foundFree = true;
+      break;
+    }
+  }
+
+  if (!foundFree || !CreateDirectoryW(candPath, NULL)) {
+    showFilerModal(st, ModalMode::MessageBox,
+                   L"【 フォルダ作成失敗 】",
+                   newName,
+                   L"書き込み権限または空き容量をご確認ください。");
+    return;
+  }
+
+  wchar_t curCopy[MAX_PATH];
+  wcsncpy(curCopy, st->curDir, MAX_PATH - 1);
+  curCopy[MAX_PATH - 1] = L'\0';
+  loadDirectory(st, curCopy);
+  for (int i = 0; i < st->entryCount; ++i) {
+    if (_wcsicmp(st->entries[i].name, newName) == 0) {
+      st->sel = i;
+      adjustListScroll(st->sel, st->entryCount, st->scroll);
+      break;
+    }
+  }
+  showFilerModal(st, ModalMode::MessageBox, L"【 フォルダ作成完了 】", newName, L"新しいフォルダを作成しました。");
 }
 
 static void executePasteCopy(FilerState * st) {
-  if (st->atDriveList || !st->copySrcPath[0]) return;
+  if (st->atDriveList || isProtectedSystemDir(st->curDir)) {
+    showFilerModal(st, ModalMode::ProtectedWarn,
+                   L"【 書き込み保護領域 】",
+                   L"システム保護領域へは貼り付けできません。",
+                   L"コピー元としての読み出しのみ許可されています。");
+    return;
+  }
+  if (!st->copySrcPath[0]) {
+    showFilerModal(st, ModalMode::MessageBox,
+                   L"【 貼り付け待機なし 】",
+                   L"コピー元のファイルが選択されていません。",
+                   L"[3] アイコンでコピー元を指定してください。");
+    return;
+  }
   wchar_t dstPath[MAX_PATH];
   FileEntry dummy = {};
   wcsncpy(dummy.name, st->copySrcName, MAX_PATH - 1);
   buildFullEntryPath(st, dummy, dstPath, MAX_PATH);
 
   if (_wcsicmp(dstPath, st->copySrcPath) == 0) {
-    // Append _copy suffix to allow in-same-folder duplication
     _snwprintf(dstPath, MAX_PATH, L"%ls\\copy_%ls", st->curDir, st->copySrcName);
     dstPath[MAX_PATH - 1] = L'\0';
   }
@@ -448,20 +610,10 @@ static void executePasteCopy(FilerState * st) {
     wcsncpy(curCopy, st->curDir, MAX_PATH - 1);
     curCopy[MAX_PATH - 1] = L'\0';
     loadDirectory(st, curCopy);
-    wcsncpy(st->msgTitle, L"【 コピー完了 】", 63);
-    wcsncpy(st->msgLine1, st->copySrcName, 95);
-    wcsncpy(st->msgLine2, L"現在のフォルダへコピーしました。", 95);
+    showFilerModal(st, ModalMode::MessageBox, L"【 コピー完了 】", st->copySrcName, L"現在のフォルダへコピーしました。");
   } else {
-    wcsncpy(st->msgTitle, L"【 コピー失敗 】", 63);
-    wcsncpy(st->msgLine1, st->copySrcName, 95);
-    wcsncpy(st->msgLine2, L"書き込み先や空き容量をご確認ください。", 95);
+    showFilerModal(st, ModalMode::MessageBox, L"【 コピー失敗 】", st->copySrcName, L"書き込み先や空き容量をご確認ください。");
   }
-  st->msgTitle[63] = L'\0';
-  st->msgLine1[95] = L'\0';
-  st->msgLine2[95] = L'\0';
-  st->modal = ModalMode::MessageBox;
-  st->modalFocus = 0;
-  st->window.requestRepaint(true);
 }
 
 static void renderEntryRow(LiliumUI::Canvas & c, const FilerState * st, int r) {
@@ -577,6 +729,149 @@ static void renderViewerPanel(LiliumUI::Canvas & c, const FilerState * st) {
   }
 }
 
+static void drawToolbarIconGlyph(LiliumUI::Canvas & c, int idx, int bx, int by, int bw, int bh,
+                                 bool focused, bool locked) {
+  int cx = bx + bw / 2;
+  int cy = by + bh / 2;
+  uint32_t ink = locked ? LiliumUI::kColLightMuted : LiliumUI::kColCharcoal;
+  uint32_t accent = locked ? LiliumUI::kColLightMuted : LiliumUI::kColTealDark;
+
+  switch (idx) {
+    case ToolRoot: {
+      c.drawBox(cx - 11, cy - 6, 22, 12, LiliumUI::kColWhite, ink);
+      c.fillRect(cx - 8, cy - 2, 16, 2, ink);
+      c.fillRect(cx + 4, cy + 2, 4, 2, focused ? LiliumUI::kColTealDark : LiliumUI::kColTeal);
+      break;
+    }
+    case ToolLilium: {
+      for (int row = 0; row < 6; ++row) {
+        c.fillRect(cx - row * 2 - 1, cy - 9 + row, row * 4 + 3, 1, accent);
+      }
+      c.drawBox(cx - 8, cy - 3, 16, 11, LiliumUI::kColWhite, accent);
+      c.fillRect(cx - 2, cy + 2, 5, 6, accent);
+      break;
+    }
+    case ToolCopy: {
+      c.drawBox(cx - 9, cy - 8, 12, 13, 0xE6EEF2, ink);
+      c.drawBox(cx - 3, cy - 4, 12, 13, LiliumUI::kColWhite, ink);
+      c.fillRect(cx, cy, 6, 2, accent);
+      c.fillRect(cx, cy + 4, 6, 2, ink);
+      break;
+    }
+    case ToolPaste: {
+      c.drawBox(cx - 8, cy - 6, 16, 15, LiliumUI::kColWhite, ink);
+      c.fillRect(cx - 4, cy - 9, 8, 4, accent);
+      c.fillRect(cx - 4, cy - 1, 8, 2, ink);
+      c.fillRect(cx - 4, cy + 3, 6, 2, ink);
+      break;
+    }
+    case ToolNewFolder: {
+      uint32_t bodyBg = locked ? 0xE8ECEF : LiliumUI::kColTealSoft;
+      c.fillRect(cx - 10, cy - 7, 8, 3, ink);
+      c.drawBox(cx - 10, cy - 5, 20, 13, bodyBg, ink);
+      c.fillRect(cx - 4, cy + 1, 8, 2, accent);
+      c.fillRect(cx - 1, cy - 2, 2, 8, accent);
+      break;
+    }
+    case ToolDelete: {
+      uint32_t dCol = locked ? LiliumUI::kColLightMuted : LiliumUI::kColDangerFill;
+      uint32_t dBg = locked ? 0xEAECEF : LiliumUI::kColWhite;
+      c.fillRect(cx - 3, cy - 9, 6, 2, dCol);
+      c.fillRect(cx - 8, cy - 7, 16, 2, dCol);
+      c.drawBox(cx - 6, cy - 4, 12, 12, dBg, dCol);
+      c.fillRect(cx - 3, cy - 1, 2, 7, dCol);
+      c.fillRect(cx - 1, cy - 1, 2, 7, dCol);
+      c.fillRect(cx + 1, cy - 1, 2, 7, dCol);
+      break;
+    }
+    case ToolRefresh:
+    default: {
+      c.fillRect(cx - 7, cy - 5, 11, 2, accent);
+      c.fillRect(cx + 3, cy - 7, 2, 6, accent);
+      c.fillRect(cx + 5, cy - 6, 2, 4, accent);
+      c.fillRect(cx + 7, cy - 5, 2, 2, accent);
+      c.fillRect(cx - 4, cy + 3, 11, 2, accent);
+      c.fillRect(cx - 5, cy + 1, 2, 6, accent);
+      c.fillRect(cx - 7, cy + 2, 2, 4, accent);
+      c.fillRect(cx - 9, cy + 3, 2, 2, accent);
+      break;
+    }
+  }
+
+  if (locked) {
+    // Compact lock indicator at top-right of icon button
+    c.drawBox(bx + bw - 9, by + 3, 6, 6, LiliumUI::kColDangerBg, LiliumUI::kColDangerFill);
+  }
+}
+
+static bool isToolActionLocked(const FilerState * st, int idx) {
+  if (!st) return true;
+  bool dirProt = st->atDriveList || isProtectedSystemDir(st->curDir);
+  if (idx == ToolPaste || idx == ToolNewFolder) return dirProt;
+  if (idx == ToolDelete) {
+    if (st->sel < 0 || st->sel >= st->entryCount) return true;
+    const FileEntry & e = st->entries[st->sel];
+    if (e.isParent || e.isDriveRoot) return true;
+    wchar_t full[MAX_PATH];
+    buildFullEntryPath(st, e, full, MAX_PATH);
+    return isEntryProtectedForDelete(st, full, e.name);
+  }
+  return false;
+}
+
+static void renderIconToolbar(LiliumUI::Canvas & c, const FilerState * st) {
+  for (int i = 0; i < kToolCount; ++i) {
+    int bx = 12 + i * 56;
+    int by = 80;
+    int bw = 50;
+    int bh = 30;
+    bool focused = st->toolbarFocused && (st->toolbarSel == i);
+    bool locked = isToolActionLocked(st, i);
+
+    uint32_t bg = LiliumUI::kColWhite;
+    uint32_t bd = LiliumUI::kColBorder;
+    if (locked && !focused) {
+      bg = 0xF0F3F7;
+    }
+    if (focused) {
+      if (i == ToolDelete && !locked) {
+        bg = LiliumUI::kColDangerBg;
+        bd = LiliumUI::kColDangerFill;
+      } else if (locked) {
+        bg = LiliumUI::kColWarnBg;
+        bd = LiliumUI::kColWarnBorder;
+      } else {
+        bg = LiliumUI::kColTealSoft;
+        bd = LiliumUI::kColTealDark;
+      }
+    }
+    c.drawBox(bx, by, bw, bh, bg, bd);
+    if (focused) {
+      c.drawThickFrame(bx, by, bw, bh, 2, bd);
+      c.fillRect(bx, by + bh - 2, bw, 2, bd);
+    }
+    drawToolbarIconGlyph(c, i, bx, by, bw, bh, focused, locked);
+  }
+
+  // Status pill on right of toolbar (x=406..628)
+  bool dirProt = st->atDriveList || isProtectedSystemDir(st->curDir);
+  if (dirProt) {
+    c.drawBox(406, 80, 222, 30, LiliumUI::kColWarnBg, LiliumUI::kColWarnBorder);
+    c.drawText(412, 80, 210, 30, LiliumUI::kColWarnText,
+               L"保護領域 (複写元のみ可)", 2, LiliumUI::Align::Center, true);
+  } else if (st->copySrcName[0]) {
+    wchar_t cpBuf[96];
+    _snwprintf(cpBuf, 96, L"複写:%ls", st->copySrcName);
+    cpBuf[95] = L'\0';
+    c.drawBox(406, 80, 222, 30, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
+    c.drawText(412, 80, 210, 30, LiliumUI::kColTealDeep, cpBuf, 2, LiliumUI::Align::Center, true);
+  } else {
+    c.drawBox(406, 80, 222, 30, LiliumUI::kColWhite, LiliumUI::kColBorder);
+    c.drawText(412, 80, 210, 30, LiliumUI::kColMuted,
+               L"[1-7]機能アイコン選択", 2, LiliumUI::Align::Center, true);
+  }
+}
+
 static void onRender(LiliumUI::Canvas & c, void * userData) {
   FilerState * st = static_cast<FilerState *>(userData);
 
@@ -600,31 +895,22 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     if (st->viewing) {
       renderViewerPanel(c, st);
     } else {
+      bool dirProt = st->atDriveList || isProtectedSystemDir(st->curDir);
       // Path bar (y=48)
       c.drawBox(12, 48, LiliumUI::kMainW - 24, 28, LiliumUI::kColWhite, LiliumUI::kColBorder);
-      c.drawText(20, 48, LiliumUI::kMainW - 40, 28, LiliumUI::kColText,
+      c.drawText(20, 48, dirProt ? 530 : (LiliumUI::kMainW - 40), 28, LiliumUI::kColText,
                  st->curDir, 2, LiliumUI::Align::Left, true);
+      if (dirProt) {
+        c.drawBox(556, 51, 66, 22, LiliumUI::kColDangerBg, LiliumUI::kColDangerBorder);
+        c.drawText(556, 51, 66, 22, LiliumUI::kColDangerText, L"保護", 2, LiliumUI::Align::Center, true);
+      }
 
-      // Quick action strip (y=82)
-      c.drawBox(12, 82, 134, 28, LiliumUI::kColWhite, LiliumUI::kColBorder);
-      c.drawText(12, 82, 134, 28, LiliumUI::kColTextSub, L"[F1]ルート", 2, LiliumUI::Align::Center, true);
-
-      c.drawBox(152, 82, 142, 28, LiliumUI::kColWhite, LiliumUI::kColBorder);
-      c.drawText(152, 82, 142, 28, LiliumUI::kColTextSub, L"[F2]Lilium", 2, LiliumUI::Align::Center, true);
-
-      c.drawBox(300, 82, 160, 28, LiliumUI::kColTealSoft, LiliumUI::kColTealBorder);
-      c.drawText(300, 82, 160, 28, LiliumUI::kColTealDeep, L"[F8]コピー指定", 2, LiliumUI::Align::Center, true);
-
-      bool hasClip = (st->copySrcPath[0] != L'\0' && !st->atDriveList);
-      c.drawBox(466, 82, 162, 28,
-                hasClip ? LiliumUI::kColWarnBg : 0xF0F3F7,
-                hasClip ? LiliumUI::kColWarnBorder : LiliumUI::kColBorder);
-      c.drawText(466, 82, 162, 28,
-                 hasClip ? LiliumUI::kColWarnText : LiliumUI::kColLightMuted,
-                 L"[F9]貼付", 2, LiliumUI::Align::Center, true);
+      // Pure icon-only quick toolbar (y=80..110)
+      renderIconToolbar(c, st);
 
       const int listX = 12, listY = 114, listW = LiliumUI::kMainW - 24, rowH = 34;
-      c.drawBox(listX, listY, listW, kVisibleRows * rowH + 8, LiliumUI::kColWhite, LiliumUI::kColBorder);
+      c.drawBox(listX, listY, listW, kVisibleRows * rowH + 8, LiliumUI::kColWhite,
+                st->toolbarFocused ? LiliumUI::kColBorder : LiliumUI::kColBorderStrong);
       for (int r = 0; r < kVisibleRows; ++r) {
         renderEntryRow(c, st, r);
       }
@@ -635,7 +921,9 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     c.drawText(14, 440, LiliumUI::kMainW - 28, 40, LiliumUI::kColTextSub,
                st->viewing
                  ? L"[↑↓/PgUpDn]スクロール [F2]テキスト/HEX [Esc]一覧へ戻る"
-                 : L"[↑↓]選択 [Ent]開く [BS]上へ [F5]削除 [F8/F9]複写 [Esc]戻る",
+                 : (st->toolbarFocused
+                      ? L"[←→/1-7]機能選択 [Ent]実行 [戻る/↓]一覧へ戻る [HOME]終了"
+                      : L"[↑↓]選択 [Ent]開く [BS]上 [1-7]機能アイコン [戻る]終了"),
                2, LiliumUI::Align::Left, true);
   } else {
     if (st->prevScroll != st->scroll) {
@@ -653,7 +941,14 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
 
   const wchar_t * cardTitle = L"ファイル詳細";
   wchar_t cardBody[512] = L"項目なし";
+  const wchar_t * statusLine = L"一覧中";
+  const wchar_t * hint1 = L"[1-7]機能選択";
+  const wchar_t * hint2 = L"[Ent]開[BS]上";
+  const wchar_t * exitLbl = L"戻　る";
+
+  wchar_t statusBuf[48];
   if (st->viewing) {
+    statusLine = L"閲覧中";
     cardTitle = L"ビューア情報";
     _snwprintf(cardBody, 512,
                L"【ファイル名】\n%s\n【サイズ】\n%lu バイト\n【モード】\n%s%s",
@@ -662,27 +957,78 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                st->viewHexMode ? L"HEXダンプ(省メモリ)" : L"テキスト(UTF-8/16)",
                st->viewTruncated ? L"\n(先頭64KBまで)" : L"");
     cardBody[511] = L'\0';
-  } else if (st->sel >= 0 && st->sel < st->entryCount) {
-    const FileEntry & e = st->entries[st->sel];
-    cardTitle = e.isParent ? L"親フォルダ" : e.name;
-    wchar_t szBuf[24];
-    formatSizeStr(e, szBuf, 24);
-    _snwprintf(cardBody, 512,
-               L"【種別】\n%s\n【サイズ】\n%s\n【コピー待機】\n%s",
-               e.isDir ? L"フォルダ" : L"ファイル",
-               szBuf,
-               st->copySrcName[0] ? st->copySrcName : L"(なし)");
-    cardBody[511] = L'\0';
+    hint1 = L"[F2]HEX切替";
+    hint2 = L"[Esc]一覧へ";
+    exitLbl = L"一覧へ";
+  } else if (st->toolbarFocused) {
+    statusLine = L"機能アイコン";
+    bool locked = isToolActionLocked(st, st->toolbarSel);
+    switch (st->toolbarSel) {
+      case ToolRoot:
+        cardTitle = L"[1] ルートへ移動";
+        wcscpy(cardBody, L"【機能説明】\n記憶領域の最上位ルート\n(\\/ドライブ一覧)へ\n移動します。\n【操作】\n[Ent]移動 [戻る]一覧");
+        break;
+      case ToolLilium:
+        cardTitle = L"[2] Liliumへ移動";
+        wcscpy(cardBody, L"【機能説明】\nLiliumランチャーの\n格納フォルダへ素早く\n移動します。\n【操作】\n[Ent]移動 [戻る]一覧");
+        break;
+      case ToolCopy:
+        cardTitle = L"[3] コピー指定";
+        _snwprintf(cardBody, 512,
+                   L"【機能説明】\n選択中ファイルをコピー\n元として記憶します。\n保護領域からの読み出\nしも可能です。\n【待機】%ls",
+                   st->copySrcName[0] ? st->copySrcName : L"(なし)");
+        cardBody[511] = L'\0';
+        break;
+      case ToolPaste:
+        cardTitle = L"[4] 貼り付け";
+        _snwprintf(cardBody, 512,
+                   L"【機能説明】\nコピー指定ファイルを\n現在のフォルダへ複写\nします。\n【状態】\n%ls",
+                   locked ? L"※保護領域のため貼付不可" : (st->copySrcName[0] ? st->copySrcName : L"コピー指定待機なし"));
+        cardBody[511] = L'\0';
+        break;
+      case ToolNewFolder:
+        cardTitle = L"[5] 新規フォルダ";
+        wcscpy(cardBody, locked
+          ? L"【機能説明】\n新しいフォルダを作成\nします。\n【状態】\n※保護領域のため作成不可\n(\\NAND3/SDは作成可)"
+          : L"【機能説明】\n現在のフォルダ内に\nNewFolder を新規作成\nします。\n【操作】\n[Ent]作成 [戻る]一覧");
+        break;
+      case ToolDelete:
+        cardTitle = L"[6] 項目を削除";
+        wcscpy(cardBody, locked
+          ? L"【機能説明】\n選択中のファイル/空\nフォルダを削除します。\n【状態】\n※システム保護対象は削除不可"
+          : L"【機能説明】\n選択中のファイル/空\nフォルダを削除します。\n確認画面が出ます。\n【操作】\n[Ent]削除 [戻る]一覧");
+        break;
+      case ToolRefresh:
+      default:
+        cardTitle = L"[7] 最新に更新";
+        wcscpy(cardBody, L"【機能説明】\n現在のフォルダ一覧を\n再読み込みします。\n【操作】\n[Ent]更新 [戻る]一覧");
+        break;
+    }
+    hint1 = L"[Ent]機能実行";
+    hint2 = L"[戻る/↓]一覧へ";
+    exitLbl = L"一覧へ";
+  } else {
+    _snwprintf(statusBuf, 48, L"%d 項目", st->entryCount);
+    statusBuf[47] = L'\0';
+    statusLine = statusBuf;
+    if (st->sel >= 0 && st->sel < st->entryCount) {
+      const FileEntry & e = st->entries[st->sel];
+      cardTitle = e.isParent ? L"親フォルダ" : e.name;
+      wchar_t szBuf[24];
+      formatSizeStr(e, szBuf, 24);
+      bool dirProt = st->atDriveList || isProtectedSystemDir(st->curDir);
+      _snwprintf(cardBody, 512,
+                 L"【種別 / 保護】\n%s / %s\n【サイズ】\n%s\n【コピー待機】\n%s",
+                 e.isDir ? L"フォルダ" : L"ファイル",
+                 dirProt ? L"読取保護" : L"書込可",
+                 szBuf,
+                 st->copySrcName[0] ? st->copySrcName : L"(なし)");
+      cardBody[511] = L'\0';
+    }
   }
 
-  wchar_t statusLine[48];
-  _snwprintf(statusLine, 48, st->viewing ? L"閲覧中" : L"%d 項目", st->entryCount);
-  statusLine[47] = L'\0';
-
   LiliumUI::renderSidebar(c, statusLine, cardTitle, cardBody,
-                          st->viewing ? L"[F2]HEX切替" : L"[F8]複写[F9]貼付",
-                          st->viewing ? L"[Esc]一覧へ" : L"[F5]削除[F4]更新",
-                          st->viewing ? L"一覧へ" : L"戻　る", false);
+                          hint1, hint2, exitLbl, false);
 
   if (st->modal == ModalMode::DeleteConfirm) {
     static constexpr LiliumUI::ModalButton kDelBtns[2] = {
@@ -702,9 +1048,70 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
   }
 }
 
+static void executeToolAction(FilerState * st, int idx) {
+  st->toolbarFocused = false;
+  switch (idx) {
+    case ToolRoot:
+#if defined(_WIN32_WCE) || defined(__MINGW32CE__)
+      loadDirectory(st, L"\\");
+#else
+      loadDirectory(st, L"");
+#endif
+      st->window.requestRepaint(true);
+      break;
+    case ToolLilium: {
+      wchar_t rootDir[MAX_PATH] = L"";
+      LiliumUI::getLiliumRootDir(rootDir, MAX_PATH);
+      loadDirectory(st, rootDir);
+      st->window.requestRepaint(true);
+      break;
+    }
+    case ToolCopy:
+      copySelectedEntry(st);
+      break;
+    case ToolPaste:
+      executePasteCopy(st);
+      break;
+    case ToolNewFolder:
+      executeCreateFolder(st);
+      break;
+    case ToolDelete:
+      requestDeleteSelected(st);
+      break;
+    case ToolRefresh: {
+      wchar_t curCopy[MAX_PATH];
+      wcsncpy(curCopy, st->curDir, MAX_PATH - 1);
+      curCopy[MAX_PATH - 1] = L'\0';
+      loadDirectory(st, st->atDriveList ? L"" : curCopy);
+      st->window.requestRepaint(true);
+      break;
+    }
+    default:
+      st->window.requestRepaint(true);
+      break;
+  }
+}
+
+static int toolIndexFromKey(WPARAM vkCode) {
+  if (vkCode >= '1' && vkCode <= '7') return static_cast<int>(vkCode - '1');
+  if (vkCode >= VK_NUMPAD1 && vkCode <= VK_NUMPAD7) return static_cast<int>(vkCode - VK_NUMPAD1);
+  // SHARP Brain top-row number keys (when unshifted)
+  switch (vkCode) {
+    case 'Q': return 0;
+    case 'W': return 1;
+    case 'E': return 2;
+    case 'R': return 3;
+    case 'T': return 4;
+    case 'Y': return 5;
+    case 'U': return 6;
+    default: return -1;
+  }
+}
+
 static void activateSelectedEntry(FilerState * st) {
   if (st->sel < 0 || st->sel >= st->entryCount) return;
   const FileEntry e = st->entries[st->sel];
+  st->toolbarFocused = false;
   if (e.isParent) {
     navigateUp(st);
     st->window.requestRepaint(true);
@@ -816,6 +1223,44 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
     return;
   }
 
+  int tKey = toolIndexFromKey(vkCode);
+  if (tKey >= 0) {
+    st->toolbarFocused = true;
+    st->toolbarSel = tKey;
+    st->window.requestRepaint(true);
+    return;
+  }
+
+  if (st->toolbarFocused) {
+    switch (vkCode) {
+      case VK_LEFT:
+        st->toolbarSel = (st->toolbarSel + kToolCount - 1) % kToolCount;
+        st->window.requestRepaint(true);
+        break;
+      case VK_RIGHT:
+        st->toolbarSel = (st->toolbarSel + 1) % kToolCount;
+        st->window.requestRepaint(true);
+        break;
+      case VK_RETURN:
+      case VK_F3:
+        executeToolAction(st, st->toolbarSel);
+        break;
+      case VK_ESCAPE:
+      case VK_BACK:
+      case VK_DOWN:
+        st->toolbarFocused = false;
+        st->window.requestRepaint(true);
+        break;
+      case VK_HOME:
+      case VK_F10:
+        st->window.requestQuit();
+        break;
+      default:
+        break;
+    }
+    return;
+  }
+
   switch (vkCode) {
     case VK_UP:
       if (st->entryCount > 0) {
@@ -865,58 +1310,24 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
       st->window.requestRepaint(true);
       break;
     case VK_F1:
-#if defined(_WIN32_WCE) || defined(__MINGW32CE__)
-      loadDirectory(st, L"\\");
-#else
-      loadDirectory(st, L"");
-#endif
-      st->window.requestRepaint(true);
+      executeToolAction(st, ToolRoot);
       break;
-    case VK_F2: {
-      wchar_t rootDir[MAX_PATH] = L"";
-      LiliumUI::getLiliumRootDir(rootDir, MAX_PATH);
-      loadDirectory(st, rootDir);
-      st->window.requestRepaint(true);
+    case VK_F2:
+      executeToolAction(st, ToolLilium);
       break;
-    }
-    case VK_F4: {
-      wchar_t curCopy[MAX_PATH];
-      wcsncpy(curCopy, st->curDir, MAX_PATH - 1);
-      curCopy[MAX_PATH - 1] = L'\0';
-      loadDirectory(st, st->atDriveList ? L"" : curCopy);
-      st->window.requestRepaint(true);
+    case VK_F4:
+      executeToolAction(st, ToolRefresh);
       break;
-    }
     case VK_F8:
     case 'C':
-      if (st->sel >= 0 && st->sel < st->entryCount && !st->entries[st->sel].isDir) {
-        buildFullEntryPath(st, st->entries[st->sel], st->copySrcPath, MAX_PATH);
-        wcsncpy(st->copySrcName, st->entries[st->sel].name, 127);
-        st->copySrcName[127] = L'\0';
-        st->window.requestRepaint(true);
-      }
+      executeToolAction(st, ToolCopy);
       break;
     case VK_F9:
-      executePasteCopy(st);
+      executeToolAction(st, ToolPaste);
       break;
     case VK_F5:
     case VK_DELETE:
-      if (st->sel >= 0 && st->sel < st->entryCount) {
-        const FileEntry & e = st->entries[st->sel];
-        if (e.isParent || e.isDriveRoot) break;
-        wchar_t fullPath[MAX_PATH];
-        buildFullEntryPath(st, e, fullPath, MAX_PATH);
-        if (isProtectedFile(fullPath, e.name)) {
-          wcsncpy(st->msgTitle, L"【 保護対象ファイル 】", 63);
-          wcsncpy(st->msgLine1, e.name, 95);
-          wcsncpy(st->msgLine2, L"OS/Lilium必須ファイルは削除保護されています。", 95);
-          st->modal = ModalMode::ProtectedWarn;
-        } else {
-          st->modal = ModalMode::DeleteConfirm;
-          st->modalFocus = 1; // Cancel default
-        }
-        st->window.requestRepaint(true);
-      }
+      executeToolAction(st, ToolDelete);
       break;
     case VK_ESCAPE:
     case VK_HOME:
@@ -959,6 +1370,9 @@ static void onClick(int x, int y, void * userData) {
       st->viewing = false;
       freeViewerBuffer(st);
       st->window.requestRepaint(true);
+    } else if (st->toolbarFocused) {
+      st->toolbarFocused = false;
+      st->window.requestRepaint(true);
     } else {
       st->window.requestQuit();
     }
@@ -973,39 +1387,24 @@ static void onClick(int x, int y, void * userData) {
     return;
   }
 
-  if (y >= 82 && y < 110) {
-    if (x >= 12 && x < 146) {
-#if defined(_WIN32_WCE) || defined(__MINGW32CE__)
-      loadDirectory(st, L"\\");
-#else
-      loadDirectory(st, L"");
-#endif
-      st->window.requestRepaint(true);
-      return;
-    }
-    if (x >= 152 && x < 294) {
-      wchar_t rootDir[MAX_PATH] = L"";
-      LiliumUI::getLiliumRootDir(rootDir, MAX_PATH);
-      loadDirectory(st, rootDir);
-      st->window.requestRepaint(true);
-      return;
-    }
-    if (x >= 300 && x < 460) {
-      if (st->sel >= 0 && st->sel < st->entryCount && !st->entries[st->sel].isDir) {
-        buildFullEntryPath(st, st->entries[st->sel], st->copySrcPath, MAX_PATH);
-        wcsncpy(st->copySrcName, st->entries[st->sel].name, 127);
-        st->copySrcName[127] = L'\0';
-        st->window.requestRepaint(true);
+  if (y >= 80 && y < 110) {
+    for (int i = 0; i < kToolCount; ++i) {
+      int bx = 12 + i * 56;
+      if (x >= bx && x < bx + 50) {
+        if (st->toolbarFocused && st->toolbarSel == i) {
+          executeToolAction(st, i);
+        } else {
+          st->toolbarFocused = true;
+          st->toolbarSel = i;
+          st->window.requestRepaint(true);
+        }
+        return;
       }
-      return;
-    }
-    if (x >= 466 && x < 628) {
-      executePasteCopy(st);
-      return;
     }
   }
 
   if (x >= 16 && x < LiliumUI::kMainW - 16 && y >= 118 && y < 118 + kVisibleRows * 34) {
+    st->toolbarFocused = false;
     int r = (y - 118) / 34;
     int idx = st->scroll + r;
     if (idx < st->entryCount) {
@@ -1015,8 +1414,10 @@ static void onClick(int x, int y, void * userData) {
         st->prevSel = st->sel;
         st->prevScroll = st->scroll;
         st->sel = idx;
-        st->window.requestRepaint(false);
+        st->window.requestRepaint(true);
       }
+    } else {
+      st->window.requestRepaint(true);
     }
   }
 }
@@ -1024,20 +1425,28 @@ static void onClick(int x, int y, void * userData) {
 static void onTimer(LiliumUI::Canvas & c, void * userData) {
   FilerState * st = static_cast<FilerState *>(userData);
   wchar_t statusLine[48];
-  _snwprintf(statusLine, 48, st->viewing ? L"閲覧中" : L"%d 項目", st->entryCount);
-  statusLine[47] = L'\0';
+  if (st->viewing) {
+    wcscpy(statusLine, L"閲覧中");
+  } else if (st->toolbarFocused) {
+    wcscpy(statusLine, L"機能アイコン");
+  } else {
+    _snwprintf(statusLine, 48, L"%d 項目", st->entryCount);
+    statusLine[47] = L'\0';
+  }
   LiliumUI::renderSidebarStatus(c, statusLine);
 }
 
 } // namespace
 
 int main(int /*argc*/, char * /*argv*/[]) {
-  FilerState state;
-  state.manageTaskBar = !LiliumUI::isLaunchedFromLauncherArg();
+  void * rawMem = calloc(1, sizeof(FilerState));
+  if (!rawMem) return 1;
+  FilerState * state = new (rawMem) FilerState();
+  state->manageTaskBar = !LiliumUI::isLaunchedFromLauncherArg();
 
   wchar_t rootDir[MAX_PATH] = L"";
   LiliumUI::getLiliumRootDir(rootDir, MAX_PATH);
-  loadDirectory(&state, rootDir);
+  loadDirectory(state, rootDir);
 
   LiliumUI::AppCallbacks cb = {};
   cb.onRender = onRender;
@@ -1045,14 +1454,15 @@ int main(int /*argc*/, char * /*argv*/[]) {
   cb.onClick = onClick;
   cb.onTimer = onTimer;
 
-  if (!state.window.create(L"LiliumFilerWinClass",
+  int rc = 1;
+  if (state->window.create(L"LiliumFilerWinClass",
                            L"Lilium Filer (SHARP Brain 800x480)",
-                           cb, &state, state.manageTaskBar)) {
-    freeViewerBuffer(&state);
-    return 1;
+                           cb, state, state->manageTaskBar)) {
+    rc = state->window.runLoop();
   }
 
-  int rc = state.window.runLoop();
-  freeViewerBuffer(&state);
+  freeViewerBuffer(state);
+  state->~FilerState();
+  free(rawMem);
   return rc;
 }
