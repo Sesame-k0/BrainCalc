@@ -288,9 +288,9 @@ bool AppsContainer::processEvent(Ion::Events::Event event) {
     }
   }
 
-  // Add EE shortcut to go to the settings (app number 12)
+  // Add EE shortcut to go to the settings (last built-in app)
   if (event == Ion::Events::EE) {
-    switchTo(appSnapshotAtIndex(std::min(12, numberOfApps() - 1)));
+    switchTo(appSnapshotAtIndex(numberOfApps() - 1));
     return true;
   }
 

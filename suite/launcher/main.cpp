@@ -1,4 +1,5 @@
 #include "../common/lilium_ui.h"
+#include "../common/lilium_ime_client.h"
 
 #include <new>
 #include <shellapi.h>
@@ -54,6 +55,8 @@ struct LauncherState {
   int selectedIndex = 0;
   int prevSelectedIndex = 0;
   bool reorderMode = false;
+  HANDLE imeProcess = NULL;
+  bool imeDaemonRunning = false;
   ModalState modal = ModalState::None;
   int modalFocus = 1; // 0: Yes/Quit, 1: Cancel
   wchar_t errLine1[96] = L"";
@@ -71,7 +74,7 @@ static bool hasExeSuffix(const wchar_t * name) {
 }
 
 static bool isBuiltInRelName(const wchar_t * fileName) {
-  static constexpr const wchar_t * kBuiltInFiles[8] = {
+  static constexpr const wchar_t * kBuiltInFiles[9] = {
     L"LiliumCalc.exe",
     L"LiliumTaskMgr.exe",
     L"LiliumClock.exe",
@@ -79,9 +82,10 @@ static bool isBuiltInRelName(const wchar_t * fileName) {
     L"doom.exe",
     L"LiliumLife.exe",
     L"LiliumTimeTable.exe",
-    L"LiliumCashCalc.exe"
+    L"LiliumEditor.exe",
+    L"LiliumIME.exe" // Resident background IME daemon (hidden from Launchpad grid)
   };
-  for (int i = 0; i < 8; ++i) {
+  for (int i = 0; i < 9; ++i) {
     if (_wcsicmp(fileName, kBuiltInFiles[i]) == 0) return true;
   }
   return false;
@@ -527,7 +531,7 @@ static void scanApps(LauncherState * st, bool preserveSelection = true) {
   addBuiltInEntry(st, appsDir, L"DOOM", L"doom.exe", 4);
   addBuiltInEntry(st, appsDir, L"Lilium Life", L"LiliumLife.exe", 5);
   addBuiltInEntry(st, appsDir, L"Lilium TimeTable", L"LiliumTimeTable.exe", 6);
-  addBuiltInEntry(st, appsDir, L"Lilium CashCalc", L"LiliumCashCalc.exe", 7);
+  addBuiltInEntry(st, appsDir, L"Lilium Editor", L"LiliumEditor.exe", 7);
   const int extStart = st->appCount;
 
   // 2. Dynamic scan of apps\* for additional EXEs and Brain app subfolders
@@ -754,18 +758,15 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, const AppEntry & a
       }
     }
   } else if (app.builtInKind == 7) {
-    // Lilium CashCalc desktop accounting calculator with green LCD and amber TAX/CA keys
-    c.drawBox(x + 9, y + 10, 38, 36, 0xF7F9FB, LiliumUI::kColCharcoal);
-    c.drawThickFrame(x + 9, y + 10, 38, 36, 2, LiliumUI::kColCharcoal);
-    c.drawBox(x + 13, y + 13, 30, 9, 0xCBEAD2, 0x2A6B46);
-    c.fillRect(x + 28, y + 16, 12, 3, 0x1A3E2B);
-    for (int row = 0; row < 3; ++row) {
-      for (int col = 0; col < 3; ++col) {
-        uint32_t kCol = (row == 0 && col == 0) ? 0xD47A14 : 0x4A5560;
-        c.fillRect(x + 13 + col * 8, y + 25 + row * 6, 6, 4, kCol);
-      }
-    }
-    c.fillRect(x + 37, y + 25, 6, 16, LiliumUI::kColTeal);
+    // Lilium Editor Markdown document + '#' heading badge emblem
+    c.drawBox(x + 12, y + 9, 32, 38, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
+    c.drawThickFrame(x + 12, y + 9, 32, 38, 2, LiliumUI::kColCharcoal);
+    c.fillRect(x + 35, y + 9, 9, 9, LiliumUI::kColTeal);
+    c.drawText(x + 15, y + 12, 16, 16, LiliumUI::kColTealDark, L"#", 2, LiliumUI::Align::Left, true);
+    c.fillRect(x + 28, y + 19, 10, 2, LiliumUI::kColTeal);
+    c.fillRect(x + 16, y + 29, 24, 2, LiliumUI::kColCharcoal);
+    c.fillRect(x + 16, y + 34, 20, 2, LiliumUI::kColMuted);
+    c.fillRect(x + 16, y + 39, 16, 2, LiliumUI::kColTeal);
   } else if (app.hasCustomIcon && app.cachedIcon) {
     // Extracted 48x48 EXE icon inside crisp 56x56 frame
     c.drawBox(x, y, 56, 56, LiliumUI::kColWhite, selected ? LiliumUI::kColTeal : LiliumUI::kColBorder);
@@ -824,10 +825,20 @@ static void renderAppTile(LiliumUI::Canvas & c, const LauncherState * st, int ap
              app.name, 2, LiliumUI::Align::Center, true);
 }
 
-static void renderTopStatusPills(LiliumUI::Canvas & c, const LauncherState * st) {
+static void renderTopStatusPills(LiliumUI::Canvas & c, LauncherState * st) {
   // Repaint only the right status region of the 800x42 top teal bar
-  c.fillRect(336, 0, 464, LiliumUI::kHeaderH - 2, LiliumUI::kColTeal);
-  c.fillRect(336, LiliumUI::kHeaderH - 2, 464, 2, LiliumUI::kColTealDark);
+  c.fillRect(256, 0, 544, LiliumUI::kHeaderH - 2, LiliumUI::kColTeal);
+  c.fillRect(256, LiliumUI::kHeaderH - 2, 544, 2, LiliumUI::kColTealDark);
+
+  HWND hIme = FindWindowW(LiliumIME::kDaemonClassName, NULL);
+  st->imeDaemonRunning = (hIme != NULL && IsWindow(hIme));
+  c.drawBox(260, 8, 74, 26,
+            st->imeDaemonRunning ? LiliumUI::kColTealHeader : LiliumUI::kColRowAlt,
+            st->imeDaemonRunning ? LiliumUI::kColWhite : LiliumUI::kColBorder);
+  c.drawText(260, 8, 74, 26,
+             st->imeDaemonRunning ? LiliumUI::kColTealDeep : LiliumUI::kColMuted,
+             st->imeDaemonRunning ? L"IME:常駐" : L"IME:待機",
+             2, LiliumUI::Align::Center, true);
 
   // 1. Dictionary status pill
   c.drawBox(340, 8, 116, 26,
@@ -1406,6 +1417,61 @@ static bool onCloseRequest(void * userData) {
   return false;
 }
 
+static void startResidentImeDaemon(LauncherState * st) {
+  if (!st) return;
+  HWND existing = FindWindowW(LiliumIME::kDaemonClassName, NULL);
+  if (existing && IsWindow(existing)) {
+    st->imeDaemonRunning = true;
+    return;
+  }
+
+  wchar_t rootDir[MAX_PATH] = L"";
+  LiliumUI::getLiliumRootDir(rootDir, MAX_PATH);
+  wchar_t imeExe[MAX_PATH] = L"";
+  LiliumUI::joinPath(rootDir, L"apps\\LiliumIME.exe", imeExe, MAX_PATH);
+  if (!fileExists(imeExe)) return;
+
+  PROCESS_INFORMATION pi = {};
+#ifdef _WIN32_WCE
+  wchar_t cmdArgs[32] = L"--daemon";
+  BOOL ok = CreateProcessW(imeExe, cmdArgs, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi);
+#else
+  wchar_t cmdLine[MAX_PATH + 32] = L"";
+  _snwprintf(cmdLine, MAX_PATH + 31, L"\"%ls\" --daemon", imeExe);
+  STARTUPINFOW si = {};
+  si.cb = sizeof(si);
+  BOOL ok = CreateProcessW(imeExe, cmdLine, NULL, NULL, FALSE, 0, NULL, rootDir, &si, &pi);
+#endif
+  if (ok) {
+    CloseHandle(pi.hThread);
+    st->imeProcess = pi.hProcess;
+    for (int ms = 0; ms < 900; ms += 30) {
+      HWND hIme = FindWindowW(LiliumIME::kDaemonClassName, NULL);
+      if (hIme && IsWindow(hIme)) {
+        st->imeDaemonRunning = true;
+        break;
+      }
+      Sleep(30);
+    }
+  }
+}
+
+static void stopResidentImeDaemon(LauncherState * st) {
+  if (!st) return;
+  HWND hIme = FindWindowW(LiliumIME::kDaemonClassName, NULL);
+  if (hIme && IsWindow(hIme)) {
+    PostMessageW(hIme, WM_CLOSE, 0, 0);
+  }
+  if (st->imeProcess) {
+    if (WaitForSingleObject(st->imeProcess, 1500) != WAIT_OBJECT_0) {
+      TerminateProcess(st->imeProcess, 0);
+    }
+    CloseHandle(st->imeProcess);
+    st->imeProcess = NULL;
+  }
+  st->imeDaemonRunning = false;
+}
+
 } // namespace
 
 int main(int /*argc*/, char * /*argv*/[]) {
@@ -1414,6 +1480,7 @@ int main(int /*argc*/, char * /*argv*/[]) {
   LauncherState * state = new (rawMem) LauncherState();
   state->dict = LiliumUI::queryDictStatus();
   scanApps(state, false);
+  startResidentImeDaemon(state);
 
   LiliumUI::AppCallbacks cb = {};
   cb.onRender = onRender;
@@ -1429,6 +1496,7 @@ int main(int /*argc*/, char * /*argv*/[]) {
     rc = state->window.runLoop();
   }
 
+  stopResidentImeDaemon(state);
   freeAppEntries(state);
   state->~LauncherState();
   free(rawMem);

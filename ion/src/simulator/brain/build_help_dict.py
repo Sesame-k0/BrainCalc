@@ -170,6 +170,13 @@ RAW_HELP_ENTRIES = [
         "ja_desc": "四則演算や分数、\n微積分、三角関数\n行列などの計算を\n行います。\n【Enter】計算実行\n【F1】関数メニュー\n【F9】変数一覧"
     },
     {
+        "id": "App_CashCalc",
+        "en_keys": ["CashCalc", "CASHCALC"],
+        "en_desc": "Accounting calculator with tax/GT, cost-sell-margin, invoice tax breakdown, and days/loan solver.",
+        "ja_title": "経理電卓アプリ",
+        "ja_desc": "税込・税抜・GT・\n原価売価逆算・\nインボイス集計・\n日数単利/割賦計算\n【Enter】アプリ起動\n【F1】税率端数設定"
+    },
+    {
         "id": "App_Functions",
         "en_keys": ["Functions", "FUNCTIONS"],
         "en_desc": "Define functions f(x), plot graphs, find roots/extrema/intersections, and view value tables.",

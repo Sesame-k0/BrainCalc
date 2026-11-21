@@ -43,5 +43,6 @@
     "apps/probability/images/student_icon.png": "probability/student_icon.png",
     "apps/probability/images/uniform_icon.png": "probability/uniform_icon.png",
     "bootloader/computer.png": "bootloader/computer.png",
-    "apps/khycas/khycas_icon.png": "apps/khycas_icon.png"
+    "apps/khycas/khycas_icon.png": "apps/khycas_icon.png",
+    "apps/cashcalc/cashcalc_icon.png": "apps/cashcalc_icon.png"
 }

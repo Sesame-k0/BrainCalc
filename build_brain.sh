@@ -83,7 +83,7 @@ if [[ ! -f "${APPS_DIR}/LiliumCalc.exe" ]] || [[ "${OUT_DIR}/epsilon.exe" -nt "$
 fi
 
 # 2. Standalone Lilium Suite apps (Launcher + TaskManager)
-SUITE_COMMON_SRCS="suite/common/lilium_ui.cpp ion/src/simulator/brain/misaki_font_data.cpp"
+SUITE_COMMON_SRCS="suite/common/lilium_ui.cpp suite/common/lilium_ime_client.cpp ion/src/simulator/brain/misaki_font_data.cpp"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
   SUITE_CXX="g++"
   DOOM_CC="gcc"
@@ -126,9 +126,31 @@ TIMETABLE_OUT="${APPS_DIR}/LiliumTimeTable.exe"
 echo "[INFO] Building Lilium TimeTable -> ${TIMETABLE_OUT}..."
 ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/timetable/main.cpp ${SUITE_COMMON_SRCS} -o "${TIMETABLE_OUT}" ${SUITE_LDFLAGS}
 
-CASHCALC_OUT="${APPS_DIR}/LiliumCashCalc.exe"
-echo "[INFO] Building Lilium CashCalc -> ${CASHCALC_OUT}..."
-${SUITE_CXX} ${SUITE_CXXFLAGS} suite/cashcalc/main.cpp ${SUITE_COMMON_SRCS} -o "${CASHCALC_OUT}" ${SUITE_LDFLAGS} -lm
+rm -f "${APPS_DIR}/LiliumCashCalc.exe" "${APPS_DIR}/cashcalc.cfg"
+
+EDITOR_OUT="${APPS_DIR}/LiliumEditor.exe"
+echo "[INFO] Building Lilium Editor -> ${EDITOR_OUT}..."
+${SUITE_CXX} ${SUITE_CXXFLAGS} suite/editor/main.cpp ${SUITE_COMMON_SRCS} -o "${EDITOR_OUT}" ${SUITE_LDFLAGS}
+
+SUITE_CC="${SUITE_CXX%++}cc"
+IME_INFLATE_OBJ="${OUT_DIR}/lilium_inflate_ime.o"
+if [[ ! -f "${IME_INFLATE_OBJ}" ]] || [[ "suite/doom/lilium_inflate.c" -nt "${IME_INFLATE_OBJ}" ]] || [[ "suite/doom/lilium_inflate.h" -nt "${IME_INFLATE_OBJ}" ]]; then
+  ${SUITE_CC} -O2 -Wall -Wextra -Isuite/doom -c suite/doom/lilium_inflate.c -o "${IME_INFLATE_OBJ}"
+fi
+IME_OUT="${APPS_DIR}/LiliumIME.exe"
+echo "[INFO] Building Lilium IME -> ${IME_OUT}..."
+${SUITE_CXX} ${SUITE_CXXFLAGS} -Isuite/doom suite/ime/main.cpp "${IME_INFLATE_OBJ}" ${SUITE_COMMON_SRCS} -o "${IME_OUT}" ${SUITE_LDFLAGS}
+
+IME_DIC_SRC="suite/ime/lilium_ime.dic"
+if [[ ! -f "${IME_DIC_SRC}" ]] || [[ "suite/ime/build_mozc_dict.py" -nt "${IME_DIC_SRC}" ]]; then
+  echo "[INFO] Building Mozc dictionary -> ${IME_DIC_SRC}..."
+  if command -v python >/dev/null 2>&1; then
+    python suite/ime/build_mozc_dict.py
+  else
+    python3 suite/ime/build_mozc_dict.py
+  fi
+fi
+cp -f "${IME_DIC_SRC}" "${APPS_DIR}/lilium_ime.dic"
 
 # 3. OSS DOOM (doomgeneric + Freedoom Phase 1 Mini ZWAD) -> DIST_DIR/apps/doom.exe
 DOOM_OBJ_DIR="${OUT_DIR}/doom_obj"
@@ -253,10 +275,10 @@ echo "==========================================================================
 echo "[SUCCESS] Build completed!"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
   echo "  Launcher   : ${DIST_DIR}/AppMain.exe (LiliumLauncher.exe)"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumCashCalc.exe, doom.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumIME.exe, doom.exe"
 else
   echo "  Launcher   : ${DIST_DIR}/AppMain_.exe"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumCashCalc.exe, doom.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumIME.exe, doom.exe"
   echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe [loader], AppMain.cfg, AppMain_.exe [Launcher], index.din, font.ttf, apps/)"
 fi
 echo "=============================================================================="

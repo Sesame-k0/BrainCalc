@@ -1,4 +1,5 @@
 #include "../common/lilium_ui.h"
+#include "../common/lilium_ime_client.h"
 
 #include <new>
 #include <stdio.h>
@@ -160,6 +161,9 @@ struct TimeTableState {
   int setTmplIdx = 1;      // 0=HS45, 1=HS50, 2=Univ90, 3=Univ100
   int newNameIdx = 0;      // 0..kNewNameCount-1
   int newTemplateKind = 1; // 0=HS45, 1=HS50, 2=Univ90, 3=Univ100, 4=CopyCurrent
+  bool renameActiveModal = false;
+  wchar_t customNewFileName[48] = L"";
+  LiliumIME::TextInputModal inputModal;
 
   // Confirm / Info modals
   int modalFocus = 1;
@@ -1066,13 +1070,13 @@ static void renderCellEditorModal(LiliumUI::Canvas & c, const TimeTableState * s
       c.fillRect(mx + 175, ry + 9, 8, 24, cth.accent);
       c.drawText(mx + 236, ry, 280, 42, LiliumUI::kColText, cth.name, 2, LiliumUI::Align::Left, true);
     } else if (r == 0) {
-      c.drawText(mx + 174, ry, 232, 42, LiliumUI::kColText, subjName, 2, LiliumUI::Align::Left, true);
-      c.drawBox(mx + mw - 170, ry + 7, 136, 28,
+      c.drawText(mx + 174, ry, 224, 42, LiliumUI::kColText, subjName, 2, LiliumUI::Align::Left, true);
+      c.drawBox(mx + mw - 178, ry + 7, 152, 28,
                 act ? LiliumUI::kColTealDark : LiliumUI::kColWhite,
                 LiliumUI::kColTealDark);
-      c.drawText(mx + mw - 170, ry + 7, 136, 28,
+      c.drawText(mx + mw - 178, ry + 7, 152, 28,
                  act ? LiliumUI::kColWhite : LiliumUI::kColTealDeep,
-                 L"[Ent]リスト", 2, LiliumUI::Align::Center, true);
+                 L"[Ent]選択 [F1]IME", 2, LiliumUI::Align::Center, true);
     } else {
       const wchar_t * val = (r == 2) ? roomName : (r == 3) ? linkStr : scopeStr;
       c.drawText(mx + 174, ry, mw - 230, 42,
@@ -1102,11 +1106,11 @@ static void renderCellEditorModal(LiliumUI::Canvas & c, const TimeTableState * s
   }
 
   c.drawText(mx + 18, my + 356, mw - 36, 24, LiliumUI::kColMuted,
-             L"[↑↓]項目 [Ent]科目リスト/保存 [←→]変更 [Esc]戻る", 2, LiliumUI::Align::Center, true);
+             L"[↑↓]項目 [Ent]リスト/保存 [F1]科目名入力 [←→]変更 [Esc]戻る", 2, LiliumUI::Align::Center, true);
 
   LiliumUI::renderSidebar(c, L"授業編集", L"セル設定",
-                          L"【操作方法】\n[↑↓]: 項目移動\n科目名で[Ent]:\n分野別リスト表示\n[←→]: 色/教室\n[Esc]: 中止",
-                          L"[Ent]リスト/保存", L"[Esc]戻る", L"戻　る", false);
+                          L"【操作方法】\n[↑↓]: 項目移動\n科目名で[Ent]:\n分野別リスト表示\n[F1]: IME自由入力\n[←→]: 色/教室",
+                          L"[Ent]リスト/保存", L"[F1]IME入力", L"戻　る", false);
 }
 
 static void renderSubjectPickerModal(LiliumUI::Canvas & c, const TimeTableState * st) {
@@ -1146,12 +1150,12 @@ static void renderSubjectPickerModal(LiliumUI::Canvas & c, const TimeTableState 
   }
 
   c.drawText(mx + 14, my + 362, mw - 28, 24, LiliumUI::kColMuted,
-             L"[←→]分野切替   [↑↓]科目選択   [Enter]決定   [Esc]戻る",
+             L"[←→]分野 [↑↓]科目 [Ent]決定 [F1]自由入力(IME) [Esc]戻る",
              2, LiliumUI::Align::Center, true);
 
   LiliumUI::renderSidebar(c, L"科目選択", sc.name,
-                          L"【分野別リスト】\n[←→]: 分野切替\n[↑↓]: 科目選択\n[Ent]: 科目を決定\n[Esc]: キャンセル",
-                          L"[←→]分野[Ent]決定", L"[Esc]戻る", L"戻　る", false);
+                          L"【分野別リスト】\n[←→]: 分野切替\n[↑↓]: 科目選択\n[Ent]: 科目を決定\n[F1]: IME手入力",
+                          L"[F1]IME自由入力", L"[Esc]戻る", L"戻　る", false);
 }
 
 static void openPairPicker(TimeTableState * st) {
@@ -1359,9 +1363,10 @@ static void renderSettingsScreen(LiliumUI::Canvas & c, const TimeTableState * st
       if (r == 0) {
         wcscpy(valBuf, st->showTabBar ? L"ON (上部タブで切替)" : L"OFF (設定から切替)");
       } else if (r == 1) {
-        _snwprintf(valBuf, 96, L"%ls (%d/%d)", st->tabNames[st->activeFileIdx], st->activeFileIdx + 1, st->fileCount);
+        _snwprintf(valBuf, 96, L"%ls (%d/%d) [F4]改名", st->tabNames[st->activeFileIdx], st->activeFileIdx + 1, st->fileCount);
       } else if (r == 2) {
-        _snwprintf(valBuf, 96, L"%ls.ttb", kNewFileNames[st->newNameIdx]);
+        const wchar_t * nm = st->customNewFileName[0] ? st->customNewFileName : kNewFileNames[st->newNameIdx];
+        _snwprintf(valBuf, 96, L"%ls.ttb ([Ent]IME)", nm);
       } else if (r == 3) {
         wcsncpy(valBuf, kNewTmpl[st->newTemplateKind], 95);
       } else if (r == 4) {
@@ -1380,7 +1385,7 @@ static void renderSettingsScreen(LiliumUI::Canvas & c, const TimeTableState * st
   c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
   const wchar_t * foot = (st->setTab == 0) ? L"[↑↓]曜日 [Spc/Ent]表示切替 [←→]曜日色 [F2]タブ [Esc]戻る"
                        : (st->setTab == 1) ? L"[↑↓]行 [Ent]項目/適用 [←→]時刻・限・休憩 [F2]タブ [Esc]戻る"
-                                           : L"[↑↓]項目 [←→]切替 [Ent]決定・新規作成 [F2]タブ [Esc]戻る";
+                                           : L"[↑↓]項目 [←→]切替 [Ent]入力・作成 [F4]改名 [Esc]戻る";
   c.drawText(10, 440, LiliumUI::kMainW - 20, 40, LiliumUI::kColTextSub, foot, 2, LiliumUI::Align::Left, true);
 
   wchar_t sbBody[384];
@@ -1419,6 +1424,97 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                                    kOkBtn, 1, 0, L"[Enter / Esc] 閉じる");
     }
   }
+  if (st->inputModal.isOpen()) {
+    st->inputModal.render(c, true);
+  }
+}
+
+static void sanitizeFileNameStem(const wchar_t * raw, wchar_t * out, size_t maxLen) {
+  if (!out || maxLen == 0) return;
+  out[0] = L'\0';
+  if (!raw) return;
+  wchar_t tmp[64];
+  wcsncpy(tmp, raw, 63);
+  tmp[63] = L'\0';
+  int start = 0;
+  while (tmp[start] == L' ' || tmp[start] == L'\t') ++start;
+  if (start > 0) memmove(tmp, tmp + start, (wcslen(tmp + start) + 1) * sizeof(wchar_t));
+  size_t len = wcslen(tmp);
+  while (len > 0 && (tmp[len - 1] == L' ' || tmp[len - 1] == L'\t')) tmp[--len] = L'\0';
+  if (len >= 4 && _wcsicmp(tmp + len - 4, L".ttb") == 0) {
+    tmp[len - 4] = L'\0';
+  }
+  size_t k = 0;
+  for (size_t i = 0; tmp[i] && k + 1 < maxLen; ++i) {
+    wchar_t ch = tmp[i];
+    if (ch < 0x20 || ch == L'\\' || ch == L'/' || ch == L':' || ch == L'*' ||
+        ch == L'?' || ch == L'\"' || ch == L'<' || ch == L'>' || ch == L'|') {
+      continue;
+    }
+    out[k++] = ch;
+  }
+  out[k] = L'\0';
+}
+
+static void renameCurrentTimetableFile(TimeTableState * st, const wchar_t * rawStem) {
+  wchar_t stem[48] = L"";
+  sanitizeFileNameStem(rawStem, stem, 48);
+  if (!stem[0]) return;
+
+  wchar_t newFname[64] = L"";
+  _snwprintf(newFname, 64, L"%ls.ttb", stem);
+  newFname[63] = L'\0';
+  if (_wcsicmp(newFname, st->fileNames[st->activeFileIdx]) == 0) return;
+
+  wchar_t oldFull[MAX_PATH] = L"", newFull[MAX_PATH] = L"";
+  LiliumUI::joinPath(st->storeDir, st->fileNames[st->activeFileIdx], oldFull, MAX_PATH);
+  LiliumUI::joinPath(st->storeDir, newFname, newFull, MAX_PATH);
+  if (GetFileAttributesW(newFull) != INVALID_FILE_ATTRIBUTES) {
+    wcscpy(st->modalTitle, L"【 名前変更エラー 】");
+    wcsncpy(st->modalLine1, newFname, 95);
+    st->modalLine1[95] = L'\0';
+    wcscpy(st->modalLine2, L"同名の時間割ファイルが既に存在します。");
+    st->returnModeAfterModal = ScreenMode::Settings;
+    st->mode = ScreenMode::InfoModal;
+    return;
+  }
+
+  saveTimetableFile(st, st->activeFileIdx, st->data);
+  if (MoveFileW(oldFull, newFull)) {
+    scanTimetableFiles(st, newFname);
+    saveUiConfig(st);
+  }
+}
+
+static void confirmInputModalResult(TimeTableState * st) {
+  const wchar_t * raw = st->inputModal.text();
+  if (st->mode == ScreenMode::Settings) {
+    if (st->renameActiveModal) {
+      st->renameActiveModal = false;
+      renameCurrentTimetableFile(st, raw);
+    } else {
+      wchar_t stem[48] = L"";
+      sanitizeFileNameStem(raw, stem, 48);
+      if (stem[0]) {
+        wcsncpy(st->customNewFileName, stem, 47);
+        st->customNewFileName[47] = L'\0';
+      }
+    }
+  } else {
+    wchar_t nm[32] = L"";
+    wcsncpy(nm, raw, 31);
+    nm[31] = L'\0';
+    int start = 0;
+    while (nm[start] == L' ' || nm[start] == L'\t') ++start;
+    if (start > 0) memmove(nm, nm + start, (wcslen(nm + start) + 1) * sizeof(wchar_t));
+    size_t len = wcslen(nm);
+    while (len > 0 && (nm[len - 1] == L' ' || nm[len - 1] == L'\t')) nm[--len] = L'\0';
+    if (nm[0]) {
+      wcsncpy(st->editCustomName, nm, 31);
+      st->editCustomName[31] = L'\0';
+    }
+    st->mode = ScreenMode::CellEdit;
+  }
 }
 
 static void createNewTimetableFile(TimeTableState * st) {
@@ -1432,7 +1528,11 @@ static void createNewTimetableFile(TimeTableState * st) {
   }
 
   wchar_t baseName[48];
-  wcsncpy(baseName, kNewFileNames[st->newNameIdx], 47);
+  if (st->customNewFileName[0]) {
+    wcsncpy(baseName, st->customNewFileName, 47);
+  } else {
+    wcsncpy(baseName, kNewFileNames[st->newNameIdx], 47);
+  }
   baseName[47] = L'\0';
 
   wchar_t fname[64] = L"";
@@ -1612,8 +1712,15 @@ static void handleSettingsKey(TimeTableState * st, WPARAM vkCode) {
   st->window.requestRepaint(true);
 }
 
-static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
+static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
   TimeTableState * st = static_cast<TimeTableState *>(userData);
+  if (st->inputModal.isOpen()) {
+    bool confirmed = false, closed = false;
+    st->inputModal.handleKey(vkCode, isShift, confirmed, closed);
+    if (confirmed) confirmInputModalResult(st);
+    st->window.requestRepaint(true);
+    return;
+  }
 
   if (st->mode == ScreenMode::InfoModal) {
     if (vkCode == VK_RETURN || vkCode == VK_F3 || vkCode == VK_ESCAPE || vkCode == VK_BACK) {
@@ -1639,6 +1746,25 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
   }
 
   if (st->mode == ScreenMode::Settings) {
+    if (st->setTab == 2) {
+      if ((vkCode == VK_LEFT || vkCode == VK_RIGHT) && st->setRow == 2) {
+        st->customNewFileName[0] = L'\0';
+      } else if ((vkCode == VK_RETURN || vkCode == VK_F3 || vkCode == VK_SPACE) && st->setRow == 2) {
+        st->renameActiveModal = false;
+        const wchar_t * init = st->customNewFileName[0] ? st->customNewFileName : kNewFileNames[st->newNameIdx];
+        st->inputModal.open(L"【 新規時間割名 (Lilium IME) 】",
+                            L"作成する時間割の名称を入力 ([F2]入力切替)", init, 40);
+        st->window.requestRepaint(true);
+        return;
+      } else if (vkCode == VK_F4) {
+        st->renameActiveModal = true;
+        st->inputModal.open(L"【 時間割名の変更 (Lilium IME) 】",
+                            L"表示中の時間割ファイル名を変更 ([F2]入力切替)",
+                            st->tabNames[st->activeFileIdx], 40);
+        st->window.requestRepaint(true);
+        return;
+      }
+    }
     handleSettingsKey(st, vkCode);
     return;
   }
@@ -1686,6 +1812,11 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
         st->editCustomName[31] = L'\0';
       }
       st->mode = ScreenMode::CellEdit;
+    } else if (vkCode == VK_F1) {
+      st->renameActiveModal = false;
+      st->inputModal.open(L"【 科目名入力 (Lilium IME) 】",
+                          L"自由な科目名を入力してください ([F2]入力切替)",
+                          st->editCustomName, 30);
     } else if (vkCode == VK_ESCAPE || vkCode == VK_BACK) {
       st->mode = ScreenMode::CellEdit;
     }
@@ -1697,6 +1828,14 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
     int ids[kMaxCourses] = {};
     int idCount = collectExistingCourseIds(st, ids, kMaxCourses);
 
+    if (vkCode == VK_F1) {
+      st->renameActiveModal = false;
+      st->inputModal.open(L"【 科目名入力 (Lilium IME) 】",
+                          L"自由な科目名を入力してください ([F2]入力切替)",
+                          st->editCustomName, 30);
+      st->window.requestRepaint(true);
+      return;
+    }
     if (vkCode == VK_ESCAPE || vkCode == VK_BACK) {
       st->mode = ScreenMode::Grid;
       st->window.requestRepaint(true);
@@ -1821,6 +1960,14 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
 static void onClick(int x, int y, void * userData) {
   TimeTableState * st = static_cast<TimeTableState *>(userData);
 
+  if (st->inputModal.isOpen()) {
+    bool confirmed = false, closed = false;
+    st->inputModal.handleClick(x, y, confirmed, closed);
+    if (confirmed) confirmInputModalResult(st);
+    st->window.requestRepaint(true);
+    return;
+  }
+
   if (st->mode == ScreenMode::InfoModal) {
     st->mode = st->returnModeAfterModal;
     st->window.requestRepaint(true);
@@ -1881,6 +2028,18 @@ static void onClick(int x, int y, void * userData) {
         handleSettingsKey(st, VK_RIGHT);
       } else {
         st->window.requestRepaint(true);
+      }
+      return;
+    }
+    if (st->setTab == 2 && y >= 94 && y < 94 + 6 * 54) {
+      int r = (y - 94) / 54;
+      st->setRow = r;
+      if (r == 2) {
+        onKeyDown(VK_RETURN, false, userData);
+      } else if (r == 4 || r == 5) {
+        handleSettingsKey(st, VK_RETURN);
+      } else {
+        handleSettingsKey(st, VK_RIGHT);
       }
       return;
     }

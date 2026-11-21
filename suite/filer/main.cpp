@@ -1,4 +1,5 @@
 #include "../common/lilium_ui.h"
+#include "../common/lilium_ime_client.h"
 
 #include <new>
 #include <stdio.h>
@@ -15,7 +16,7 @@ constexpr int kViewerVisibleLines = 15;
 constexpr DWORD kMaxTextLoadBytes = 64 * 1024;
 constexpr int kHexBytesPerRow = 12;
 constexpr int kHexRowsPerPage = 15;
-constexpr int kToolCount = 7;
+constexpr int kToolCount = 8;
 
 enum ToolAction {
   ToolRoot = 0,
@@ -24,7 +25,8 @@ enum ToolAction {
   ToolPaste = 3,
   ToolNewFolder = 4,
   ToolDelete = 5,
-  ToolRefresh = 6
+  ToolRefresh = 6,
+  ToolRename = 7
 };
 
 struct FileEntry {
@@ -84,6 +86,8 @@ struct FilerState {
   wchar_t msgTitle[64] = L"";
   wchar_t msgLine1[96] = L"";
   wchar_t msgLine2[96] = L"";
+
+  LiliumIME::TextInputModal inputModal;
 };
 
 static void formatSizeStr(const FileEntry & e, wchar_t * out, size_t maxLen) {
@@ -653,6 +657,101 @@ static void executeCreateFolder(FilerState * st) {
   showFilerModal(st, ModalMode::MessageBox, L"【 フォルダ作成完了 】", newName, L"新しいフォルダを作成しました。");
 }
 
+static bool hasInvalidFileNameChars(const wchar_t * name) {
+  if (!name || !name[0]) return true;
+  if (wcscmp(name, L".") == 0 || wcscmp(name, L"..") == 0) return true;
+  for (int i = 0; name[i]; ++i) {
+    wchar_t ch = name[i];
+    if (ch < 0x20 || ch == L'\\' || ch == L'/' || ch == L':' ||
+        ch == L'*' || ch == L'?' || ch == L'\"' || ch == L'<' || ch == L'>' || ch == L'|') {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void requestRenameSelected(FilerState * st) {
+  if (st->sel < 0 || st->sel >= st->entryCount) return;
+  const FileEntry & e = st->entries[st->sel];
+  if (e.isParent || e.isDriveRoot) return;
+
+  wchar_t fullPath[MAX_PATH];
+  buildFullEntryPath(st, e, fullPath, MAX_PATH);
+  if (isEntryProtectedForDelete(st, fullPath, e.name)) {
+    showFilerModal(st, ModalMode::ProtectedWarn,
+                   L"【 名前変更保護領域 】",
+                   e.name,
+                   L"OS・NANDシステム領域や必須ファイルは変更できません。");
+    return;
+  }
+
+  st->inputModal.open(L"【 名前変更 (Lilium IME) 】",
+                      L"新しい名前を入力してください ([F2]で入力モード切替)",
+                      e.name, 96);
+  st->window.requestRepaint(true);
+}
+
+static void executeRenameSelected(FilerState * st, const wchar_t * rawNewName) {
+  if (!rawNewName || st->sel < 0 || st->sel >= st->entryCount) return;
+  const FileEntry e = st->entries[st->sel];
+  if (e.isParent || e.isDriveRoot) return;
+
+  wchar_t newName[MAX_PATH] = L"";
+  wcsncpy(newName, rawNewName, MAX_PATH - 1);
+  newName[MAX_PATH - 1] = L'\0';
+  int start = 0;
+  while (newName[start] == L' ' || newName[start] == L'\t') ++start;
+  if (start > 0) memmove(newName, newName + start, (wcslen(newName + start) + 1) * sizeof(wchar_t));
+  size_t len = wcslen(newName);
+  while (len > 0 && (newName[len - 1] == L' ' || newName[len - 1] == L'\t')) newName[--len] = L'\0';
+
+  if (hasInvalidFileNameChars(newName)) {
+    showFilerModal(st, ModalMode::MessageBox,
+                   L"【 名前変更エラー 】",
+                   newName[0] ? newName : L"(空欄)",
+                   L"使用できない文字が含まれているか空欄です。");
+    return;
+  }
+  if (wcscmp(newName, e.name) == 0) {
+    st->window.requestRepaint(true);
+    return;
+  }
+
+  wchar_t oldPath[MAX_PATH], newPath[MAX_PATH];
+  buildFullEntryPath(st, e, oldPath, MAX_PATH);
+  if (isEntryProtectedForDelete(st, oldPath, e.name)) {
+    showFilerModal(st, ModalMode::ProtectedWarn,
+                   L"【 名前変更保護領域 】",
+                   e.name,
+                   L"OS・NANDシステム領域や必須ファイルは変更できません。");
+    return;
+  }
+
+  FileEntry dummy = {};
+  wcsncpy(dummy.name, newName, MAX_PATH - 1);
+  buildFullEntryPath(st, dummy, newPath, MAX_PATH);
+
+  if (MoveFileW(oldPath, newPath)) {
+    wchar_t curCopy[MAX_PATH];
+    wcsncpy(curCopy, st->curDir, MAX_PATH - 1);
+    curCopy[MAX_PATH - 1] = L'\0';
+    loadDirectory(st, curCopy);
+    for (int i = 0; i < st->entryCount; ++i) {
+      if (_wcsicmp(st->entries[i].name, newName) == 0) {
+        st->sel = i;
+        adjustListScroll(st->sel, st->entryCount, st->scroll);
+        break;
+      }
+    }
+    showFilerModal(st, ModalMode::MessageBox, L"【 名前変更完了 】", newName, L"名前を変更しました。");
+  } else {
+    showFilerModal(st, ModalMode::MessageBox,
+                   L"【 名前変更失敗 】",
+                   newName,
+                   L"同名の項目があるか使用中の可能性があります。");
+  }
+}
+
 static void executePasteCopy(FilerState * st) {
   if (st->atDriveList || isProtectedSystemDir(st->curDir)) {
     showFilerModal(st, ModalMode::ProtectedWarn,
@@ -858,8 +957,7 @@ static void drawToolbarIconGlyph(LiliumUI::Canvas & c, int idx, int bx, int by, 
       c.fillRect(cx + 1, cy - 1, 2, 7, dCol);
       break;
     }
-    case ToolRefresh:
-    default: {
+    case ToolRefresh: {
       c.fillRect(cx - 7, cy - 5, 11, 2, accent);
       c.fillRect(cx + 3, cy - 7, 2, 6, accent);
       c.fillRect(cx + 5, cy - 6, 2, 4, accent);
@@ -868,6 +966,17 @@ static void drawToolbarIconGlyph(LiliumUI::Canvas & c, int idx, int bx, int by, 
       c.fillRect(cx - 5, cy + 1, 2, 6, accent);
       c.fillRect(cx - 7, cy + 2, 2, 4, accent);
       c.fillRect(cx - 9, cy + 3, 2, 2, accent);
+      break;
+    }
+    case ToolRename:
+    default: {
+      // Pencil / Rename glyph
+      for (int p = 0; p < 8; ++p) {
+        c.fillRect(cx - 5 + p, cy + 3 - p, 4, 3, accent);
+      }
+      c.fillRect(cx + 3, cy - 6, 4, 4, ink);
+      c.fillRect(cx - 7, cy + 5, 3, 2, ink);
+      c.fillRect(cx - 8, cy + 8, 16, 2, ink);
       break;
     }
   }
@@ -882,7 +991,7 @@ static bool isToolActionLocked(const FilerState * st, int idx) {
   if (!st) return true;
   bool dirProt = st->atDriveList || isProtectedSystemDir(st->curDir);
   if (idx == ToolPaste || idx == ToolNewFolder) return dirProt;
-  if (idx == ToolDelete) {
+  if (idx == ToolDelete || idx == ToolRename) {
     if (st->sel < 0 || st->sel >= st->entryCount) return true;
     const FileEntry & e = st->entries[st->sel];
     if (e.isParent || e.isDriveRoot) return true;
@@ -895,9 +1004,9 @@ static bool isToolActionLocked(const FilerState * st, int idx) {
 
 static void renderIconToolbar(LiliumUI::Canvas & c, const FilerState * st) {
   for (int i = 0; i < kToolCount; ++i) {
-    int bx = 12 + i * 56;
+    int bx = 12 + i * 50;
     int by = 80;
-    int bw = 50;
+    int bw = 45;
     int bh = 30;
     bool focused = st->toolbarFocused && (st->toolbarSel == i);
     bool locked = isToolActionLocked(st, i);
@@ -927,29 +1036,29 @@ static void renderIconToolbar(LiliumUI::Canvas & c, const FilerState * st) {
     drawToolbarIconGlyph(c, i, bx, by, bw, bh, focused, locked);
   }
 
-  // Status pill on right of toolbar (x=406..628)
+  // Status pill on right of toolbar (x=414..628)
   bool dirProt = st->atDriveList || isProtectedSystemDir(st->curDir);
   if (dirProt) {
-    c.drawBox(406, 80, 222, 30, LiliumUI::kColWarnBg, LiliumUI::kColWarnBorder);
-    c.drawText(412, 80, 210, 30, LiliumUI::kColWarnText,
+    c.drawBox(414, 80, 214, 30, LiliumUI::kColWarnBg, LiliumUI::kColWarnBorder);
+    c.drawText(418, 80, 206, 30, LiliumUI::kColWarnText,
                L"保護領域 (複写元のみ可)", 2, LiliumUI::Align::Center, true);
   } else if (st->copySrcName[0]) {
     wchar_t cpBuf[96];
     _snwprintf(cpBuf, 96, L"複写:%ls", st->copySrcName);
     cpBuf[95] = L'\0';
-    c.drawBox(406, 80, 222, 30, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
-    c.drawText(412, 80, 210, 30, LiliumUI::kColTealDeep, cpBuf, 2, LiliumUI::Align::Center, true);
+    c.drawBox(414, 80, 214, 30, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
+    c.drawText(418, 80, 206, 30, LiliumUI::kColTealDeep, cpBuf, 2, LiliumUI::Align::Center, true);
   } else {
-    c.drawBox(406, 80, 222, 30, LiliumUI::kColWhite, LiliumUI::kColBorder);
-    c.drawText(412, 80, 210, 30, LiliumUI::kColMuted,
-               L"[1-7]機能アイコン選択", 2, LiliumUI::Align::Center, true);
+    c.drawBox(414, 80, 214, 30, LiliumUI::kColWhite, LiliumUI::kColBorder);
+    c.drawText(418, 80, 206, 30, LiliumUI::kColMuted,
+               L"[1-8]機能アイコン選択", 2, LiliumUI::Align::Center, true);
   }
 }
 
 static void onRender(LiliumUI::Canvas & c, void * userData) {
   FilerState * st = static_cast<FilerState *>(userData);
 
-  if (c.fullRedraw || st->modal != ModalMode::None || st->viewing) {
+  if (c.fullRedraw || st->modal != ModalMode::None || st->viewing || st->inputModal.isOpen()) {
     c.fillRect(0, 0, LiliumUI::kMainW, LiliumUI::kScreenH, LiliumUI::kColBgMain);
 
     wchar_t badge[48];
@@ -996,8 +1105,8 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                st->viewing
                  ? L"[↑↓/PgUpDn]スクロール [F2]テキスト/HEX [Esc]一覧へ戻る"
                  : (st->toolbarFocused
-                      ? L"[←→/1-7]機能選択 [Ent]実行 [戻る/↓]一覧へ戻る [HOME]終了"
-                      : L"[↑↓]選択 [Ent]開く [BS]上 [1-7]機能アイコン [戻る]終了"),
+                      ? L"[←→/1-8]機能選択 [Ent]実行 [戻る/↓]一覧へ戻る [HOME]終了"
+                      : L"[↑↓]選択 [Ent]開く [BS]上 [1-8]機能 [F6]名前変更 [戻る]終了"),
                2, LiliumUI::Align::Left, true);
   } else {
     if (st->prevScroll != st->scroll) {
@@ -1016,7 +1125,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
   const wchar_t * cardTitle = L"ファイル詳細";
   wchar_t cardBody[512] = L"項目なし";
   const wchar_t * statusLine = L"一覧中";
-  const wchar_t * hint1 = L"[1-7]機能選択";
+  const wchar_t * hint1 = L"[1-8]機能選択";
   const wchar_t * hint2 = L"[Ent]開[BS]上";
   const wchar_t * exitLbl = L"戻　る";
 
@@ -1073,9 +1182,15 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
           : L"【機能説明】\n選択中のファイル/空\nフォルダを削除します。\n確認画面が出ます。\n【操作】\n[Ent]削除 [戻る]一覧");
         break;
       case ToolRefresh:
-      default:
         cardTitle = L"[7] 最新に更新";
         wcscpy(cardBody, L"【機能説明】\n現在のフォルダ一覧を\n再読み込みします。\n【操作】\n[Ent]更新 [戻る]一覧");
+        break;
+      case ToolRename:
+      default:
+        cardTitle = L"[8] 名前変更(IME)";
+        wcscpy(cardBody, locked
+          ? L"【機能説明】\n選択中ファイル/フォルダ\nの名前を変更します。\n【状態】\n※システム保護対象は変更不可"
+          : L"【機能説明】\n選択中項目の名前を\nLilium IME(日本語可)\nで変更します。\n【操作】\n[Ent]変更 [戻る]一覧");
         break;
     }
     hint1 = L"[Ent]機能実行";
@@ -1120,6 +1235,10 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     LiliumUI::renderConfirmModal(c, st->msgTitle, st->msgLine1, st->msgLine2,
                                  kOkBtns, 1, 0, L"[Enter / Esc]: 閉じる");
   }
+
+  if (st->inputModal.isOpen()) {
+    st->inputModal.render(c, true);
+  }
 }
 
 static void executeToolAction(FilerState * st, int idx) {
@@ -1160,6 +1279,9 @@ static void executeToolAction(FilerState * st, int idx) {
       st->window.requestRepaint(true);
       break;
     }
+    case ToolRename:
+      requestRenameSelected(st);
+      break;
     default:
       st->window.requestRepaint(true);
       break;
@@ -1167,8 +1289,8 @@ static void executeToolAction(FilerState * st, int idx) {
 }
 
 static int toolIndexFromKey(WPARAM vkCode) {
-  if (vkCode >= '1' && vkCode <= '7') return static_cast<int>(vkCode - '1');
-  if (vkCode >= VK_NUMPAD1 && vkCode <= VK_NUMPAD7) return static_cast<int>(vkCode - VK_NUMPAD1);
+  if (vkCode >= '1' && vkCode <= '8') return static_cast<int>(vkCode - '1');
+  if (vkCode >= VK_NUMPAD1 && vkCode <= VK_NUMPAD8) return static_cast<int>(vkCode - VK_NUMPAD1);
   // SHARP Brain top-row number keys (when unshifted)
   switch (vkCode) {
     case 'Q': return 0;
@@ -1178,6 +1300,7 @@ static int toolIndexFromKey(WPARAM vkCode) {
     case 'T': return 4;
     case 'Y': return 5;
     case 'U': return 6;
+    case 'I': return 7;
     default: return -1;
   }
 }
@@ -1201,8 +1324,19 @@ static void activateSelectedEntry(FilerState * st) {
   openFileInViewer(st, e);
 }
 
-static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
+static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
   FilerState * st = static_cast<FilerState *>(userData);
+
+  if (st->inputModal.isOpen()) {
+    bool confirmed = false, closed = false;
+    st->inputModal.handleKey(vkCode, isShift, confirmed, closed);
+    if (confirmed) {
+      executeRenameSelected(st, st->inputModal.text());
+    } else {
+      st->window.requestRepaint(true);
+    }
+    return;
+  }
 
   if (st->modal == ModalMode::ProtectedWarn || st->modal == ModalMode::MessageBox) {
     if (vkCode == VK_RETURN || vkCode == VK_F3 || vkCode == VK_ESCAPE || vkCode == VK_BACK) {
@@ -1403,6 +1537,9 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
     case VK_DELETE:
       executeToolAction(st, ToolDelete);
       break;
+    case VK_F6:
+      executeToolAction(st, ToolRename);
+      break;
     case VK_ESCAPE:
     case VK_HOME:
     case VK_F10:
@@ -1415,6 +1552,17 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
 
 static void onClick(int x, int y, void * userData) {
   FilerState * st = static_cast<FilerState *>(userData);
+
+  if (st->inputModal.isOpen()) {
+    bool confirmed = false, closed = false;
+    st->inputModal.handleClick(x, y, confirmed, closed);
+    if (confirmed) {
+      executeRenameSelected(st, st->inputModal.text());
+    } else {
+      st->window.requestRepaint(true);
+    }
+    return;
+  }
 
   if (st->modal == ModalMode::ProtectedWarn || st->modal == ModalMode::MessageBox) {
     st->modal = ModalMode::None;
@@ -1463,8 +1611,8 @@ static void onClick(int x, int y, void * userData) {
 
   if (y >= 80 && y < 110) {
     for (int i = 0; i < kToolCount; ++i) {
-      int bx = 12 + i * 56;
-      if (x >= bx && x < bx + 50) {
+      int bx = 12 + i * 50;
+      if (x >= bx && x < bx + 45) {
         if (st->toolbarFocused && st->toolbarSel == i) {
           executeToolAction(st, i);
         } else {

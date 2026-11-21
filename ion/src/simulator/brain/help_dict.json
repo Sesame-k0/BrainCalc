@@ -19,6 +19,15 @@
     "ja_title": "計算アプリ",
     "ja_desc": "四則演算や分数、微積分、三角関数行列などの計算を行います。\n【Enter】計算実行\n【F1】関数メニュー\n【F9】変数一覧"
   },
+  "App_CashCalc": {
+    "en_keys": [
+      "CashCalc",
+      "CASHCALC"
+    ],
+    "en_desc": "Accounting calculator with tax/GT, cost-sell-margin, invoice tax breakdown, and days/loan solver.",
+    "ja_title": "経理電卓アプリ",
+    "ja_desc": "税込・税抜・GT・原価売価逆算・インボイス集計・日数単利/割賦計算\n【Enter】アプリ起動\n【F1】税率端数設定"
+  },
   "App_Functions": {
     "en_keys": [
       "Functions",

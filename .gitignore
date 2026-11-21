@@ -12,3 +12,5 @@ epsilon.map
 compile_commands.json
 /scratch/
 /suite/doom/wad/
+/suite/ime/mozc_raw/
+/suite/ime/lilium_ime.dic
