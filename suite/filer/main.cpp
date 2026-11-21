@@ -49,6 +49,7 @@ struct FilerState {
   wchar_t curDir[MAX_PATH] = L"";
   bool atDriveList = false; // Host PC drive list view; WinCE uses "\" root directly
   FileEntry entries[kMaxEntries] = {};
+  wchar_t selfLiliumRoot[MAX_PATH] = L"";
   int entryCount = 0;
   int sel = 0;
   int prevSel = 0;
@@ -438,16 +439,89 @@ static bool isProtectedSystemDir(const wchar_t * dirPath) {
   return false;
 }
 
+static void trimTrailingSlashCopy(const wchar_t * src, wchar_t * dst, size_t maxLen) {
+  if (!dst || maxLen == 0) return;
+  dst[0] = L'\0';
+  if (!src || !src[0]) return;
+  wcsncpy(dst, src, maxLen - 1);
+  dst[maxLen - 1] = L'\0';
+  size_t len = wcslen(dst);
+  while (len > 1 && (dst[len - 1] == L'\\' || dst[len - 1] == L'/')) {
+    if (len == 3 && dst[1] == L':') break; // Preserve Windows drive root like C:\.
+    dst[--len] = L'\0';
+  }
+}
+
 static bool isEntryProtectedForDelete(const FilerState * st, const wchar_t * fullPath, const wchar_t * name) {
   if (!st || st->atDriveList) return true;
-  if (isProtectedSystemDir(st->curDir) || isProtectedSystemDir(fullPath)) return true;
-  if (_wcsicmp(name, L"AppMain.exe") == 0 ||
-      _wcsicmp(name, L"AppMain.cfg") == 0 ||
-      _wcsicmp(name, L"AppMain_.exe") == 0 ||
-      _wcsicmp(name, L"index.din") == 0) {
-    return true;
+  wchar_t trimmedFull[MAX_PATH];
+  trimTrailingSlashCopy(fullPath, trimmedFull, MAX_PATH);
+  if (isProtectedSystemDir(st->curDir) || isProtectedSystemDir(trimmedFull)) return true;
+
+  const bool isCoreFileName =
+      (_wcsicmp(name, L"AppMain.exe") == 0 ||
+       _wcsicmp(name, L"AppMain.cfg") == 0 ||
+       _wcsicmp(name, L"AppMain_.exe") == 0 ||
+       _wcsicmp(name, L"index.din") == 0 ||
+       _wcsicmp(name, L"LiliumFiler.exe") == 0 ||
+       _wcsicmp(name, L"LiliumLauncher.exe") == 0);
+
+  if (st->selfLiliumRoot[0] != L'\0') {
+    // Protect the running Lilium folder itself and all its ancestor directories (e.g., \NAND3\アプリ).
+    if (pathMatchesPrefixDir(st->selfLiliumRoot, trimmedFull)) return true;
+
+    // Inside the running Lilium folder, protect core binaries/config/apps dir;
+    // sibling app folders outside selfLiliumRoot (e.g., \NAND3\アプリ\ceOpener) can be deleted freely.
+    if (pathMatchesPrefixDir(trimmedFull, st->selfLiliumRoot)) {
+      if (isCoreFileName || _wcsicmp(name, L"apps") == 0) return true;
+    }
+    return false;
   }
-  return false;
+
+  return isCoreFileName;
+}
+
+static bool deleteDirectoryRecursive(const FilerState * st, const wchar_t * dirPath, int depth) {
+  if (depth > 16 || !dirPath || !dirPath[0]) return false;
+  wchar_t trimmed[MAX_PATH];
+  trimTrailingSlashCopy(dirPath, trimmed, MAX_PATH);
+  if (isProtectedSystemDir(trimmed)) return false;
+  if (st && st->selfLiliumRoot[0] != L'\0' && pathMatchesPrefixDir(st->selfLiliumRoot, trimmed)) {
+    return false;
+  }
+
+  wchar_t pattern[MAX_PATH];
+  LiliumUI::joinPath(trimmed, L"*", pattern, MAX_PATH);
+  WIN32_FIND_DATAW fd = {};
+  HANDLE hFind = FindFirstFileW(pattern, &fd);
+  if (hFind != INVALID_HANDLE_VALUE) {
+    do {
+      if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) continue;
+      wchar_t child[MAX_PATH];
+      LiliumUI::joinPath(trimmed, fd.cFileName, child, MAX_PATH);
+      if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+        if (!deleteDirectoryRecursive(st, child, depth + 1)) {
+          FindClose(hFind);
+          return false;
+        }
+      } else {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_READONLY) {
+          SetFileAttributesW(child, fd.dwFileAttributes & ~FILE_ATTRIBUTE_READONLY);
+        }
+        if (!DeleteFileW(child)) {
+          FindClose(hFind);
+          return false;
+        }
+      }
+    } while (FindNextFileW(hFind, &fd));
+    FindClose(hFind);
+  }
+
+  DWORD attrs = GetFileAttributesW(trimmed);
+  if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_READONLY)) {
+    SetFileAttributesW(trimmed, attrs & ~FILE_ATTRIBUTE_READONLY);
+  }
+  return RemoveDirectoryW(trimmed) != 0;
 }
 
 static void showFilerModal(FilerState * st, ModalMode mode,
@@ -494,7 +568,7 @@ static void executeDeleteSelected(FilerState * st) {
     return;
   }
 
-  BOOL ok = e.isDir ? RemoveDirectoryW(fullPath) : DeleteFileW(fullPath);
+  BOOL ok = e.isDir ? (deleteDirectoryRecursive(st, fullPath, 0) ? TRUE : FALSE) : DeleteFileW(fullPath);
   if (ok) {
     int oldSel = st->sel;
     wchar_t curCopy[MAX_PATH];
@@ -509,7 +583,7 @@ static void executeDeleteSelected(FilerState * st) {
     showFilerModal(st, ModalMode::MessageBox,
                    L"【 削除失敗 】",
                    e.name,
-                   e.isDir ? L"空でないフォルダは削除できません。" : L"使用中または保護されています。");
+                   e.isDir ? L"使用中または削除保護された項目を含みます。" : L"使用中または保護されています。");
   }
 }
 
@@ -1446,6 +1520,7 @@ int main(int /*argc*/, char * /*argv*/[]) {
 
   wchar_t rootDir[MAX_PATH] = L"";
   LiliumUI::getLiliumRootDir(rootDir, MAX_PATH);
+  trimTrailingSlashCopy(rootDir, state->selfLiliumRoot, MAX_PATH);
   loadDirectory(state, rootDir);
 
   LiliumUI::AppCallbacks cb = {};

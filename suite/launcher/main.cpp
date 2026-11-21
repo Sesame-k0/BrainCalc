@@ -1,5 +1,6 @@
 #include "../common/lilium_ui.h"
 
+#include <new>
 #include <shellapi.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +15,11 @@ static constexpr int kGridCols = 4;
 static constexpr int kGridRows = 3;
 static constexpr int kAppsPerPage = kGridCols * kGridRows;
 
+static constexpr int kLaunchReorderX = 568;
+static constexpr int kLaunchReorderY = 440;
+static constexpr int kLaunchReorderW = 100;
+static constexpr int kLaunchReorderH = 34;
+
 static constexpr int kLaunchExitX = 678;
 static constexpr int kLaunchExitY = 440;
 static constexpr int kLaunchExitW = 104;
@@ -24,7 +30,8 @@ struct AppEntry {
   wchar_t exePath[MAX_PATH];
   wchar_t workDir[MAX_PATH];
   wchar_t relDesc[96];
-  int builtInKind; // 0=Calc, 1=TaskMgr, 2=Clock, 3=Filer, 4=DOOM, -1=External
+  wchar_t orderKey[96];
+  int builtInKind; // 0=Calc, 1=TaskMgr, 2=Clock, 3=Filer, 4=DOOM, 5=Life, 6=TimeTable, 7=CashCalc, -1=External
   bool isLiliumSuite;
   bool isFolderApp;
   bool hasCustomIcon;
@@ -46,6 +53,7 @@ struct LauncherState {
   int appCount = 0;
   int selectedIndex = 0;
   int prevSelectedIndex = 0;
+  bool reorderMode = false;
   ModalState modal = ModalState::None;
   int modalFocus = 1; // 0: Yes/Quit, 1: Cancel
   wchar_t errLine1[96] = L"";
@@ -63,16 +71,17 @@ static bool hasExeSuffix(const wchar_t * name) {
 }
 
 static bool isBuiltInRelName(const wchar_t * fileName) {
-  static constexpr const wchar_t * kBuiltInFiles[7] = {
+  static constexpr const wchar_t * kBuiltInFiles[8] = {
     L"LiliumCalc.exe",
     L"LiliumTaskMgr.exe",
     L"LiliumClock.exe",
     L"LiliumFiler.exe",
     L"doom.exe",
     L"LiliumLife.exe",
-    L"LiliumTimeTable.exe"
+    L"LiliumTimeTable.exe",
+    L"LiliumCashCalc.exe"
   };
-  for (int i = 0; i < 7; ++i) {
+  for (int i = 0; i < 8; ++i) {
     if (_wcsicmp(fileName, kBuiltInFiles[i]) == 0) return true;
   }
   return false;
@@ -292,6 +301,80 @@ static bool resolveFolderAppExe(const wchar_t * folderPath, const wchar_t * fold
   return false;
 }
 
+static bool containsNoCase(const wchar_t * haystack, const wchar_t * needle) {
+  if (!haystack || !needle || !needle[0]) return false;
+  size_t hLen = wcslen(haystack);
+  size_t nLen = wcslen(needle);
+  if (hLen < nLen) return false;
+  for (size_t i = 0; i + nLen <= hLen; ++i) {
+    if (_wcsnicmp(haystack + i, needle, nLen) == 0) return true;
+  }
+  return false;
+}
+
+static void trimTrailingSlashInPlace(wchar_t * path) {
+  if (!path) return;
+  size_t len = wcslen(path);
+  while (len > 1 && (path[len - 1] == L'\\' || path[len - 1] == L'/')) {
+    if (len == 3 && path[1] == L':') break;
+    path[--len] = L'\0';
+  }
+}
+
+static void getParentDirAndSelfName(const wchar_t * rootDir,
+                                    wchar_t * outParentDir, size_t maxParentLen,
+                                    wchar_t * outSelfName, size_t maxSelfLen) {
+  outParentDir[0] = L'\0';
+  outSelfName[0] = L'\0';
+  if (!rootDir || !rootDir[0]) return;
+
+  wchar_t clean[MAX_PATH] = L"";
+  wcsncpy(clean, rootDir, MAX_PATH - 1);
+  clean[MAX_PATH - 1] = L'\0';
+  trimTrailingSlashInPlace(clean);
+
+  wchar_t * lastSlash = wcsrchr(clean, L'\\');
+  wchar_t * fslash = wcsrchr(clean, L'/');
+  if (fslash && (!lastSlash || fslash > lastSlash)) lastSlash = fslash;
+  if (!lastSlash) return;
+
+  wcsncpy(outSelfName, lastSlash + 1, maxSelfLen - 1);
+  outSelfName[maxSelfLen - 1] = L'\0';
+
+  if (lastSlash == clean) {
+    wcsncpy(outParentDir, L"\\", maxParentLen - 1);
+  } else {
+    *lastSlash = L'\0';
+    if (wcslen(clean) == 2 && clean[1] == L':') {
+      _snwprintf(outParentDir, maxParentLen, L"%s\\", clean);
+    } else {
+      wcsncpy(outParentDir, clean, maxParentLen - 1);
+    }
+  }
+  outParentDir[maxParentLen - 1] = L'\0';
+}
+
+static bool isKnownNonAppDir(const wchar_t * name) {
+  static constexpr const wchar_t * kSkipDirs[] = {
+    L".git", L"apps", L"build", L"cegcc", L"cegcc_build", L"cegcc_stage",
+    L"common", L"docs", L"doom", L"doom_obj", L"escher", L"ion", L"kandinsky",
+    L"khycas", L"liba", L"lz4", L"misakifont", L"poincare", L"python",
+    L"release", L"scripts", L"suite", L"tools", L"tests",
+    L"System Volume Information", L"$RECYCLE.BIN", L"RECYCLER"
+  };
+  for (int i = 0; i < static_cast<int>(sizeof(kSkipDirs) / sizeof(kSkipDirs[0])); ++i) {
+    if (_wcsicmp(name, kSkipDirs[i]) == 0) return true;
+  }
+  return false;
+}
+
+static bool isDuplicateAppPath(const LauncherState * st, const wchar_t * exePath) {
+  for (int i = 0; i < st->appCount; ++i) {
+    if (_wcsicmp(st->apps[i].exePath, exePath) == 0) return true;
+  }
+  return false;
+}
+
 static void addBuiltInEntry(LauncherState * st, const wchar_t * appsDir,
                             const wchar_t * displayName, const wchar_t * fileName, int kind) {
   if (!st || st->appCount >= kMaxApps) return;
@@ -302,12 +385,133 @@ static void addBuiltInEntry(LauncherState * st, const wchar_t * appsDir,
   wcsncpy(e.workDir, appsDir, MAX_PATH - 1);
   _snwprintf(e.relDesc, 96, L"apps\\%s", fileName);
   e.relDesc[95] = L'\0';
+  wcsncpy(e.orderKey, fileName, 95);
+  e.orderKey[95] = L'\0';
   e.builtInKind = kind;
   e.isLiliumSuite = true;
 }
 
-static void scanApps(LauncherState * st) {
+static void scanSiblingAppDirs(LauncherState * st, const wchar_t * parentDir,
+                               const wchar_t * selfFolderName, const wchar_t * keyPrefix) {
+  if (!st || !parentDir || !parentDir[0]) return;
+
+  wchar_t pat[MAX_PATH] = L"";
+  LiliumUI::joinPath(parentDir, L"*", pat, MAX_PATH);
+  WIN32_FIND_DATAW fd = {};
+  HANDLE hFind = FindFirstFileW(pat, &fd);
+  if (hFind == INVALID_HANDLE_VALUE) return;
+
+  do {
+    if (st->appCount >= kMaxApps) break;
+    if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+    if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) continue;
+    if (selfFolderName && selfFolderName[0] && _wcsicmp(fd.cFileName, selfFolderName) == 0) continue;
+    // Exclude any external backup folder named Lilium... (e.g., "Lilium Classic")
+    if (containsNoCase(fd.cFileName, L"Lilium")) continue;
+    if (isKnownNonAppDir(fd.cFileName)) continue;
+
+    wchar_t folderPath[MAX_PATH] = L"";
+    LiliumUI::joinPath(parentDir, fd.cFileName, folderPath, MAX_PATH);
+    wchar_t targetExe[MAX_PATH] = L"";
+    wchar_t iconFallbackExe[MAX_PATH] = L"";
+    if (!resolveFolderAppExe(folderPath, fd.cFileName, targetExe, iconFallbackExe)) {
+      continue;
+    }
+
+    const wchar_t * exeBase = wcsrchr(targetExe, L'\\');
+    exeBase = exeBase ? (exeBase + 1) : targetExe;
+    if (containsNoCase(exeBase, L"Lilium")) continue;
+    if (isDuplicateAppPath(st, targetExe)) continue;
+
+    AppEntry & e = st->apps[st->appCount++];
+    memset(&e, 0, sizeof(e));
+    wcsncpy(e.name, fd.cFileName, 47);
+    e.name[47] = L'\0';
+    wcsncpy(e.exePath, targetExe, MAX_PATH - 1);
+    wcsncpy(e.workDir, folderPath, MAX_PATH - 1);
+    _snwprintf(e.relDesc, 96, L"%s\\%s", keyPrefix, fd.cFileName);
+    e.relDesc[95] = L'\0';
+    wcsncpy(e.orderKey, e.relDesc, 95);
+    e.orderKey[95] = L'\0';
+    e.builtInKind = -1;
+    e.isLiliumSuite = false;
+    e.isFolderApp = true;
+    e.hasCustomIcon = extractExeIconToCache(targetExe, &e.cachedIcon);
+    if (!e.hasCustomIcon && iconFallbackExe[0] && _wcsicmp(iconFallbackExe, targetExe) != 0) {
+      e.hasCustomIcon = extractExeIconToCache(iconFallbackExe, &e.cachedIcon);
+    }
+  } while (FindNextFileW(hFind, &fd));
+  FindClose(hFind);
+}
+
+static void getOrderFilePath(wchar_t * outPath, size_t maxLen) {
+  wchar_t rootDir[MAX_PATH] = L"";
+  LiliumUI::getLiliumRootDir(rootDir, MAX_PATH);
+  LiliumUI::joinPath(rootDir, L"launcher_order.cfg", outPath, maxLen);
+}
+
+static void saveLauncherOrder(const LauncherState * st) {
+  if (!st || st->appCount <= 0) return;
+  wchar_t path[MAX_PATH] = L"";
+  getOrderFilePath(path, MAX_PATH);
+  FILE * fp = _wfopen(path, L"wb");
+  if (!fp) return;
+  for (int i = 0; i < st->appCount; ++i) {
+    char utf8[256] = {};
+    WideCharToMultiByte(CP_UTF8, 0, st->apps[i].orderKey, -1, utf8, sizeof(utf8) - 1, NULL, NULL);
+    utf8[sizeof(utf8) - 1] = '\0';
+    if (utf8[0]) {
+      fprintf(fp, "%s\n", utf8);
+    }
+  }
+  fclose(fp);
+}
+
+static void applySavedLauncherOrder(LauncherState * st) {
+  if (!st || st->appCount <= 1) return;
+  wchar_t path[MAX_PATH] = L"";
+  getOrderFilePath(path, MAX_PATH);
+  FILE * fp = _wfopen(path, L"rb");
+  if (!fp) return;
+
+  int writeIdx = 0;
+  char line[256] = {};
+  while (writeIdx < st->appCount && fgets(line, sizeof(line), fp) != NULL) {
+    size_t len = strlen(line);
+    while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r' ||
+                       line[len - 1] == ' ' || line[len - 1] == '\t')) {
+      line[--len] = '\0';
+    }
+    if (!line[0]) continue;
+    wchar_t keyW[96] = L"";
+    MultiByteToWideChar(CP_UTF8, 0, line, -1, keyW, 95);
+    keyW[95] = L'\0';
+    if (!keyW[0]) continue;
+
+    for (int k = writeIdx; k < st->appCount; ++k) {
+      if (_wcsicmp(st->apps[k].orderKey, keyW) == 0) {
+        if (k != writeIdx) {
+          AppEntry moving = st->apps[k];
+          for (int m = k; m > writeIdx; --m) {
+            st->apps[m] = st->apps[m - 1];
+          }
+          st->apps[writeIdx] = moving;
+        }
+        ++writeIdx;
+        break;
+      }
+    }
+  }
+  fclose(fp);
+}
+
+static void scanApps(LauncherState * st, bool preserveSelection = true) {
   if (!st) return;
+  wchar_t prevKey[96] = L"";
+  if (preserveSelection && st->selectedIndex >= 0 && st->selectedIndex < st->appCount) {
+    wcsncpy(prevKey, st->apps[st->selectedIndex].orderKey, 95);
+    prevKey[95] = L'\0';
+  }
   freeAppEntries(st);
 
   wchar_t rootDir[MAX_PATH] = L"";
@@ -323,6 +527,7 @@ static void scanApps(LauncherState * st) {
   addBuiltInEntry(st, appsDir, L"DOOM", L"doom.exe", 4);
   addBuiltInEntry(st, appsDir, L"Lilium Life", L"LiliumLife.exe", 5);
   addBuiltInEntry(st, appsDir, L"Lilium TimeTable", L"LiliumTimeTable.exe", 6);
+  addBuiltInEntry(st, appsDir, L"Lilium CashCalc", L"LiliumCashCalc.exe", 7);
   const int extStart = st->appCount;
 
   // 2. Dynamic scan of apps\* for additional EXEs and Brain app subfolders
@@ -351,6 +556,8 @@ static void scanApps(LauncherState * st) {
         wcsncpy(e.workDir, appsDir, MAX_PATH - 1);
         _snwprintf(e.relDesc, 96, L"apps\\%s", fd.cFileName);
         e.relDesc[95] = L'\0';
+        wcsncpy(e.orderKey, e.relDesc, 95);
+        e.orderKey[95] = L'\0';
         e.builtInKind = -1;
         e.isLiliumSuite = (_wcsnicmp(fd.cFileName, L"Lilium", 6) == 0);
         e.hasCustomIcon = extractExeIconToCache(e.exePath, &e.cachedIcon);
@@ -371,6 +578,8 @@ static void scanApps(LauncherState * st) {
         wcsncpy(e.workDir, folderPath, MAX_PATH - 1);
         _snwprintf(e.relDesc, 96, L"apps\\%s", fd.cFileName);
         e.relDesc[95] = L'\0';
+        wcsncpy(e.orderKey, e.relDesc, 95);
+        e.orderKey[95] = L'\0';
         e.builtInKind = -1;
         e.isLiliumSuite = false;
         e.isFolderApp = true;
@@ -383,7 +592,26 @@ static void scanApps(LauncherState * st) {
     FindClose(hFind);
   }
 
-  // Sort dynamically discovered apps alphabetically while preserving built-in order
+  // 3. Scan sibling app folders in parentDir(rootDir) (and \NAND3\アプリ on WinCE)
+  //    Strictly excluding any external folder/EXE named "Lilium..." (e.g. "Lilium Classic")
+  wchar_t parentDir[MAX_PATH] = L"";
+  wchar_t selfName[MAX_PATH] = L"";
+  getParentDirAndSelfName(rootDir, parentDir, MAX_PATH, selfName, MAX_PATH);
+  if (parentDir[0]) {
+    scanSiblingAppDirs(st, parentDir, selfName, L"sibling");
+  }
+#ifdef _WIN32_WCE
+  wchar_t ceAppsRoot[MAX_PATH] = L"\\NAND3\\アプリ";
+  wchar_t trimmedParent[MAX_PATH] = L"";
+  wcsncpy(trimmedParent, parentDir, MAX_PATH - 1);
+  trimmedParent[MAX_PATH - 1] = L'\0';
+  trimTrailingSlashInPlace(trimmedParent);
+  if (_wcsicmp(trimmedParent, ceAppsRoot) != 0) {
+    scanSiblingAppDirs(st, ceAppsRoot, selfName, L"nand3app");
+  }
+#endif
+
+  // Sort dynamically discovered apps alphabetically while preserving built-in defaults first
   for (int i = extStart + 1; i < st->appCount; ++i) {
     AppEntry tmp = st->apps[i];
     int j = i - 1;
@@ -392,6 +620,20 @@ static void scanApps(LauncherState * st) {
       --j;
     }
     st->apps[j + 1] = tmp;
+  }
+
+  // Reapply user's saved icon order from launcher_order.cfg if present
+  applySavedLauncherOrder(st);
+
+  if (preserveSelection && prevKey[0]) {
+    for (int i = 0; i < st->appCount; ++i) {
+      if (_wcsicmp(st->apps[i].orderKey, prevKey) == 0) {
+        st->selectedIndex = i;
+        break;
+      }
+    }
+  } else if (!preserveSelection) {
+    st->selectedIndex = 0;
   }
 
   if (st->selectedIndex < 0) st->selectedIndex = 0;
@@ -511,6 +753,19 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, const AppEntry & a
         c.fillRect(x + 14 + col * 10, y + 21 + row * 7, 8, 5, kCellCols[row][col]);
       }
     }
+  } else if (app.builtInKind == 7) {
+    // Lilium CashCalc desktop accounting calculator with green LCD and amber TAX/CA keys
+    c.drawBox(x + 9, y + 10, 38, 36, 0xF7F9FB, LiliumUI::kColCharcoal);
+    c.drawThickFrame(x + 9, y + 10, 38, 36, 2, LiliumUI::kColCharcoal);
+    c.drawBox(x + 13, y + 13, 30, 9, 0xCBEAD2, 0x2A6B46);
+    c.fillRect(x + 28, y + 16, 12, 3, 0x1A3E2B);
+    for (int row = 0; row < 3; ++row) {
+      for (int col = 0; col < 3; ++col) {
+        uint32_t kCol = (row == 0 && col == 0) ? 0xD47A14 : 0x4A5560;
+        c.fillRect(x + 13 + col * 8, y + 25 + row * 6, 6, 4, kCol);
+      }
+    }
+    c.fillRect(x + 37, y + 25, 6, 16, LiliumUI::kColTeal);
   } else if (app.hasCustomIcon && app.cachedIcon) {
     // Extracted 48x48 EXE icon inside crisp 56x56 frame
     c.drawBox(x, y, 56, 56, LiliumUI::kColWhite, selected ? LiliumUI::kColTeal : LiliumUI::kColBorder);
@@ -547,10 +802,16 @@ static void renderAppTile(LiliumUI::Canvas & c, const LauncherState * st, int ap
   int tx = 0, ty = 0, tw = 0, th = 0;
   getTileRect(slot, tx, ty, tw, th);
 
-  uint32_t bg = selected ? LiliumUI::kColTealSoft : LiliumUI::kColWhite;
-  uint32_t bd = selected ? LiliumUI::kColTeal : 0xD4DCE6;
+  const bool grabbing = (selected && st->reorderMode);
+  uint32_t bg = grabbing ? 0xFFF3D6 : (selected ? LiliumUI::kColTealSoft : LiliumUI::kColWhite);
+  uint32_t bd = grabbing ? 0xCC7A00 : (selected ? LiliumUI::kColTeal : 0xD4DCE6);
   c.drawBox(tx, ty, tw, th, bg, bd);
-  if (selected) {
+  if (grabbing) {
+    c.drawThickFrame(tx, ty, tw, th, 3, 0xCC7A00);
+    c.fillRect(tx, ty, tw, 5, 0xCC7A00);
+    c.drawBox(tx + tw - 44, ty + 7, 38, 18, 0xFFE3A3, 0xCC7A00);
+    c.drawText(tx + tw - 44, ty + 7, 38, 18, 0x8A4E00, L"移動", 1, LiliumUI::Align::Center, true);
+  } else if (selected) {
     c.drawThickFrame(tx, ty, tw, th, 2, LiliumUI::kColTeal);
     c.fillRect(tx, ty, tw, 4, LiliumUI::kColTeal);
   }
@@ -559,7 +820,7 @@ static void renderAppTile(LiliumUI::Canvas & c, const LauncherState * st, int ap
   drawAppEmblem(c, tx + (tw - 56) / 2, ty + 14, app, selected);
 
   c.drawText(tx + 6, ty + 78, tw - 12, 26,
-             selected ? LiliumUI::kColTealDeep : LiliumUI::kColText,
+             grabbing ? 0x8A4E00 : (selected ? LiliumUI::kColTealDeep : LiliumUI::kColText),
              app.name, 2, LiliumUI::Align::Center, true);
 }
 
@@ -735,19 +996,35 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
       }
     }
 
-    // Full-width bottom control bar + touchable Exit button
+    // Full-width bottom control bar + touchable Reorder & Exit buttons
     c.fillRect(0, 434, LiliumUI::kScreenW, 46, LiliumUI::kColSidebar);
     c.fillRect(0, 434, LiliumUI::kScreenW, 1, LiliumUI::kColBorder);
 
     wchar_t hintBuf[96];
-    if (totalPages > 1) {
-      _snwprintf(hintBuf, 96, L"[↑↓←→]:選択 [Ent/F3]:起動 [PgUp/Dn]:頁(%d/%d) [F4]:再読込",
+    if (st->reorderMode) {
+      _snwprintf(hintBuf, 96, L"[並替モード] ↑↓←→/タップ:位置入替 [Ent/F2/Esc]:完了");
+    } else if (totalPages > 1) {
+      _snwprintf(hintBuf, 96, L"[↑↓←→]選択 [Ent]起動 [PgUp/Dn]%d/%d [F2]並替 [F4]更新",
                  curPage + 1, totalPages);
     } else {
-      _snwprintf(hintBuf, 96, L"[↑↓←→]:選択  [Ent/F3]:起動  [F4]:再読込  [Esc/HOME]:終了");
+      _snwprintf(hintBuf, 96, L"[↑↓←→]選択 [Ent]起動 [F2]並替 [F4]更新 [Esc]終了");
     }
     hintBuf[95] = L'\0';
-    c.drawText(18, 435, 650, 45, LiliumUI::kColTextSub, hintBuf, 2, LiliumUI::Align::Left, true);
+    c.drawText(18, 435, 540, 45,
+               st->reorderMode ? 0x8A4E00 : LiliumUI::kColTextSub,
+               hintBuf, 2, LiliumUI::Align::Left, true);
+
+    if (st->reorderMode) {
+      c.drawBox(kLaunchReorderX, kLaunchReorderY, kLaunchReorderW, kLaunchReorderH, 0xFFF3D6, 0xCC7A00);
+      c.drawThickFrame(kLaunchReorderX, kLaunchReorderY, kLaunchReorderW, kLaunchReorderH, 2, 0xCC7A00);
+      c.drawText(kLaunchReorderX, kLaunchReorderY, kLaunchReorderW, kLaunchReorderH,
+                 0x8A4E00, L"並替完了", 2, LiliumUI::Align::Center, true);
+    } else {
+      c.drawBox(kLaunchReorderX, kLaunchReorderY, kLaunchReorderW, kLaunchReorderH,
+                LiliumUI::kColWhite, LiliumUI::kColTealBorder);
+      c.drawText(kLaunchReorderX, kLaunchReorderY, kLaunchReorderW, kLaunchReorderH,
+                 LiliumUI::kColTealDeep, L"[F2]並替", 2, LiliumUI::Align::Center, true);
+    }
 
     c.drawBox(kLaunchExitX, kLaunchExitY, kLaunchExitW, kLaunchExitH,
               LiliumUI::kColDangerBg, LiliumUI::kColDangerBorder);
@@ -880,6 +1157,53 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
   const int totalPages = (st->appCount + kAppsPerPage - 1) / kAppsPerPage;
   const int curPage = st->selectedIndex / kAppsPerPage;
 
+  if (st->reorderMode) {
+    int swapTarget = -1;
+    switch (vkCode) {
+      case VK_LEFT:
+        swapTarget = (st->selectedIndex - 1 + st->appCount) % st->appCount;
+        break;
+      case VK_RIGHT:
+        swapTarget = (st->selectedIndex + 1) % st->appCount;
+        break;
+      case VK_UP: {
+        int next = st->selectedIndex - kGridCols;
+        if (next < 0) next = st->appCount - 1;
+        swapTarget = next;
+        break;
+      }
+      case VK_DOWN: {
+        int next = st->selectedIndex + kGridCols;
+        if (next >= st->appCount) {
+          next = (st->selectedIndex + 1 < st->appCount) ? (st->appCount - 1) : 0;
+        }
+        swapTarget = next;
+        break;
+      }
+      case VK_RETURN:
+      case VK_F2:
+      case VK_ESCAPE:
+      case VK_BACK:
+        st->reorderMode = false;
+        saveLauncherOrder(st);
+        st->window.requestRepaint(true);
+        return;
+      default:
+        return;
+    }
+
+    if (swapTarget >= 0 && swapTarget < st->appCount && swapTarget != st->selectedIndex) {
+      AppEntry tmp = st->apps[st->selectedIndex];
+      st->apps[st->selectedIndex] = st->apps[swapTarget];
+      st->apps[swapTarget] = tmp;
+      st->prevSelectedIndex = st->selectedIndex;
+      st->selectedIndex = swapTarget;
+      saveLauncherOrder(st);
+      st->window.requestRepaint(true);
+    }
+    return;
+  }
+
   switch (vkCode) {
     case VK_LEFT:
       st->prevSelectedIndex = st->selectedIndex;
@@ -935,6 +1259,12 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
       }
       break;
     }
+    case VK_F2:
+      if (st->appCount > 1) {
+        st->reorderMode = true;
+        st->window.requestRepaint(true);
+      }
+      break;
     case VK_F4:
       scanApps(st);
       st->dict = LiliumUI::queryDictStatus();
@@ -998,8 +1328,25 @@ static void onClick(int x, int y, void * userData) {
     return;
   }
 
+  if (x >= kLaunchReorderX && x < kLaunchReorderX + kLaunchReorderW &&
+      y >= kLaunchReorderY && y < kLaunchReorderY + kLaunchReorderH) {
+    if (st->reorderMode) {
+      st->reorderMode = false;
+      saveLauncherOrder(st);
+      st->window.requestRepaint(true);
+    } else if (st->appCount > 1) {
+      st->reorderMode = true;
+      st->window.requestRepaint(true);
+    }
+    return;
+  }
+
   if (x >= kLaunchExitX && x < kLaunchExitX + kLaunchExitW &&
       y >= kLaunchExitY && y < kLaunchExitY + kLaunchExitH) {
+    if (st->reorderMode) {
+      st->reorderMode = false;
+      saveLauncherOrder(st);
+    }
     st->dict = LiliumUI::queryDictStatus();
     st->modal = ModalState::ExitConfirm;
     st->modalFocus = 1;
@@ -1017,12 +1364,26 @@ static void onClick(int x, int y, void * userData) {
     getTileRect(i - pageStart, tx, ty, tw, th);
     if (x >= tx && x < tx + tw && y >= ty && y < ty + th) {
       bool alreadySelected = (st->selectedIndex == i);
-      st->prevSelectedIndex = st->selectedIndex;
-      st->selectedIndex = i;
-      if (alreadySelected) {
-        launchSelectedApp(st);
+      if (st->reorderMode) {
+        if (alreadySelected) {
+          st->reorderMode = false;
+        } else {
+          AppEntry tmp = st->apps[st->selectedIndex];
+          st->apps[st->selectedIndex] = st->apps[i];
+          st->apps[i] = tmp;
+          st->prevSelectedIndex = st->selectedIndex;
+          st->selectedIndex = i;
+        }
+        saveLauncherOrder(st);
+        st->window.requestRepaint(true);
       } else {
-        st->window.requestRepaint(false);
+        st->prevSelectedIndex = st->selectedIndex;
+        st->selectedIndex = i;
+        if (alreadySelected) {
+          launchSelectedApp(st);
+        } else {
+          st->window.requestRepaint(false);
+        }
       }
       return;
     }
@@ -1048,9 +1409,11 @@ static bool onCloseRequest(void * userData) {
 } // namespace
 
 int main(int /*argc*/, char * /*argv*/[]) {
-  LauncherState * state = new LauncherState();
+  void * rawMem = calloc(1, sizeof(LauncherState));
+  if (!rawMem) return 1;
+  LauncherState * state = new (rawMem) LauncherState();
   state->dict = LiliumUI::queryDictStatus();
-  scanApps(state);
+  scanApps(state, false);
 
   LiliumUI::AppCallbacks cb = {};
   cb.onRender = onRender;
@@ -1067,6 +1430,7 @@ int main(int /*argc*/, char * /*argv*/[]) {
   }
 
   freeAppEntries(state);
-  delete state;
+  state->~LauncherState();
+  free(rawMem);
   return rc;
 }

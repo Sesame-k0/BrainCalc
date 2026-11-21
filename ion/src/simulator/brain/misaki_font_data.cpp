@@ -7290,6 +7290,26 @@ void drawString(uint32_t * dst, int screenW, int screenH,
             }
           }
         }
+      } else if (scale > 2) {
+        for (int r = 0; r < 8; r++) {
+          uint8_t rowBits = g->rows[r];
+          if (!rowBits) continue;
+          int pyBase = y + r * scale;
+          for (int sy = 0; sy < scale; sy++) {
+            int py = pyBase + sy;
+            if (py < 0 || py >= screenH) continue;
+            uint32_t * rowPtr = dst + py * screenW;
+            for (int c = 0; c < g->width; c++) {
+              if ((rowBits & (0x80 >> c)) != 0) {
+                int pxBase = curX + c * scale;
+                for (int sx = 0; sx < scale; sx++) {
+                  int px = pxBase + sx;
+                  if (px >= 0 && px < screenW) rowPtr[px] = color;
+                }
+              }
+            }
+          }
+        }
       }
     }
 

@@ -13,10 +13,27 @@ static constexpr int kMaxPeriods = 8;
 static constexpr int kMaxCourses = 32;
 static constexpr int kMaxFiles = 12;
 static constexpr int kColorCount = 10;
-static constexpr int kPresetCount = 44;
+static constexpr int kSubjCatCount = 8;
 static constexpr int kRoomCount = 12;
 static constexpr int kNewNameCount = 14;
 static constexpr int kTmplCount = 4;
+
+struct SubjectCategory {
+  const wchar_t * name;
+  int count;
+  const wchar_t * items[8];
+};
+
+static constexpr SubjectCategory kSubjectCategories[kSubjCatCount] = {
+  { L"数学系",       7, { L"数学I/A", L"数学II/B", L"数学III/C", L"微分積分", L"線形代数", L"統計学", L"確率・数理", nullptr } },
+  { L"英語・語学",   6, { L"英語", L"英文読解", L"英語表現", L"英会話", L"第二外国語", L"語学演習", nullptr, nullptr } },
+  { L"国語・人文",   6, { L"現代文", L"古典・古文", L"漢文", L"日本語表現", L"哲学・倫理", L"心理学", nullptr, nullptr } },
+  { L"理科・理工",   7, { L"物理", L"化学", L"生物", L"地学", L"理科基礎", L"力学・電磁気", L"理科実験", nullptr } },
+  { L"社会・法経",   7, { L"世界史", L"日本史", L"地理", L"公共・政経", L"現代社会", L"経済学", L"法学", nullptr } },
+  { L"情報・工学",   7, { L"情報", L"プログラミング", L"アルゴリズム", L"データ構造", L"OS/計算機", L"ネットワーク", L"工学実習", nullptr } },
+  { L"実技・HR",     6, { L"保健体育", L"音楽", L"美術", L"家庭科", L"総合探究", L"LHR", nullptr, nullptr } },
+  { L"大学・その他", 7, { L"ゼミ/演習", L"教養講義", L"卒業研究", L"実験/実習", L"講義A", L"講義B", L"自習/空き", nullptr } }
+};
 
 static constexpr const wchar_t * kDayShort[kDays] = {
   L"日", L"月", L"火", L"水", L"木", L"金", L"土"
@@ -46,17 +63,6 @@ static constexpr ColorTheme kColors[kColorCount] = {
   { L"インディゴ", 0xE8EAF8, 0x4C5CC5, 0x202A6E }
 };
 
-static constexpr const wchar_t * kSubjectPresets[kPresetCount] = {
-  L"数学I/A", L"数学II/B", L"数学III/C", L"微分積分", L"線形代数",
-  L"英語", L"英文読解", L"英語表現", L"英会話",
-  L"現代文", L"古典・古文", L"漢文", L"日本語表現",
-  L"物理", L"化学", L"生物", L"地学", L"理科基礎",
-  L"世界史", L"日本史", L"地理", L"現代社会", L"政治経済", L"倫理",
-  L"情報", L"アルゴリズム", L"データ構造", L"OS/計算機", L"プログラミング", L"ネットワーク",
-  L"音楽", L"美術", L"保健体育", L"家庭科", L"総合探究", L"LHR",
-  L"ゼミ/演習", L"卒業研究", L"実験", L"教養講義", L"法学", L"経済学", L"統計学", L"自習/空き"
-};
-
 static constexpr const wchar_t * kRoomPresets[kRoomCount] = {
   L"HR教室", L"講義室A", L"講義室B", L"大講義室",
   L"理科室", L"物理室", L"化学室", L"PC室",
@@ -78,7 +84,7 @@ enum BreakKind {
 struct PeriodSlot {
   int startMin; // minutes from 00:00
   int endMin;
-  int breakKind; // 0=なし, 1=小休み, 2=昼休み
+  int breakKind; // 0=通常10分, 1=小休20分, 2=昼休み
 };
 
 struct Course {
@@ -92,6 +98,8 @@ struct TimetableData {
   bool dayVisible[kDays];
   int dayColorIdx[kDays];
   int periodCount;
+  int classDurationMin;
+  int lunchDurationMin;
   PeriodSlot periods[kMaxPeriods];
   Course courses[kMaxCourses]; // courseId = index + 1
   int grid[kDays][kMaxPeriods]; // 0 = empty, 1..kMaxCourses
@@ -100,6 +108,7 @@ struct TimetableData {
 enum class ScreenMode {
   Grid = 0,
   CellEdit,
+  SubjectPicker,
   PairPicker,
   Settings,
   DeleteConfirm,
@@ -127,13 +136,16 @@ struct TimeTableState {
   // Cell editor state
   int editRow = 0;         // 0=Subject, 1=Color, 2=Room, 3=LinkCourse, 4=Scope, 5=Buttons
   int editBtnFocus = 0;    // 0=Save, 1=Clear, 2=Cancel
-  int editPresetIdx = 0;   // -1 if custom text preserved
   wchar_t editCustomName[32] = L"";
   int editColorIdx = 0;
   int editRoomIdx = 0;     // -1 if custom room preserved
   wchar_t editCustomRoom[20] = L"";
   int editLinkCourseId = 0; // 0=new/standalone, >0=pair with existing courseId
   bool editSyncAll = true;  // true=edit shared course, false=split into own course
+
+  // Categorized Subject List Picker state
+  int subjCatIdx = 0;
+  int subjItemIdx = 0;
 
   // Quick 対開講 Picker state
   int pairCourseIds[kMaxCourses + 1] = {}; // 0 indicates unlink
@@ -145,9 +157,9 @@ struct TimeTableState {
   int setRow = 0;
   int setScroll = 0;
   int setPeriodCol = 0;    // 0=startMin, 1=endMin, 2=breakKind
-  int setTmplIdx = 0;      // 0..kTmplCount-1
+  int setTmplIdx = 1;      // 0=HS45, 1=HS50, 2=Univ90, 3=Univ100
   int newNameIdx = 0;      // 0..kNewNameCount-1
-  int newTemplateKind = 0; // 0=HS6, 1=Univ5, 2=CopyCurrent
+  int newTemplateKind = 1; // 0=HS45, 1=HS50, 2=Univ90, 3=Univ100, 4=CopyCurrent
 
   // Confirm / Info modals
   int modalFocus = 1;
@@ -172,49 +184,56 @@ static void formatTimeHM(int mins, wchar_t * out, size_t maxLen) {
   out[maxLen - 1] = L'\0';
 }
 
+static void cascadePeriodsFrom(TimetableData & d, int fromIdx, bool updateSelfEnd) {
+  if (fromIdx < 0 || fromIdx >= kMaxPeriods) return;
+  int dur = clampInt(d.classDurationMin > 0 ? d.classDurationMin : 50, 20, 180);
+  int lunch = clampInt(d.lunchDurationMin > 0 ? d.lunchDurationMin : 45, 15, 120);
+  if (updateSelfEnd) {
+    d.periods[fromIdx].endMin = clampInt(d.periods[fromIdx].startMin + dur,
+                                         d.periods[fromIdx].startMin + 5, 23 * 60 + 55);
+  }
+  for (int p = fromIdx + 1; p < kMaxPeriods; ++p) {
+    int gap = 10; // Default inter-class passing break = 10 min
+    if (d.periods[p - 1].breakKind == BreakLunch) gap = lunch;
+    else if (d.periods[p - 1].breakKind == BreakShort) gap = 20;
+    d.periods[p].startMin = clampInt(d.periods[p - 1].endMin + gap, 6 * 60, 23 * 60 + 45);
+    d.periods[p].endMin = clampInt(d.periods[p].startMin + dur,
+                                   d.periods[p].startMin + 5, 23 * 60 + 55);
+  }
+}
+
 static void applyPeriodTemplate(TimetableData & d, int tmplIdx) {
+  for (int i = 0; i < kMaxPeriods; ++i) d.periods[i].breakKind = BreakNone;
   if (tmplIdx == 0) {
-    // 高校 50分 (6限, 4限後に昼休み)
+    // 高校 45分 (6限, 4限後に昼休み 45分)
     d.periodCount = 6;
-    static constexpr int starts[6] = { 8 * 60 + 50, 9 * 60 + 50, 10 * 60 + 50, 11 * 60 + 50, 13 * 60 + 25, 14 * 60 + 25 };
-    for (int i = 0; i < 6; ++i) {
-      d.periods[i].startMin = starts[i];
-      d.periods[i].endMin = starts[i] + 50;
-      d.periods[i].breakKind = (i == 3) ? BreakLunch : BreakNone;
-    }
+    d.classDurationMin = 45;
+    d.lunchDurationMin = 45;
+    d.periods[0].startMin = 8 * 60 + 50;
+    d.periods[3].breakKind = BreakLunch;
   } else if (tmplIdx == 1) {
-    // 高校 50分 (7限, 4限後に昼休み)
-    d.periodCount = 7;
-    static constexpr int starts[7] = { 8 * 60 + 50, 9 * 60 + 50, 10 * 60 + 50, 11 * 60 + 50, 13 * 60 + 25, 14 * 60 + 25, 15 * 60 + 25 };
-    for (int i = 0; i < 7; ++i) {
-      d.periods[i].startMin = starts[i];
-      d.periods[i].endMin = starts[i] + 50;
-      d.periods[i].breakKind = (i == 3) ? BreakLunch : BreakNone;
-    }
-  } else if (tmplIdx == 2) {
-    // 大学 90分 (5限, 2限後に昼休み)
-    d.periodCount = 5;
-    static constexpr int starts[5] = { 9 * 60 + 0, 10 * 60 + 40, 13 * 60 + 0, 14 * 60 + 40, 16 * 60 + 20 };
-    for (int i = 0; i < 5; ++i) {
-      d.periods[i].startMin = starts[i];
-      d.periods[i].endMin = starts[i] + 90;
-      d.periods[i].breakKind = (i == 1) ? BreakLunch : BreakNone;
-    }
-  } else {
-    // 大学 90分 (6限, 2限後に昼休み)
+    // 高校 50分 (6限, 4限後に昼休み 45分)
     d.periodCount = 6;
-    static constexpr int starts[6] = { 9 * 60 + 0, 10 * 60 + 40, 13 * 60 + 0, 14 * 60 + 40, 16 * 60 + 20, 18 * 60 + 0 };
-    for (int i = 0; i < 6; ++i) {
-      d.periods[i].startMin = starts[i];
-      d.periods[i].endMin = starts[i] + 90;
-      d.periods[i].breakKind = (i == 1) ? BreakLunch : BreakNone;
-    }
+    d.classDurationMin = 50;
+    d.lunchDurationMin = 45;
+    d.periods[0].startMin = 8 * 60 + 50;
+    d.periods[3].breakKind = BreakLunch;
+  } else if (tmplIdx == 2) {
+    // 大学 90分 (5限, 2限後に昼休み 50分)
+    d.periodCount = 5;
+    d.classDurationMin = 90;
+    d.lunchDurationMin = 50;
+    d.periods[0].startMin = 9 * 60 + 0;
+    d.periods[1].breakKind = BreakLunch;
+  } else {
+    // 大学 100分 (5限, 2限後に昼休み 45分)
+    d.periodCount = 5;
+    d.classDurationMin = 100;
+    d.lunchDurationMin = 45;
+    d.periods[0].startMin = 9 * 60 + 0;
+    d.periods[1].breakKind = BreakLunch;
   }
-  for (int i = d.periodCount; i < kMaxPeriods; ++i) {
-    d.periods[i].startMin = 16 * 60 + (i - 5) * 60;
-    d.periods[i].endMin = d.periods[i].startMin + 50;
-    d.periods[i].breakKind = BreakNone;
-  }
+  cascadePeriodsFrom(d, 0, true);
 }
 
 static void initBlankTimetable(TimetableData & d, int tmplIdx) {
@@ -279,7 +298,7 @@ static int countSlotsForCourse(const TimetableData & d, int courseId) {
 }
 
 static void initSampleTimetable(TimetableData & d) {
-  initBlankTimetable(d, 0);
+  initBlankTimetable(d, 1);
   // Seed sample classes with two explicit 対開講 pairs so pairing is visible immediately
   int cMath = allocCourse(d, L"数学II/B", 1, L"HR教室");
   int cEng  = allocCourse(d, L"英語",     2, L"講義室A");
@@ -365,6 +384,8 @@ static bool saveTimetableFile(const TimeTableState * st, int fileIdx, const Time
           d.dayColorIdx[0], d.dayColorIdx[1], d.dayColorIdx[2], d.dayColorIdx[3],
           d.dayColorIdx[4], d.dayColorIdx[5], d.dayColorIdx[6]);
   fprintf(fp, "period_count=%d\n", d.periodCount);
+  fprintf(fp, "class_duration=%d\n", d.classDurationMin);
+  fprintf(fp, "lunch_duration=%d\n", d.lunchDurationMin);
 
   for (int p = 0; p < kMaxPeriods; ++p) {
     fprintf(fp, "period=%d,%d,%d,%d\n",
@@ -393,7 +414,7 @@ static bool loadTimetableFile(const wchar_t * fullPath, TimetableData & d) {
   FILE * fp = _wfopen(fullPath, L"rb");
   if (!fp) return false;
 
-  initBlankTimetable(d, 0);
+  initBlankTimetable(d, 1);
   char line[512];
   while (fgets(line, sizeof(line), fp)) {
     trimLine(line);
@@ -418,6 +439,10 @@ static bool loadTimetableFile(const wchar_t * fullPath, TimetableData & d) {
       }
     } else if (strncmp(line, "period_count=", 13) == 0) {
       d.periodCount = clampInt(atoi(line + 13), 1, kMaxPeriods);
+    } else if (strncmp(line, "class_duration=", 15) == 0) {
+      d.classDurationMin = clampInt(atoi(line + 15), 20, 180);
+    } else if (strncmp(line, "lunch_duration=", 15) == 0) {
+      d.lunchDurationMin = clampInt(atoi(line + 15), 15, 120);
     } else if (strncmp(line, "period=", 7) == 0) {
       int idx = 0, sm = 0, em = 0, br = 0;
       if (sscanf(line + 7, "%d,%d,%d,%d", &idx, &sm, &em, &br) == 4 &&
@@ -570,7 +595,7 @@ static void switchToTimetableFile(TimeTableState * st, int newIdx) {
   wchar_t full[MAX_PATH] = L"";
   LiliumUI::joinPath(st->storeDir, st->fileNames[st->activeFileIdx], full, MAX_PATH);
   if (!loadTimetableFile(full, st->data)) {
-    initBlankTimetable(st->data, 0);
+    initBlankTimetable(st->data, 1);
   }
   ensureCursorVisible(st);
   saveUiConfig(st);
@@ -587,12 +612,18 @@ static void moveCursorDay(TimeTableState * st, int delta) {
   }
 }
 
-static int findPresetIndex(const wchar_t * name) {
-  if (!name) return -1;
-  for (int i = 0; i < kPresetCount; ++i) {
-    if (wcscmp(kSubjectPresets[i], name) == 0) return i;
+static bool findSubjectInCategories(const wchar_t * name, int & outCat, int & outItem) {
+  if (!name || !name[0]) return false;
+  for (int c = 0; c < kSubjCatCount; ++c) {
+    for (int i = 0; i < kSubjectCategories[c].count; ++i) {
+      if (kSubjectCategories[c].items[i] && wcscmp(kSubjectCategories[c].items[i], name) == 0) {
+        outCat = c;
+        outItem = i;
+        return true;
+      }
+    }
   }
-  return -1;
+  return false;
 }
 
 static int findRoomIndex(const wchar_t * room) {
@@ -898,15 +929,30 @@ static void renderGridMode(LiliumUI::Canvas & c, const TimeTableState * st) {
                           L"戻　る", false);
 }
 
+static void openSubjectPicker(TimeTableState * st) {
+  int cat = st->subjCatIdx;
+  int item = st->subjItemIdx;
+  if (findSubjectInCategories(st->editCustomName, cat, item)) {
+    st->subjCatIdx = cat;
+    st->subjItemIdx = item;
+  } else {
+    st->subjCatIdx = clampInt(st->subjCatIdx, 0, kSubjCatCount - 1);
+    st->subjItemIdx = clampInt(st->subjItemIdx, 0, kSubjectCategories[st->subjCatIdx].count - 1);
+  }
+  st->mode = ScreenMode::SubjectPicker;
+}
+
 static void openCellEditor(TimeTableState * st) {
   int cid = st->data.grid[st->curDay][st->curPeriod];
   st->editRow = 0;
   st->editBtnFocus = 0;
+  st->subjCatIdx = 0;
+  st->subjItemIdx = 0;
   if (cid >= 1 && cid <= kMaxCourses && st->data.courses[cid - 1].used) {
     const Course & cr = st->data.courses[cid - 1];
-    st->editPresetIdx = findPresetIndex(cr.name);
     wcsncpy(st->editCustomName, cr.name, 31);
     st->editCustomName[31] = L'\0';
+    findSubjectInCategories(cr.name, st->subjCatIdx, st->subjItemIdx);
     st->editColorIdx = clampInt(cr.colorIdx, 0, kColorCount - 1);
     st->editRoomIdx = findRoomIndex(cr.room);
     wcsncpy(st->editCustomRoom, cr.room, 19);
@@ -914,8 +960,7 @@ static void openCellEditor(TimeTableState * st) {
     st->editLinkCourseId = cid;
     st->editSyncAll = true;
   } else {
-    st->editPresetIdx = 0;
-    wcsncpy(st->editCustomName, kSubjectPresets[0], 31);
+    wcsncpy(st->editCustomName, kSubjectCategories[0].items[0], 31);
     st->editCustomName[31] = L'\0';
     st->editColorIdx = st->data.dayColorIdx[st->curDay];
     st->editRoomIdx = 0;
@@ -928,7 +973,7 @@ static void openCellEditor(TimeTableState * st) {
 }
 
 static void saveCellEditor(TimeTableState * st) {
-  const wchar_t * finalName = (st->editPresetIdx >= 0) ? kSubjectPresets[st->editPresetIdx] : st->editCustomName;
+  const wchar_t * finalName = st->editCustomName;
   const wchar_t * finalRoom = (st->editRoomIdx >= 0) ? kRoomPresets[st->editRoomIdx] : st->editCustomRoom;
 
   int origCid = st->data.grid[st->curDay][st->curPeriod];
@@ -986,7 +1031,7 @@ static void renderCellEditorModal(LiliumUI::Canvas & c, const TimeTableState * s
   title[63] = L'\0';
   c.drawText(mx + 14, my, mw - 28, 36, LiliumUI::kColWhite, title, 2, LiliumUI::Align::Left, true);
 
-  const wchar_t * subjName = (st->editPresetIdx >= 0) ? kSubjectPresets[st->editPresetIdx] : st->editCustomName;
+  const wchar_t * subjName = st->editCustomName;
   const wchar_t * roomName = (st->editRoomIdx >= 0) ? kRoomPresets[st->editRoomIdx] : st->editCustomRoom;
   const ColorTheme & cth = kColors[clampInt(st->editColorIdx, 0, kColorCount - 1)];
 
@@ -1019,14 +1064,22 @@ static void renderCellEditorModal(LiliumUI::Canvas & c, const TimeTableState * s
     if (r == 1) {
       c.drawBox(mx + 174, ry + 8, 52, 26, cth.bg, cth.accent);
       c.fillRect(mx + 175, ry + 9, 8, 24, cth.accent);
-      c.drawText(mx + 236, ry, 310, 42, LiliumUI::kColText, cth.name, 2, LiliumUI::Align::Left, true);
+      c.drawText(mx + 236, ry, 280, 42, LiliumUI::kColText, cth.name, 2, LiliumUI::Align::Left, true);
+    } else if (r == 0) {
+      c.drawText(mx + 174, ry, 232, 42, LiliumUI::kColText, subjName, 2, LiliumUI::Align::Left, true);
+      c.drawBox(mx + mw - 170, ry + 7, 136, 28,
+                act ? LiliumUI::kColTealDark : LiliumUI::kColWhite,
+                LiliumUI::kColTealDark);
+      c.drawText(mx + mw - 170, ry + 7, 136, 28,
+                 act ? LiliumUI::kColWhite : LiliumUI::kColTealDeep,
+                 L"[Ent]リスト", 2, LiliumUI::Align::Center, true);
     } else {
-      const wchar_t * val = (r == 0) ? subjName : (r == 2) ? roomName : (r == 3) ? linkStr : scopeStr;
-      c.drawText(mx + 174, ry, mw - 220, 42,
+      const wchar_t * val = (r == 2) ? roomName : (r == 3) ? linkStr : scopeStr;
+      c.drawText(mx + 174, ry, mw - 230, 42,
                  (r == 3 && st->editLinkCourseId > 0) ? LiliumUI::kColTealDeep : LiliumUI::kColText,
                  val, 2, LiliumUI::Align::Left, true);
     }
-    if (act) {
+    if (act && r > 0) {
       c.drawText(mx + mw - 56, ry, 32, 42, LiliumUI::kColTealDark, L"<>", 2, LiliumUI::Align::Center, true);
     }
   }
@@ -1049,11 +1102,56 @@ static void renderCellEditorModal(LiliumUI::Canvas & c, const TimeTableState * s
   }
 
   c.drawText(mx + 18, my + 356, mw - 36, 24, LiliumUI::kColMuted,
-             L"[↑↓]項目 [←→]変更 [PgUp/Dn]科目ジャンル [Ent]実行", 2, LiliumUI::Align::Center, true);
+             L"[↑↓]項目 [Ent]科目リスト/保存 [←→]変更 [Esc]戻る", 2, LiliumUI::Align::Center, true);
 
   LiliumUI::renderSidebar(c, L"授業編集", L"セル設定",
-                          L"【操作方法】\n[↑↓]: 項目移動\n[←→]: 値変更\n[PgUpDn]: 大幅移動\n[Ent]: 保存/決定\n[Esc]: 中止",
-                          L"[Ent]決定/保存", L"[Esc]戻る", L"戻　る", false);
+                          L"【操作方法】\n[↑↓]: 項目移動\n科目名で[Ent]:\n分野別リスト表示\n[←→]: 色/教室\n[Esc]: 中止",
+                          L"[Ent]リスト/保存", L"[Esc]戻る", L"戻　る", false);
+}
+
+static void renderSubjectPickerModal(LiliumUI::Canvas & c, const TimeTableState * st) {
+  c.darkenScreen();
+  const int mx = 26, my = 44, mw = 588, mh = 392;
+  c.drawBox(mx, my, mw, mh, LiliumUI::kColWhite, LiliumUI::kColTealDark);
+  c.drawThickFrame(mx, my, mw, mh, 2, LiliumUI::kColTealDark);
+  c.fillRect(mx, my, mw, 36, LiliumUI::kColTeal);
+  c.drawText(mx + 14, my, mw - 28, 36, LiliumUI::kColWhite,
+             L"【 科目リストから選択 (分野別) 】", 2, LiliumUI::Align::Left, true);
+
+  // Left pane: 8 Categories (x=mx+14, w=170)
+  for (int cat = 0; cat < kSubjCatCount; ++cat) {
+    int cy = my + 46 + cat * 39;
+    bool actCat = (cat == st->subjCatIdx);
+    c.drawBox(mx + 14, cy, 170, 35,
+              actCat ? LiliumUI::kColTeal : LiliumUI::kColRowAlt,
+              actCat ? LiliumUI::kColTealDark : LiliumUI::kColBorder);
+    c.drawText(mx + 22, cy, 154, 35,
+               actCat ? LiliumUI::kColWhite : LiliumUI::kColText,
+               kSubjectCategories[cat].name, 2, LiliumUI::Align::Left, true);
+  }
+
+  // Right pane: Items inside selected category (x=mx+196, w=378)
+  const SubjectCategory & sc = kSubjectCategories[clampInt(st->subjCatIdx, 0, kSubjCatCount - 1)];
+  c.drawBox(mx + 196, my + 46, 378, 308, LiliumUI::kColWhite, LiliumUI::kColBorder);
+  for (int i = 0; i < sc.count; ++i) {
+    int iy = my + 54 + i * 42;
+    bool actItem = (i == st->subjItemIdx);
+    c.drawBox(mx + 206, iy, 358, 36,
+              actItem ? LiliumUI::kColTealSoft : LiliumUI::kColRowAlt,
+              actItem ? LiliumUI::kColTealDark : LiliumUI::kColBorder);
+    if (actItem) c.drawThickFrame(mx + 206, iy, 358, 36, 2, LiliumUI::kColTealDark);
+    c.drawText(mx + 220, iy, 330, 36,
+               actItem ? LiliumUI::kColTealDeep : LiliumUI::kColText,
+               sc.items[i], 2, LiliumUI::Align::Left, true);
+  }
+
+  c.drawText(mx + 14, my + 362, mw - 28, 24, LiliumUI::kColMuted,
+             L"[←→]分野切替   [↑↓]科目選択   [Enter]決定   [Esc]戻る",
+             2, LiliumUI::Align::Center, true);
+
+  LiliumUI::renderSidebar(c, L"科目選択", sc.name,
+                          L"【分野別リスト】\n[←→]: 分野切替\n[↑↓]: 科目選択\n[Ent]: 科目を決定\n[Esc]: キャンセル",
+                          L"[←→]分野[Ent]決定", L"[Esc]戻る", L"戻　る", false);
 }
 
 static void openPairPicker(TimeTableState * st) {
@@ -1166,10 +1264,10 @@ static void renderSettingsScreen(LiliumUI::Canvas & c, const TimeTableState * st
     }
   } else if (st->setTab == 1) {
     static constexpr const wchar_t * kTmpls[kTmplCount] = {
-      L"高校50分 (6限)", L"高校50分 (7限)", L"大学90分 (5限)", L"大学90分 (6限)"
+      L"高校45分 (6限)", L"高校50分 (6限)", L"大学90分 (5限)", L"大学100分 (5限)"
     };
     const int visRows = 8;
-    int totalRows = 2 + st->data.periodCount;
+    int totalRows = 3 + st->data.periodCount;
     for (int r = 0; r < visRows; ++r) {
       int idx = st->setScroll + r;
       if (idx >= totalRows) break;
@@ -1180,23 +1278,32 @@ static void renderSettingsScreen(LiliumUI::Canvas & c, const TimeTableState * st
                 sel ? LiliumUI::kColTealDark : LiliumUI::kColBorder);
 
       if (idx == 0) {
-        c.drawText(32, ry, 180, 37, LiliumUI::kColTextSub, L"時限数 (何限まで)", 2, LiliumUI::Align::Left, true);
+        c.drawText(32, ry, 200, 37, LiliumUI::kColTextSub, L"時限数 (何限まで)", 2, LiliumUI::Align::Left, true);
         wchar_t nBuf[24];
         _snwprintf(nBuf, 24, L"%d 限まで", st->data.periodCount);
         nBuf[23] = L'\0';
-        c.drawText(240, ry, 340, 37, LiliumUI::kColTealDeep, nBuf, 2, LiliumUI::Align::Left, true);
+        c.drawText(250, ry, 340, 37, LiliumUI::kColTealDeep, nBuf, 2, LiliumUI::Align::Left, true);
       } else if (idx == 1) {
-        c.drawText(32, ry, 180, 37, LiliumUI::kColTextSub, L"時間割テンプレート", 2, LiliumUI::Align::Left, true);
-        c.drawText(240, ry, 360, 37, LiliumUI::kColText, kTmpls[st->setTmplIdx], 2, LiliumUI::Align::Left, true);
+        c.drawText(32, ry, 200, 37, LiliumUI::kColTextSub, L"1コマの授業時間", 2, LiliumUI::Align::Left, true);
+        wchar_t dBuf[32];
+        _snwprintf(dBuf, 32, L"%d 分 (連動用)", st->data.classDurationMin);
+        dBuf[31] = L'\0';
+        c.drawText(250, ry, 340, 37, LiliumUI::kColTealDeep, dBuf, 2, LiliumUI::Align::Left, true);
+      } else if (idx == 2) {
+        c.drawText(32, ry, 200, 37, LiliumUI::kColTextSub, L"プリセット適用", 2, LiliumUI::Align::Left, true);
+        wchar_t tBuf[64];
+        _snwprintf(tBuf, 64, L"%ls  [Ent]", kTmpls[st->setTmplIdx]);
+        tBuf[63] = L'\0';
+        c.drawText(250, ry, 355, 37, LiliumUI::kColText, tBuf, 2, LiliumUI::Align::Left, true);
       } else {
-        int p = idx - 2;
+        int p = idx - 3;
         wchar_t pLbl[16], sBuf[16], eBuf[16];
         _snwprintf(pLbl, 16, L"%d限", p + 1);
         pLbl[15] = L'\0';
         formatTimeHM(st->data.periods[p].startMin, sBuf, 16);
         formatTimeHM(st->data.periods[p].endMin, eBuf, 16);
         const wchar_t * brStr = (st->data.periods[p].breakKind == BreakLunch) ? L"昼休み"
-                              : (st->data.periods[p].breakKind == BreakShort) ? L"小休み" : L"休み無";
+                              : (st->data.periods[p].breakKind == BreakShort) ? L"小休20分" : L"通常10分";
 
         c.drawText(32, ry, 68, 37, LiliumUI::kColTealDeep, pLbl, 2, LiliumUI::Align::Left, true);
 
@@ -1226,8 +1333,8 @@ static void renderSettingsScreen(LiliumUI::Canvas & c, const TimeTableState * st
     }
   } else {
     // Tab 2: Timetable Files & Tab Bar Settings
-    static constexpr const wchar_t * kNewTmpl[3] = {
-      L"高校6限(空)", L"大学5限(空)", L"現在の構成を複製"
+    static constexpr const wchar_t * kNewTmpl[5] = {
+      L"高校45分(空)", L"高校50分(空)", L"大学90分(空)", L"大学100分(空)", L"現在の構成を複製"
     };
     const wchar_t * labels[6] = {
       L"タブバー表示",
@@ -1293,6 +1400,8 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     renderGridMode(c, st);
     if (st->mode == ScreenMode::CellEdit) {
       renderCellEditorModal(c, st);
+    } else if (st->mode == ScreenMode::SubjectPicker) {
+      renderSubjectPickerModal(c, st);
     } else if (st->mode == ScreenMode::PairPicker) {
       renderPairPickerModal(c, st);
     } else if (st->mode == ScreenMode::DeleteConfirm) {
@@ -1338,10 +1447,10 @@ static void createNewTimetableFile(TimeTableState * st) {
 
   TimetableData * newData = static_cast<TimetableData *>(calloc(1, sizeof(TimetableData)));
   if (!newData) return;
-  if (st->newTemplateKind == 2) {
+  if (st->newTemplateKind == 4) {
     *newData = st->data;
   } else {
-    initBlankTimetable(*newData, (st->newTemplateKind == 1) ? 2 : 0);
+    initBlankTimetable(*newData, clampInt(st->newTemplateKind, 0, kTmplCount - 1));
   }
 
   // Save current active timetable, write new file on disk, then switch without overwriting newData
@@ -1426,7 +1535,7 @@ static void handleSettingsKey(TimeTableState * st, WPARAM vkCode) {
   }
 
   if (st->setTab == 1) {
-    int totalRows = 2 + st->data.periodCount;
+    int totalRows = 3 + st->data.periodCount;
     if (vkCode == VK_UP) st->setRow = (st->setRow + totalRows - 1) % totalRows;
     else if (vkCode == VK_DOWN) st->setRow = (st->setRow + 1) % totalRows;
     else if (vkCode == VK_LEFT || vkCode == VK_RIGHT) {
@@ -1435,27 +1544,34 @@ static void handleSettingsKey(TimeTableState * st, WPARAM vkCode) {
         st->data.periodCount = clampInt(st->data.periodCount + dir, 1, kMaxPeriods);
         saveTimetableFile(st, st->activeFileIdx, st->data);
       } else if (st->setRow == 1) {
+        st->data.classDurationMin = clampInt(st->data.classDurationMin + dir * 5, 20, 180);
+        cascadePeriodsFrom(st->data, 0, true);
+        saveTimetableFile(st, st->activeFileIdx, st->data);
+      } else if (st->setRow == 2) {
         st->setTmplIdx = (st->setTmplIdx + kTmplCount + dir) % kTmplCount;
       } else {
-        int p = st->setRow - 2;
+        int p = st->setRow - 3;
         if (st->setPeriodCol == 0) {
           st->data.periods[p].startMin = clampInt(st->data.periods[p].startMin + dir * 5, 6 * 60, 22 * 60);
-          if (st->data.periods[p].endMin <= st->data.periods[p].startMin) {
-            st->data.periods[p].endMin = clampInt(st->data.periods[p].startMin + 45, 6 * 60 + 5, 23 * 60 + 50);
-          }
+          // Forward-only auto-cascade: updates period p's end + p+1..end; never alters 0..p-1
+          cascadePeriodsFrom(st->data, p, true);
         } else if (st->setPeriodCol == 1) {
           st->data.periods[p].endMin = clampInt(st->data.periods[p].endMin + dir * 5,
-                                                st->data.periods[p].startMin + 5, 23 * 60 + 50);
+                                                st->data.periods[p].startMin + 5, 23 * 60 + 55);
+          // Forward-only cascade for p+1..end using updated end time
+          cascadePeriodsFrom(st->data, p, false);
         } else {
           st->data.periods[p].breakKind = (st->data.periods[p].breakKind + 3 + dir) % 3;
+          // Forward-only cascade for p+1..end using updated break duration
+          cascadePeriodsFrom(st->data, p, false);
         }
         saveTimetableFile(st, st->activeFileIdx, st->data);
       }
     } else if (vkCode == VK_RETURN || vkCode == VK_F3 || vkCode == VK_SPACE) {
-      if (st->setRow == 1) {
+      if (st->setRow == 2) {
         applyPeriodTemplate(st->data, st->setTmplIdx);
         saveTimetableFile(st, st->activeFileIdx, st->data);
-      } else if (st->setRow >= 2) {
+      } else if (st->setRow >= 3) {
         st->setPeriodCol = (st->setPeriodCol + 1) % 3;
       }
     }
@@ -1478,7 +1594,7 @@ static void handleSettingsKey(TimeTableState * st, WPARAM vkCode) {
     } else if (st->setRow == 2) {
       st->newNameIdx = (st->newNameIdx + kNewNameCount + dir) % kNewNameCount;
     } else if (st->setRow == 3) {
-      st->newTemplateKind = (st->newTemplateKind + 3 + dir) % 3;
+      st->newTemplateKind = (st->newTemplateKind + 5 + dir) % 5;
     }
   } else if (vkCode == VK_RETURN || vkCode == VK_F3 || vkCode == VK_SPACE) {
     if (st->setRow == 0) {
@@ -1551,6 +1667,32 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
     return;
   }
 
+  if (st->mode == ScreenMode::SubjectPicker) {
+    const SubjectCategory & sc = kSubjectCategories[clampInt(st->subjCatIdx, 0, kSubjCatCount - 1)];
+    if (vkCode == VK_LEFT) {
+      st->subjCatIdx = (st->subjCatIdx + kSubjCatCount - 1) % kSubjCatCount;
+      st->subjItemIdx = 0;
+    } else if (vkCode == VK_RIGHT) {
+      st->subjCatIdx = (st->subjCatIdx + 1) % kSubjCatCount;
+      st->subjItemIdx = 0;
+    } else if (vkCode == VK_UP) {
+      st->subjItemIdx = (st->subjItemIdx + sc.count - 1) % sc.count;
+    } else if (vkCode == VK_DOWN) {
+      st->subjItemIdx = (st->subjItemIdx + 1) % sc.count;
+    } else if (vkCode == VK_RETURN || vkCode == VK_F3 || vkCode == VK_SPACE) {
+      int itemIdx = clampInt(st->subjItemIdx, 0, sc.count - 1);
+      if (sc.items[itemIdx]) {
+        wcsncpy(st->editCustomName, sc.items[itemIdx], 31);
+        st->editCustomName[31] = L'\0';
+      }
+      st->mode = ScreenMode::CellEdit;
+    } else if (vkCode == VK_ESCAPE || vkCode == VK_BACK) {
+      st->mode = ScreenMode::CellEdit;
+    }
+    st->window.requestRepaint(true);
+    return;
+  }
+
   if (st->mode == ScreenMode::CellEdit) {
     int ids[kMaxCourses] = {};
     int idCount = collectExistingCourseIds(st, ids, kMaxCourses);
@@ -1562,17 +1704,11 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
     }
     if (vkCode == VK_UP) st->editRow = (st->editRow + 5) % 6;
     else if (vkCode == VK_DOWN) st->editRow = (st->editRow + 1) % 6;
-    else if (vkCode == VK_PRIOR || vkCode == VK_NEXT) {
-      if (st->editRow == 0) {
-        int step = (vkCode == VK_NEXT) ? 6 : -6;
-        if (st->editPresetIdx < 0) st->editPresetIdx = 0;
-        else st->editPresetIdx = (st->editPresetIdx + kPresetCount + step) % kPresetCount;
-      }
-    } else if (vkCode == VK_LEFT || vkCode == VK_RIGHT) {
+    else if (vkCode == VK_LEFT || vkCode == VK_RIGHT) {
       int dir = (vkCode == VK_RIGHT) ? 1 : -1;
       if (st->editRow == 0) {
-        if (st->editPresetIdx < 0) st->editPresetIdx = 0;
-        else st->editPresetIdx = (st->editPresetIdx + kPresetCount + dir) % kPresetCount;
+        // Opens categorized list rather than left/right cycling
+        openSubjectPicker(st);
       } else if (st->editRow == 1) {
         st->editColorIdx = (st->editColorIdx + kColorCount + dir) % kColorCount;
       } else if (st->editRow == 2) {
@@ -1591,7 +1727,9 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
         st->editBtnFocus = (st->editBtnFocus + 3 + dir) % 3;
       }
     } else if (vkCode == VK_RETURN || vkCode == VK_F3) {
-      if (st->editRow < 5 || st->editBtnFocus == 0) {
+      if (st->editRow == 0) {
+        openSubjectPicker(st);
+      } else if (st->editRow < 5 || st->editBtnFocus == 0) {
         saveCellEditor(st);
       } else if (st->editBtnFocus == 1) {
         st->data.grid[st->curDay][st->curPeriod] = 0;
@@ -1704,7 +1842,10 @@ static void onClick(int x, int y, void * userData) {
 
   if (x >= LiliumUI::kExitBtnX && x < LiliumUI::kExitBtnX + LiliumUI::kExitBtnW &&
       y >= LiliumUI::kExitBtnY && y < LiliumUI::kExitBtnY + LiliumUI::kExitBtnH) {
-    if (st->mode == ScreenMode::Grid) {
+    if (st->mode == ScreenMode::SubjectPicker) {
+      st->mode = ScreenMode::CellEdit;
+      st->window.requestRepaint(true);
+    } else if (st->mode == ScreenMode::Grid) {
       saveTimetableFile(st, st->activeFileIdx, st->data);
       saveUiConfig(st);
       st->window.requestQuit();
@@ -1746,13 +1887,43 @@ static void onClick(int x, int y, void * userData) {
     return;
   }
 
+  if (st->mode == ScreenMode::SubjectPicker) {
+    const int mx = 26, my = 44;
+    for (int cat = 0; cat < kSubjCatCount; ++cat) {
+      int cy = my + 46 + cat * 39;
+      if (x >= mx + 14 && x < mx + 184 && y >= cy && y < cy + 35) {
+        st->subjCatIdx = cat;
+        st->subjItemIdx = 0;
+        st->window.requestRepaint(true);
+        return;
+      }
+    }
+    const SubjectCategory & sc = kSubjectCategories[clampInt(st->subjCatIdx, 0, kSubjCatCount - 1)];
+    for (int i = 0; i < sc.count; ++i) {
+      int iy = my + 54 + i * 42;
+      if (x >= mx + 206 && x < mx + 564 && y >= iy && y < iy + 36) {
+        st->subjItemIdx = i;
+        if (sc.items[i]) {
+          wcsncpy(st->editCustomName, sc.items[i], 31);
+          st->editCustomName[31] = L'\0';
+        }
+        st->mode = ScreenMode::CellEdit;
+        st->window.requestRepaint(true);
+        return;
+      }
+    }
+    return;
+  }
+
   if (st->mode == ScreenMode::CellEdit) {
     const int mx = 26, my = 46;
     for (int r = 0; r < 5; ++r) {
       int ry = my + 50 + r * 48;
       if (x >= mx + 18 && x < mx + 570 && y >= ry && y < ry + 42) {
         st->editRow = r;
-        onKeyDown(VK_RIGHT, false, userData);
+        if (r == 0) openSubjectPicker(st);
+        else onKeyDown(VK_RIGHT, false, userData);
+        st->window.requestRepaint(true);
         return;
       }
     }
