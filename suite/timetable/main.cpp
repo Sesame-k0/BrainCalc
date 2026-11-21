@@ -1399,6 +1399,10 @@ static void renderSettingsScreen(LiliumUI::Canvas & c, const TimeTableState * st
 
 static void onRender(LiliumUI::Canvas & c, void * userData) {
   TimeTableState * st = static_cast<TimeTableState *>(userData);
+  if (st->inputModal.isOpen() && !c.fullRedraw && st->inputModal.hasDrawnChrome()) {
+    st->inputModal.render(c, true);
+    return;
+  }
   if (st->mode == ScreenMode::Settings) {
     renderSettingsScreen(c, st);
   } else {
@@ -1718,7 +1722,7 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     bool confirmed = false, closed = false;
     st->inputModal.handleKey(vkCode, isShift, confirmed, closed);
     if (confirmed) confirmInputModalResult(st);
-    st->window.requestRepaint(true);
+    st->window.requestRepaint(confirmed || closed);
     return;
   }
 
@@ -1964,7 +1968,7 @@ static void onClick(int x, int y, void * userData) {
     bool confirmed = false, closed = false;
     st->inputModal.handleClick(x, y, confirmed, closed);
     if (confirmed) confirmInputModalResult(st);
-    st->window.requestRepaint(true);
+    st->window.requestRepaint(confirmed || closed);
     return;
   }
 

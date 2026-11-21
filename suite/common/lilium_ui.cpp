@@ -164,14 +164,16 @@ int Canvas::drawWrappedText(int x, int y, int maxW, int maxY, uint32_t colorRgb,
     int lastSpaceIdx = -1;
     const wchar_t * lineStart = p;
 
+    int w = 0;
     while (p[len] != L'\0' && p[len] != L'\n' && p[len] != L'\r' && len < 250) {
       if (p[len] == L' ') lastSpaceIdx = len;
+      int cw = ::MisakiFont::measureCharWidth(static_cast<uint16_t>(p[len]), scale);
+      if (w + cw > maxW && len > 0) break;
       lineBuf[len] = p[len];
-      lineBuf[len + 1] = L'\0';
-      int w = ::MisakiFont::measureTextWidth(lineBuf, len + 1, scale);
-      if (w > maxW && len > 0) break;
+      w += cw;
       ++len;
     }
+    lineBuf[len] = L'\0';
 
     if (p[len] != L'\0' && p[len] != L'\n' && p[len] != L'\r' && lastSpaceIdx > 0 && lastSpaceIdx > len / 2) {
       len = lastSpaceIdx;
@@ -981,6 +983,8 @@ void AppWindow::setVisible(bool visible) {
     m_needsRepaint = true;
     redrawNow();
   } else {
+    SetWindowPos(m_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_HIDEWINDOW | SWP_NOACTIVATE);
     ShowWindow(m_hwnd, SW_HIDE);
   }
 }
@@ -1036,6 +1040,21 @@ int AppWindow::runLoop() {
     if (got <= 0) break;
     TranslateMessage(&msg);
     DispatchMessageW(&msg);
+    if (msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN) {
+      int batch = 0;
+      MSG nextMsg;
+      while (batch < 6 && !m_quitRequested &&
+             PeekMessageW(&nextMsg, NULL, 0, 0, PM_NOREMOVE)) {
+        if (nextMsg.message != WM_KEYDOWN && nextMsg.message != WM_KEYUP &&
+            nextMsg.message != WM_SYSKEYDOWN && nextMsg.message != WM_SYSKEYUP) {
+          break;
+        }
+        PeekMessageW(&nextMsg, NULL, 0, 0, PM_REMOVE);
+        TranslateMessage(&nextMsg);
+        DispatchMessageW(&nextMsg);
+        ++batch;
+      }
+    }
     if (m_needsRepaint && !m_quitRequested) {
       redrawNow();
     }
@@ -1072,13 +1091,14 @@ LRESULT AppWindow::handleMsg(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 
     case WM_SIZE:
 #ifdef _WIN32_WCE
-      if (LOWORD(lParam) != kScreenW || HIWORD(lParam) != kScreenH) {
+      if (IsWindowVisible(hWnd) && (LOWORD(lParam) != kScreenW || HIWORD(lParam) != kScreenH)) {
         SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, kScreenW, kScreenH, SWP_SHOWWINDOW);
       }
 #endif
       return 0;
 
     case WM_TIMER: {
+      if (!IsWindowVisible(hWnd)) return 0;
       SYSTEMTIME st;
       GetLocalTime(&st);
       int batPct = 100;

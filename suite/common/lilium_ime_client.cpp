@@ -420,6 +420,15 @@ bool ImeClient::showExternalOverlay(HWND targetHwnd) {
 
 TextInputModal::TextInputModal()
   : m_open(false),
+    m_chromeDrawn(false),
+    m_lastInputMode(-1),
+    m_lastBtnFocus(-1),
+    m_lastCursor(-1),
+    m_lastConverting(false),
+    m_lastRomajiHas(false),
+    m_lastCandCount(-1),
+    m_lastCandSel(-1),
+    m_lastCandPageStart(-1),
     m_maxChars(64),
     m_cursor(0),
     m_inputMode(0),
@@ -429,6 +438,8 @@ TextInputModal::TextInputModal()
     m_candSel(0),
     m_candPageStart(0),
     m_segLen(0) {
+  m_lastBuf[0] = L'\0';
+  m_lastPre[0] = L'\0';
   m_title[0] = L'\0';
   m_hint[0] = L'\0';
   m_buf[0] = L'\0';
@@ -438,6 +449,17 @@ TextInputModal::TextInputModal()
 
 void TextInputModal::open(const wchar_t * title, const wchar_t * hint, const wchar_t * initialText, int maxChars) {
   m_open = true;
+  m_chromeDrawn = false;
+  m_lastInputMode = -1;
+  m_lastBtnFocus = -1;
+  m_lastCursor = -1;
+  m_lastConverting = false;
+  m_lastRomajiHas = false;
+  m_lastCandCount = -1;
+  m_lastCandSel = -1;
+  m_lastCandPageStart = -1;
+  m_lastBuf[0] = L'\0';
+  m_lastPre[0] = L'\0';
   wcsncpy(m_title, title ? title : L"テキスト入力", 63);
   m_title[63] = L'\0';
   wcsncpy(m_hint, hint ? hint : L"", 95);
@@ -464,6 +486,7 @@ void TextInputModal::open(const wchar_t * title, const wchar_t * hint, const wch
 
 void TextInputModal::close() {
   m_open = false;
+  m_chromeDrawn = false;
   m_romaji.reset();
   m_converting = false;
   m_candCount = 0;
@@ -591,33 +614,46 @@ wchar_t TextInputModal::map12xSymbol(WPARAM vkCode) const {
   }
 }
 
-void TextInputModal::render(LiliumUI::Canvas & c, bool drawSidebarGuide) const {
+void TextInputModal::render(LiliumUI::Canvas & c, bool drawSidebarGuide) {
   if (!m_open) return;
-  c.darkenScreen();
+  bool full = c.fullRedraw || !m_chromeDrawn;
 
   const int mx = 36, my = 52, mw = 568, mh = 360;
-  c.drawBox(mx, my, mw, mh, LiliumUI::kColWhite, LiliumUI::kColTealDark);
-  c.drawThickFrame(mx, my, mw, mh, 2, LiliumUI::kColTealDark);
-  c.fillRect(mx, my, mw, 38, LiliumUI::kColTeal);
-  c.drawText(mx + 14, my, 360, 38, LiliumUI::kColWhite, m_title, 2, LiliumUI::Align::Left, true);
+  if (full) {
+    c.darkenScreen();
+    c.drawBox(mx, my, mw, mh, LiliumUI::kColWhite, LiliumUI::kColTealDark);
+    c.drawThickFrame(mx, my, mw, mh, 2, LiliumUI::kColTealDark);
+    c.fillRect(mx, my, mw, 38, LiliumUI::kColTeal);
+    c.drawText(mx + 14, my, 360, 38, LiliumUI::kColWhite, m_title, 2, LiliumUI::Align::Left, true);
 
-  // Input mode pill top-right
-  static constexpr const wchar_t * kModeLabels[4] = {
-    L"[F2] あ (IME)", L"[F2] abc", L"[F2] ABC", L"[F2] 12x記号"
-  };
-  uint32_t mBg = (m_inputMode == 0) ? 0xFFF3D6 : LiliumUI::kColTealSoft;
-  uint32_t mBd = (m_inputMode == 0) ? 0xCC7A00 : LiliumUI::kColWhite;
-  uint32_t mTx = (m_inputMode == 0) ? 0x8A4E00 : LiliumUI::kColTealDeep;
-  c.drawBox(mx + mw - 160, my + 6, 148, 26, mBg, mBd);
-  c.drawText(mx + mw - 160, my + 6, 148, 26, mTx, kModeLabels[m_inputMode], 2, LiliumUI::Align::Center, true);
+    if (m_hint[0]) {
+      c.drawText(mx + 16, my + 46, mw - 32, 22, LiliumUI::kColMuted, m_hint, 2, LiliumUI::Align::Left, true);
+    }
 
-  if (m_hint[0]) {
-    c.drawText(mx + 16, my + 46, mw - 32, 22, LiliumUI::kColMuted, m_hint, 2, LiliumUI::Align::Left, true);
+    c.drawText(mx + 14, my + 324, mw - 28, 24, LiliumUI::kColMuted,
+               L"[F2]入力モード [Spc]変換 [F7]カナ [Ent]確定 [Esc]戻る",
+               2, LiliumUI::Align::Center, true);
+
+    if (drawSidebarGuide) {
+      LiliumUI::renderSidebar(c, L"文字入力 (IME)", L"Lilium IME",
+                              L"【操作ガイド】\n[F2]: あ/abc/ABC/12x\n[Spc]: 漢字変換\n[1-8]: 候補選択\n[F7]: カタカナ\n[Ent]: 確定/決定\n[F4]: 全消去\n[Esc]: 戻る",
+                              L"[F2]モード切替", L"[Spc]漢字変換", L"戻　る", false);
+    }
+    m_chromeDrawn = true;
   }
 
-  // Editable text box with inline IME composition underline
-  c.drawBox(mx + 16, my + 74, mw - 32, 48, 0xF8FAFC, LiliumUI::kColTealDark);
-  c.drawThickFrame(mx + 16, my + 74, mw - 32, 48, 2, LiliumUI::kColTealDark);
+  // Input mode pill top-right
+  if (full || m_lastInputMode != m_inputMode) {
+    static constexpr const wchar_t * kModeLabels[4] = {
+      L"[F2] あ (IME)", L"[F2] abc", L"[F2] ABC", L"[F2] 12x記号"
+    };
+    uint32_t mBg = (m_inputMode == 0) ? 0xFFF3D6 : LiliumUI::kColTealSoft;
+    uint32_t mBd = (m_inputMode == 0) ? 0xCC7A00 : LiliumUI::kColWhite;
+    uint32_t mTx = (m_inputMode == 0) ? 0x8A4E00 : LiliumUI::kColTealDeep;
+    c.drawBox(mx + mw - 160, my + 6, 148, 26, mBg, mBd);
+    c.drawText(mx + mw - 160, my + 6, 148, 26, mTx, kModeLabels[m_inputMode], 2, LiliumUI::Align::Center, true);
+    m_lastInputMode = m_inputMode;
+  }
 
   wchar_t pre[kMaxReadingChars] = L"";
   if (m_converting && m_candCount > 0) {
@@ -626,108 +662,135 @@ void TextInputModal::render(LiliumUI::Canvas & c, bool drawSidebarGuide) const {
     m_romaji.getPreeditDisplay(pre, kMaxReadingChars);
   }
 
-  wchar_t leftPart[kMaxBuf + 4] = L"";
-  int copyL = (m_cursor < kMaxBuf) ? m_cursor : kMaxBuf - 1;
-  wcsncpy(leftPart, m_buf, static_cast<size_t>(copyL));
-  leftPart[copyL] = L'\0';
+  bool prevConv = m_lastConverting;
+  bool textDirty = full ||
+                   (m_lastCursor != m_cursor) ||
+                   (prevConv != m_converting) ||
+                   (wcscmp(m_lastBuf, m_buf) != 0) ||
+                   (wcscmp(m_lastPre, pre) != 0);
+  if (textDirty) {
+    // Editable text box with inline IME composition underline
+    c.drawBox(mx + 16, my + 74, mw - 32, 48, 0xF8FAFC, LiliumUI::kColTealDark);
+    c.drawThickFrame(mx + 16, my + 74, mw - 32, 48, 2, LiliumUI::kColTealDark);
 
-  const wchar_t * rightPart = m_buf + m_cursor;
+    wchar_t leftPart[kMaxBuf + 4] = L"";
+    int copyL = (m_cursor < kMaxBuf) ? m_cursor : kMaxBuf - 1;
+    wcsncpy(leftPart, m_buf, static_cast<size_t>(copyL));
+    leftPart[copyL] = L'\0';
 
-  int tx = mx + 26;
-  int ty = my + 90;
-  if (leftPart[0]) {
-    int lw = c.measureWidth(leftPart, 2);
-    c.drawText(tx, my + 74, mw - 52, 48, LiliumUI::kColText, leftPart, 2, LiliumUI::Align::Left, true);
-    tx += lw;
-  }
-  if (pre[0]) {
-    int pw = c.measureWidth(pre, 2);
-    c.fillRect(tx, my + 82, pw + 2, 30, m_converting ? LiliumUI::kColTealSoft : 0xFFF3D6);
-    c.drawText(tx, my + 74, pw + 16, 48, m_converting ? LiliumUI::kColTealDeep : 0x8A4E00,
-               pre, 2, LiliumUI::Align::Left, true);
-    c.fillRect(tx, ty + 18, pw, 2, m_converting ? LiliumUI::kColTealDark : 0xCC7A00);
-    tx += pw + 2;
-  } else {
-    c.fillRect(tx, my + 84, 2, 28, LiliumUI::kColTealDark);
-    tx += 3;
-  }
-  if (rightPart[0]) {
-    c.drawText(tx, my + 74, (mx + mw - 24) - tx, 48, LiliumUI::kColText,
-               rightPart, 2, LiliumUI::Align::Left, true);
+    const wchar_t * rightPart = m_buf + m_cursor;
+
+    int tx = mx + 26;
+    int ty = my + 90;
+    if (leftPart[0]) {
+      int lw = c.measureWidth(leftPart, 2);
+      c.drawText(tx, my + 74, mw - 52, 48, LiliumUI::kColText, leftPart, 2, LiliumUI::Align::Left, true);
+      tx += lw;
+    }
+    if (pre[0]) {
+      int pw = c.measureWidth(pre, 2);
+      c.fillRect(tx, my + 82, pw + 2, 30, m_converting ? LiliumUI::kColTealSoft : 0xFFF3D6);
+      c.drawText(tx, my + 74, pw + 16, 48, m_converting ? LiliumUI::kColTealDeep : 0x8A4E00,
+                 pre, 2, LiliumUI::Align::Left, true);
+      c.fillRect(tx, ty + 18, pw, 2, m_converting ? LiliumUI::kColTealDark : 0xCC7A00);
+      tx += pw + 2;
+    } else {
+      c.fillRect(tx, my + 84, 2, 28, LiliumUI::kColTealDark);
+      tx += 3;
+    }
+    if (rightPart[0]) {
+      c.drawText(tx, my + 74, (mx + mw - 24) - tx, 48, LiliumUI::kColText,
+                 rightPart, 2, LiliumUI::Align::Left, true);
+    }
+
+    m_lastCursor = m_cursor;
+    wcsncpy(m_lastBuf, m_buf, kMaxBuf - 1);
+    m_lastBuf[kMaxBuf - 1] = L'\0';
+    wcsncpy(m_lastPre, pre, kMaxReadingChars - 1);
+    m_lastPre[kMaxReadingChars - 1] = L'\0';
   }
 
   // Candidate strip / Mozc status box (y = my+132 .. my+258)
-  c.drawBox(mx + 16, my + 132, mw - 32, 126, LiliumUI::kColRowAlt, LiliumUI::kColBorder);
-  if (m_converting && m_candCount > 0) {
-    c.drawText(mx + 26, my + 138, 420, 22, LiliumUI::kColTealDeep,
-               L"変換候補 ([1-8]決定 / [←→][Spc]移動):", 2, LiliumUI::Align::Left, true);
-    wchar_t pgBuf[24];
-    _snwprintf(pgBuf, 24, L"%d / %d", m_candSel + 1, m_candCount);
-    c.drawText(mx + mw - 126, my + 138, 100, 22, LiliumUI::kColMuted, pgBuf, 2, LiliumUI::Align::Right, true);
+  bool romajiHas = m_romaji.hasContent();
+  bool candsDirty = full ||
+                    (prevConv != m_converting) ||
+                    (m_converting ? (m_lastCandCount != m_candCount ||
+                                     m_lastCandSel != m_candSel ||
+                                     m_lastCandPageStart != m_candPageStart)
+                                  : (m_lastRomajiHas != romajiHas));
+  if (candsDirty) {
+    c.drawBox(mx + 16, my + 132, mw - 32, 126, LiliumUI::kColRowAlt, LiliumUI::kColBorder);
+    if (m_converting && m_candCount > 0) {
+      c.drawText(mx + 26, my + 138, 420, 22, LiliumUI::kColTealDeep,
+                 L"変換候補 ([1-8]決定 / [←→][Spc]移動):", 2, LiliumUI::Align::Left, true);
+      wchar_t pgBuf[24];
+      _snwprintf(pgBuf, 24, L"%d / %d", m_candSel + 1, m_candCount);
+      c.drawText(mx + mw - 126, my + 138, 100, 22, LiliumUI::kColMuted, pgBuf, 2, LiliumUI::Align::Right, true);
 
-    // Draw up to 4 candidates cleanly on row 1, next 4 on row 2
-    int drawn = 0;
-    for (int row = 0; row < 2; ++row) {
-      int cx = mx + 26;
-      int cy = my + 168 + row * 40;
-      for (int col = 0; col < 4 && (m_candPageStart + drawn) < m_candCount; ++col) {
-        int idx = m_candPageStart + drawn;
-        bool sel = (idx == m_candSel);
-        wchar_t pillTxt[64];
-        _snwprintf(pillTxt, 64, L"%d.%ls", drawn + 1, m_cands[idx]);
-        pillTxt[63] = L'\0';
-        int pw = c.measureWidth(pillTxt, 2) + 18;
-        if (pw < 76) pw = 76;
-        if (cx + pw > mx + mw - 24) break;
-        c.drawBox(cx, cy, pw, 32,
-                  sel ? LiliumUI::kColTeal : LiliumUI::kColWhite,
-                  sel ? LiliumUI::kColTealDark : LiliumUI::kColBorderStrong);
-        c.drawText(cx, cy, pw, 32,
-                   sel ? LiliumUI::kColWhite : LiliumUI::kColText,
-                   pillTxt, 2, LiliumUI::Align::Center, true);
-        cx += pw + 8;
-        ++drawn;
+      // Draw up to 4 candidates cleanly on row 1, next 4 on row 2
+      int drawn = 0;
+      for (int row = 0; row < 2; ++row) {
+        int cx = mx + 26;
+        int cy = my + 168 + row * 40;
+        for (int col = 0; col < 4 && (m_candPageStart + drawn) < m_candCount; ++col) {
+          int idx = m_candPageStart + drawn;
+          bool sel = (idx == m_candSel);
+          wchar_t pillTxt[64];
+          _snwprintf(pillTxt, 64, L"%d.%ls", drawn + 1, m_cands[idx]);
+          pillTxt[63] = L'\0';
+          int pw = c.measureWidth(pillTxt, 2) + 18;
+          if (pw < 76) pw = 76;
+          if (cx + pw > mx + mw - 24) break;
+          c.drawBox(cx, cy, pw, 32,
+                    sel ? LiliumUI::kColTeal : LiliumUI::kColWhite,
+                    sel ? LiliumUI::kColTealDark : LiliumUI::kColBorderStrong);
+          c.drawText(cx, cy, pw, 32,
+                     sel ? LiliumUI::kColWhite : LiliumUI::kColText,
+                     pillTxt, 2, LiliumUI::Align::Center, true);
+          cx += pw + 8;
+          ++drawn;
+        }
       }
+    } else if (romajiHas) {
+      c.drawText(mx + 26, my + 168, mw - 52, 26, LiliumUI::kColTealDeep,
+                 L"[Space]: Mozc漢字変換   [F7]: カタカナ   [Enter]: ひらがな確定",
+                 2, LiliumUI::Align::Center, true);
+    } else {
+      c.drawText(mx + 26, my + 160, mw - 52, 26, LiliumUI::kColTextSub,
+                 L"ローマ字で日本語入力 (あ) / [F2]で abc・ABC・12x記号 に切替",
+                 2, LiliumUI::Align::Center, true);
+      c.drawText(mx + 26, my + 194, mw - 52, 24, LiliumUI::kColMuted,
+                 L"[←→]: カーソル移動   [BS]: 1文字削除   [F4]: 全消去",
+                 2, LiliumUI::Align::Center, true);
     }
-  } else if (m_romaji.hasContent()) {
-    c.drawText(mx + 26, my + 168, mw - 52, 26, LiliumUI::kColTealDeep,
-               L"[Space]: Mozc漢字変換   [F7]: カタカナ   [Enter]: ひらがな確定",
-               2, LiliumUI::Align::Center, true);
+    m_lastConverting = m_converting;
+    m_lastRomajiHas = romajiHas;
+    m_lastCandCount = m_candCount;
+    m_lastCandSel = m_candSel;
+    m_lastCandPageStart = m_candPageStart;
   } else {
-    c.drawText(mx + 26, my + 160, mw - 52, 26, LiliumUI::kColTextSub,
-               L"ローマ字で日本語入力 (あ) / [F2]で abc・ABC・12x記号 に切替",
-               2, LiliumUI::Align::Center, true);
-    c.drawText(mx + 26, my + 194, mw - 52, 24, LiliumUI::kColMuted,
-               L"[←→]: カーソル移動   [BS]: 1文字削除   [F4]: 全消去",
-               2, LiliumUI::Align::Center, true);
+    m_lastConverting = m_converting;
   }
 
   // Confirm / Cancel Buttons (my+274 .. my+314)
-  const int bx0 = mx + (mw - (160 * 2 + 24)) / 2;
-  const int bx1 = bx0 + 184;
-  const int by = my + 272;
-  c.drawBox(bx0, by, 160, 40,
-            (m_btnFocus == 0) ? LiliumUI::kColTeal : LiliumUI::kColWhite,
-            LiliumUI::kColTealDark);
-  c.drawText(bx0, by, 160, 40,
-             (m_btnFocus == 0) ? LiliumUI::kColWhite : LiliumUI::kColTealDeep,
-             L"決　定", 2, LiliumUI::Align::Center, true);
+  if (full || m_lastBtnFocus != m_btnFocus) {
+    const int bx0 = mx + (mw - (160 * 2 + 24)) / 2;
+    const int bx1 = bx0 + 184;
+    const int by = my + 272;
+    c.drawBox(bx0, by, 160, 40,
+              (m_btnFocus == 0) ? LiliumUI::kColTeal : LiliumUI::kColWhite,
+              LiliumUI::kColTealDark);
+    c.drawText(bx0, by, 160, 40,
+               (m_btnFocus == 0) ? LiliumUI::kColWhite : LiliumUI::kColTealDeep,
+               L"決　定", 2, LiliumUI::Align::Center, true);
 
-  c.drawBox(bx1, by, 160, 40,
-            (m_btnFocus == 1) ? LiliumUI::kColCharcoal : LiliumUI::kColWhite,
-            LiliumUI::kColBorderStrong);
-  c.drawText(bx1, by, 160, 40,
-             (m_btnFocus == 1) ? LiliumUI::kColWhite : LiliumUI::kColText,
-             L"キャンセル", 2, LiliumUI::Align::Center, true);
-
-  c.drawText(mx + 14, my + 324, mw - 28, 24, LiliumUI::kColMuted,
-             L"[F2]入力モード [Spc]変換 [F7]カナ [Ent]確定 [Esc]戻る",
-             2, LiliumUI::Align::Center, true);
-
-  if (drawSidebarGuide) {
-    LiliumUI::renderSidebar(c, L"文字入力 (IME)", L"Lilium IME",
-                            L"【操作ガイド】\n[F2]: あ/abc/ABC/12x\n[Spc]: 漢字変換\n[1-8]: 候補選択\n[F7]: カタカナ\n[Ent]: 確定/決定\n[F4]: 全消去\n[Esc]: 戻る",
-                            L"[F2]モード切替", L"[Spc]漢字変換", L"戻　る", false);
+    c.drawBox(bx1, by, 160, 40,
+              (m_btnFocus == 1) ? LiliumUI::kColCharcoal : LiliumUI::kColWhite,
+              LiliumUI::kColBorderStrong);
+    c.drawText(bx1, by, 160, 40,
+               (m_btnFocus == 1) ? LiliumUI::kColWhite : LiliumUI::kColText,
+               L"キャンセル", 2, LiliumUI::Align::Center, true);
+    m_lastBtnFocus = m_btnFocus;
   }
 }
 

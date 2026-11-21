@@ -7197,6 +7197,27 @@ const Glyph * findGlyph(uint16_t code) {
     }
   }
 
+  if (code >= 0x3000 && code <= 0x30FF) {
+    static bool s_kanaInit = false;
+    static int16_t s_kanaIdx[256];
+    if (!s_kanaInit) {
+      for (int i = 0; i < 256; ++i) s_kanaIdx[i] = -1;
+      int left = 0;
+      int right = static_cast<int>(kGlyphCount) - 1;
+      while (left <= right) {
+        int mid = left + (right - left) / 2;
+        if (kGlyphs[mid].code < 0x3000) left = mid + 1;
+        else right = mid - 1;
+      }
+      for (int i = left; i < static_cast<int>(kGlyphCount) && kGlyphs[i].code <= 0x30FF; ++i) {
+        s_kanaIdx[kGlyphs[i].code - 0x3000] = static_cast<int16_t>(i);
+      }
+      s_kanaInit = true;
+    }
+    int16_t kIdx = s_kanaIdx[code - 0x3000];
+    return (kIdx >= 0) ? &kGlyphs[kIdx] : nullptr;
+  }
+
   // Binary search
   int left = 0;
   int right = static_cast<int>(kGlyphCount) - 1;

@@ -1058,6 +1058,11 @@ static void renderIconToolbar(LiliumUI::Canvas & c, const FilerState * st) {
 static void onRender(LiliumUI::Canvas & c, void * userData) {
   FilerState * st = static_cast<FilerState *>(userData);
 
+  if (st->inputModal.isOpen() && !c.fullRedraw && st->inputModal.hasDrawnChrome()) {
+    st->inputModal.render(c, true);
+    return;
+  }
+
   if (c.fullRedraw || st->modal != ModalMode::None || st->viewing || st->inputModal.isOpen()) {
     c.fillRect(0, 0, LiliumUI::kMainW, LiliumUI::kScreenH, LiliumUI::kColBgMain);
 
@@ -1332,8 +1337,9 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     st->inputModal.handleKey(vkCode, isShift, confirmed, closed);
     if (confirmed) {
       executeRenameSelected(st, st->inputModal.text());
-    } else {
       st->window.requestRepaint(true);
+    } else {
+      st->window.requestRepaint(closed);
     }
     return;
   }
@@ -1558,8 +1564,9 @@ static void onClick(int x, int y, void * userData) {
     st->inputModal.handleClick(x, y, confirmed, closed);
     if (confirmed) {
       executeRenameSelected(st, st->inputModal.text());
-    } else {
       st->window.requestRepaint(true);
+    } else {
+      st->window.requestRepaint(closed);
     }
     return;
   }

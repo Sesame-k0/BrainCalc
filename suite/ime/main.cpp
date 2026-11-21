@@ -10,7 +10,6 @@
 
 #include "../common/lilium_ui.h"
 #include "../common/lilium_ime_client.h"
-#include "../doom/lilium_inflate.h"
 
 #include <new>
 #include <stdio.h>
@@ -57,27 +56,12 @@ static constexpr int kHotKeyCtrlSpace = 101;
 static constexpr int kHotKeyAltSpace  = 102;
 static constexpr int kHotKeyF11       = 103;
 static constexpr int kHotKeyConvert   = 104;
+static constexpr UINT_PTR kTimerSaveUser = 1;
 
-static constexpr int kBlockCacheSlots = 4;
-static constexpr int kBlockRawMax     = 4096;
-static constexpr int kBlockCompMax    = 4608;
+static constexpr size_t kMaxDictBytes = 4u * 1024u * 1024u;
 static constexpr int kMaxUserLearn   = 128;
 
 static_assert(sizeof(wchar_t) == 2, "Expected 16-bit wchar_t for LIME dictionary");
-
-struct BlockIndexEntry {
-  uint32_t fileOffset;
-  uint16_t compSize;
-  uint16_t rawSize;
-  wchar_t firstReading[16];
-};
-
-struct CacheSlot {
-  int blockIdx;
-  uint32_t lastUse;
-  uint16_t rawSize;
-  uint8_t raw[kBlockRawMax];
-};
 
 struct UserLearnEntry {
   wchar_t reading[24];
@@ -87,149 +71,126 @@ struct UserLearnEntry {
 
 class MozcDict {
 public:
-  MozcDict() : m_fp(nullptr), m_blocks(nullptr), m_blockCount(0), m_readingCount(0), m_totalPairs(0), m_lruClock(1) {
-    for (int i = 0; i < kBlockCacheSlots; ++i) {
-      m_cache[i].blockIdx = -1;
-      m_cache[i].lastUse = 0;
-      m_cache[i].rawSize = 0;
-    }
-  }
+  MozcDict()
+    : m_data(nullptr),
+      m_dataSize(0),
+      m_readingCount(0),
+      m_totalPairs(0),
+      m_indexOffset(0),
+      m_poolOffset(0) {}
 
   ~MozcDict() {
     close();
   }
 
   void close() {
-    if (m_fp) {
-      fclose(m_fp);
-      m_fp = nullptr;
+    if (m_data) {
+      free(m_data);
+      m_data = nullptr;
     }
-    if (m_blocks) {
-      free(m_blocks);
-      m_blocks = nullptr;
-    }
-    m_blockCount = 0;
+    m_dataSize = 0;
     m_readingCount = 0;
     m_totalPairs = 0;
+    m_indexOffset = 0;
+    m_poolOffset = 0;
   }
 
   bool load(const wchar_t * dicPath) {
     close();
-    m_fp = _wfopen(dicPath, L"rb");
-    if (!m_fp) return false;
+    FILE * fp = _wfopen(dicPath, L"rb");
+    if (!fp) return false;
 
-    uint8_t hdr[24] = {};
-    if (fread(hdr, 1, 24, m_fp) != 24) {
-      close();
+    if (fseek(fp, 0, SEEK_END) != 0) {
+      fclose(fp);
       return false;
     }
-    if (memcmp(hdr, "LIME", 4) != 0) {
-      close();
-      return false;
-    }
-    uint32_t ver = readU32(hdr + 4);
-    m_readingCount = readU32(hdr + 8);
-    m_blockCount = readU32(hdr + 12);
-    uint32_t indexOff = readU32(hdr + 16);
-    m_totalPairs = readU32(hdr + 20);
-    if (ver != 1 || m_blockCount == 0 || m_blockCount > 8192) {
-      close();
+    long fsz = ftell(fp);
+    if (fsz < 24 || static_cast<size_t>(fsz) > kMaxDictBytes || fseek(fp, 0, SEEK_SET) != 0) {
+      fclose(fp);
       return false;
     }
 
-    m_blocks = static_cast<BlockIndexEntry *>(calloc(m_blockCount, sizeof(BlockIndexEntry)));
-    if (!m_blocks) {
-      close();
+    uint8_t * buf = static_cast<uint8_t *>(malloc(static_cast<size_t>(fsz)));
+    if (!buf) {
+      fclose(fp);
       return false;
     }
-    if (fseek(m_fp, static_cast<long>(indexOff), SEEK_SET) != 0) {
-      close();
+    size_t got = fread(buf, 1, static_cast<size_t>(fsz), fp);
+    fclose(fp);
+    if (got != static_cast<size_t>(fsz)) {
+      free(buf);
       return false;
     }
 
-    for (uint32_t i = 0; i < m_blockCount; ++i) {
-      uint8_t rawEnt[40] = {};
-      if (fread(rawEnt, 1, 40, m_fp) != 40) {
-        close();
-        return false;
-      }
-      m_blocks[i].fileOffset = readU32(rawEnt);
-      m_blocks[i].compSize = readU16(rawEnt + 4);
-      m_blocks[i].rawSize = readU16(rawEnt + 6);
-      for (int k = 0; k < 16; ++k) {
-        m_blocks[i].firstReading[k] = static_cast<wchar_t>(readU16(rawEnt + 8 + k * 2));
-      }
-      m_blocks[i].firstReading[15] = L'\0';
-      if (m_blocks[i].compSize > kBlockCompMax || m_blocks[i].rawSize > kBlockRawMax) {
-        close();
-        return false;
-      }
+    if (memcmp(buf, "LIME", 4) != 0 || readU32(buf + 4) != 2) {
+      free(buf);
+      return false;
     }
+
+    uint32_t readingCnt = readU32(buf + 8);
+    uint32_t totalPairs = readU32(buf + 12);
+    uint32_t indexOff = readU32(buf + 16);
+    uint32_t poolOff = readU32(buf + 20);
+    if (readingCnt == 0 ||
+        indexOff < 24 ||
+        static_cast<uint64_t>(indexOff) + static_cast<uint64_t>(readingCnt) * 4u > poolOff ||
+        poolOff > static_cast<uint32_t>(fsz)) {
+      free(buf);
+      return false;
+    }
+
+    m_data = buf;
+    m_dataSize = static_cast<uint32_t>(fsz);
+    m_readingCount = readingCnt;
+    m_totalPairs = totalPairs;
+    m_indexOffset = indexOff;
+    m_poolOffset = poolOff;
     return true;
   }
 
   uint32_t totalPairs() const { return m_totalPairs; }
-  bool isLoaded() const { return m_fp != nullptr && m_blockCount > 0; }
+  bool isLoaded() const { return m_data != nullptr && m_readingCount > 0; }
 
-  int lookupExact(const wchar_t * reading, wchar_t outCands[][LiliumIME::kMaxCandChars], int maxOut) {
+  int lookupExact(const wchar_t * reading, wchar_t outCands[][LiliumIME::kMaxCandChars], int maxOut) const {
     if (!isLoaded() || !reading || !reading[0] || maxOut <= 0) return 0;
 
-    // Binary search block where blocks[mid].firstReading <= reading
-    int lo = 0, hi = static_cast<int>(m_blockCount) - 1, bIdx = 0;
+    int lo = 0;
+    int hi = static_cast<int>(m_readingCount) - 1;
     while (lo <= hi) {
-      int mid = (lo + hi) / 2;
-      if (wcscmp(m_blocks[mid].firstReading, reading) <= 0) {
-        bIdx = mid;
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
-      }
-    }
+      int mid = lo + (hi - lo) / 2;
+      uint32_t relOff = readU32(m_data + m_indexOffset + static_cast<size_t>(mid) * 4u);
+      size_t pos = static_cast<size_t>(m_poolOffset) + relOff;
+      if (pos >= m_dataSize) return 0;
 
-    const CacheSlot * slot = getBlock(bIdx);
-    if (!slot) return 0;
+      uint8_t rLen = m_data[pos++];
+      if (pos + static_cast<size_t>(rLen) * 2u + 1u > m_dataSize) return 0;
 
-    const uint8_t * raw = slot->raw;
-    size_t pos = 0;
-    size_t rawSize = slot->rawSize;
-    while (pos < rawSize) {
-      uint8_t rLen = raw[pos++];
-      if (pos + static_cast<size_t>(rLen) * 2 + 1 > rawSize) break;
-      wchar_t recR[LiliumIME::kMaxReadingChars] = L"";
-      for (int i = 0; i < rLen && i + 1 < LiliumIME::kMaxReadingChars; ++i) {
-        recR[i] = static_cast<wchar_t>(readU16(raw + pos + static_cast<size_t>(i) * 2));
-      }
-      recR[(rLen < LiliumIME::kMaxReadingChars) ? rLen : (LiliumIME::kMaxReadingChars - 1)] = L'\0';
-      pos += static_cast<size_t>(rLen) * 2;
-
-      uint8_t candCnt = raw[pos++];
-      int cmp = wcscmp(recR, reading);
+      int cmp = compareUtf16(m_data + pos, rLen, reading);
       if (cmp == 0) {
+        pos += static_cast<size_t>(rLen) * 2u;
+        uint8_t candCnt = m_data[pos++];
         int copied = 0;
         for (int c = 0; c < candCnt; ++c) {
-          if (pos >= rawSize) break;
-          uint8_t sLen = raw[pos++];
-          if (pos + static_cast<size_t>(sLen) * 2 > rawSize) break;
+          if (pos >= m_dataSize) break;
+          uint8_t sLen = m_data[pos++];
+          if (pos + static_cast<size_t>(sLen) * 2u > m_dataSize) break;
           if (copied < maxOut) {
             int copyLen = (sLen < LiliumIME::kMaxCandChars) ? sLen : (LiliumIME::kMaxCandChars - 1);
             for (int j = 0; j < copyLen; ++j) {
-              outCands[copied][j] = static_cast<wchar_t>(readU16(raw + pos + static_cast<size_t>(j) * 2));
+              outCands[copied][j] = static_cast<wchar_t>(readU16(m_data + pos + static_cast<size_t>(j) * 2u));
             }
             outCands[copied][copyLen] = L'\0';
             ++copied;
           }
-          pos += static_cast<size_t>(sLen) * 2;
+          pos += static_cast<size_t>(sLen) * 2u;
         }
         return copied;
       }
-
-      // Skip candidates quickly
-      for (int c = 0; c < candCnt; ++c) {
-        if (pos >= rawSize) break;
-        uint8_t sLen = raw[pos++];
-        pos += static_cast<size_t>(sLen) * 2;
+      if (cmp < 0) {
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
       }
-      if (cmp > 0) break; // Blocks are sorted lexicographically
     }
     return 0;
   }
@@ -244,38 +205,25 @@ private:
            (static_cast<uint32_t>(p[2]) << 16) |
            (static_cast<uint32_t>(p[3]) << 24);
   }
-
-  const CacheSlot * getBlock(int bIdx) {
-    for (int i = 0; i < kBlockCacheSlots; ++i) {
-      if (m_cache[i].blockIdx == bIdx) {
-        m_cache[i].lastUse = ++m_lruClock;
-        return &m_cache[i];
-      }
+  static int compareUtf16(const uint8_t * recUtf16, uint8_t recLen, const wchar_t * target) {
+    int i = 0;
+    while (i < recLen && target[i] != L'\0') {
+      uint16_t a = readU16(recUtf16 + static_cast<size_t>(i) * 2u);
+      uint16_t b = static_cast<uint16_t>(target[i]);
+      if (a != b) return (a < b) ? -1 : 1;
+      ++i;
     }
-    int victim = 0;
-    for (int i = 1; i < kBlockCacheSlots; ++i) {
-      if (m_cache[i].lastUse < m_cache[victim].lastUse) victim = i;
-    }
-    CacheSlot & dst = m_cache[victim];
-    const BlockIndexEntry & meta = m_blocks[bIdx];
-    if (fseek(m_fp, static_cast<long>(meta.fileOffset), SEEK_SET) != 0) return nullptr;
-    if (fread(m_compScratch, 1, meta.compSize, m_fp) != meta.compSize) return nullptr;
-    int dec = lilium_inflate_raw(m_compScratch, meta.compSize, dst.raw, meta.rawSize);
-    if (dec != static_cast<int>(meta.rawSize)) return nullptr;
-    dst.blockIdx = bIdx;
-    dst.rawSize = meta.rawSize;
-    dst.lastUse = ++m_lruClock;
-    return &dst;
+    if (i < recLen) return 1;
+    if (target[i] != L'\0') return -1;
+    return 0;
   }
 
-  FILE * m_fp;
-  BlockIndexEntry * m_blocks;
-  uint32_t m_blockCount;
+  uint8_t * m_data;
+  uint32_t m_dataSize;
   uint32_t m_readingCount;
   uint32_t m_totalPairs;
-  uint32_t m_lruClock;
-  CacheSlot m_cache[kBlockCacheSlots];
-  uint8_t m_compScratch[kBlockCompMax];
+  uint32_t m_indexOffset;
+  uint32_t m_poolOffset;
 };
 
 struct ImeDaemonState {
@@ -293,9 +241,18 @@ struct ImeDaemonState {
   wchar_t userDatPath[MAX_PATH] = L"";
   UserLearnEntry userLearn[kMaxUserLearn] = {};
   int userLearnCount = 0;
+  bool userLearnDirty = false;
 
   // Floating overlay state for external apps
   bool overlayVisible = false;
+  bool overlayChromeDrawn = false;
+  int lastOverlayMode = -1;
+  bool lastOverlayConv = false;
+  int lastOverlayCandSel = -1;
+  int lastOverlayCandPage = -1;
+  int lastOverlayCandCount = -1;
+  wchar_t lastOverlayComp[64] = L"";
+  wchar_t lastOverlayPre[64] = L"";
   HWND targetHwnd = NULL;
   int inputMode = 0; // 0=あ, 1=abc, 2=ABC, 3=12x
   LiliumIME::RomajiEngine romaji;
@@ -355,6 +312,20 @@ static void saveUserHistory(const ImeDaemonState * st) {
   fclose(fp);
 }
 
+static void markUserLearnDirty(ImeDaemonState * st) {
+  if (!st) return;
+  st->userLearnDirty = true;
+  if (st->hDaemon) {
+    SetTimer(st->hDaemon, kTimerSaveUser, 5000, NULL);
+  }
+}
+
+static void flushUserHistoryIfDirty(ImeDaemonState * st) {
+  if (!st || !st->userLearnDirty) return;
+  saveUserHistory(st);
+  st->userLearnDirty = false;
+}
+
 static void recordUserChoice(ImeDaemonState * st, const wchar_t * reading, const wchar_t * surface) {
   if (!reading || !reading[0] || !surface || !surface[0]) return;
   for (int i = 0; i < st->userLearnCount; ++i) {
@@ -364,7 +335,7 @@ static void recordUserChoice(ImeDaemonState * st, const wchar_t * reading, const
       UserLearnEntry moved = st->userLearn[i];
       for (int j = i; j > 0; --j) st->userLearn[j] = st->userLearn[j - 1];
       st->userLearn[0] = moved;
-      saveUserHistory(st);
+      markUserLearnDirty(st);
       return;
     }
   }
@@ -376,7 +347,7 @@ static void recordUserChoice(ImeDaemonState * st, const wchar_t * reading, const
   st->userLearn[0].surface[31] = L'\0';
   st->userLearn[0].hits = 1;
   if (st->userLearnCount < kMaxUserLearn) ++st->userLearnCount;
-  saveUserHistory(st);
+  markUserLearnDirty(st);
 }
 
 static int queryDictWithClause(ImeDaemonState * st, const wchar_t * reading,
@@ -493,33 +464,59 @@ static void freeOverlayBackbuffer(ImeDaemonState * st) {
   st->pixels = nullptr;
 }
 
-static void renderOverlay(ImeDaemonState * st) {
+static void expandDirtyRect(RECT * rc, LONG l, LONG t, LONG r, LONG b) {
+  if (!rc) return;
+  if (IsRectEmpty(rc)) {
+    SetRect(rc, l, t, r, b);
+  } else {
+    if (l < rc->left) rc->left = l;
+    if (t < rc->top) rc->top = t;
+    if (r > rc->right) rc->right = r;
+    if (b > rc->bottom) rc->bottom = b;
+  }
+}
+
+static void renderOverlay(ImeDaemonState * st, bool fullRedraw, RECT * outDirty) {
   if (!st || !st->pixels) return;
+  if (outDirty) SetRectEmpty(outDirty);
+  if (!st->overlayChromeDrawn) fullRedraw = true;
+
   LiliumUI::Canvas c = {};
   c.pixels = st->pixels;
   c.width = kOverlayW;
   c.height = kOverlayH;
   c.clearDirty();
 
-  c.drawBox(0, 0, kOverlayW, kOverlayH, LiliumUI::kColWhite, LiliumUI::kColTealDark);
-  c.fillRect(0, 0, kOverlayW, 34, LiliumUI::kColTeal);
-  c.drawText(14, 0, 260, 34, LiliumUI::kColWhite, L"LILIUM IME (外部入力)", 2, LiliumUI::Align::Left, true);
+  if (fullRedraw) {
+    c.drawBox(0, 0, kOverlayW, kOverlayH, LiliumUI::kColWhite, LiliumUI::kColTealDark);
+    c.fillRect(0, 0, kOverlayW, 34, LiliumUI::kColTeal);
+    c.drawText(14, 0, 260, 34, LiliumUI::kColWhite, L"LILIUM IME (外部入力)", 2, LiliumUI::Align::Left, true);
+
+    wchar_t dictStat[40];
+    _snwprintf(dictStat, 40, L"辞書:%lu語", static_cast<unsigned long>(st->dict.totalPairs()));
+    c.drawText(402, 0, 238, 34, LiliumUI::kColWhite, dictStat, 2, LiliumUI::Align::Right, true);
+
+    c.drawBox(650, 4, 68, 26, LiliumUI::kColWhite, LiliumUI::kColTealDark);
+    c.drawText(650, 4, 68, 26, LiliumUI::kColTealDeep, L"確 定", 2, LiliumUI::Align::Center, true);
+    c.drawBox(724, 4, 68, 26, LiliumUI::kColDangerBg, LiliumUI::kColDangerBorder);
+    c.drawText(724, 4, 68, 26, LiliumUI::kColDangerText, L"閉じる", 2, LiliumUI::Align::Center, true);
+
+    c.drawText(14, 132, 772, 26, LiliumUI::kColMuted,
+               L"[F2]あ/abc/ABC/12x   [1-8/←→]候補   [Enter]送信確定   [Esc]キャンセル",
+               2, LiliumUI::Align::Left, true);
+
+    st->overlayChromeDrawn = true;
+    expandDirtyRect(outDirty, 0, 0, kOverlayW, kOverlayH);
+  }
 
   static constexpr const wchar_t * kModeLbls[4] = { L"[F2] あ", L"[F2] abc", L"[F2] ABC", L"[F2] 12x" };
-  c.drawBox(280, 4, 110, 26, LiliumUI::kColTealSoft, LiliumUI::kColWhite);
-  c.drawText(280, 4, 110, 26, LiliumUI::kColTealDeep, kModeLbls[st->inputMode], 2, LiliumUI::Align::Center, true);
+  if (fullRedraw || st->lastOverlayMode != st->inputMode) {
+    c.drawBox(280, 4, 110, 26, LiliumUI::kColTealSoft, LiliumUI::kColWhite);
+    c.drawText(280, 4, 110, 26, LiliumUI::kColTealDeep, kModeLbls[st->inputMode], 2, LiliumUI::Align::Center, true);
+    st->lastOverlayMode = st->inputMode;
+    expandDirtyRect(outDirty, 280, 4, 390, 30);
+  }
 
-  wchar_t dictStat[40];
-  _snwprintf(dictStat, 40, L"辞書:%lu語", static_cast<unsigned long>(st->dict.totalPairs()));
-  c.drawText(402, 0, 238, 34, LiliumUI::kColWhite, dictStat, 2, LiliumUI::Align::Right, true);
-
-  c.drawBox(650, 4, 68, 26, LiliumUI::kColWhite, LiliumUI::kColTealDark);
-  c.drawText(650, 4, 68, 26, LiliumUI::kColTealDeep, L"確 定", 2, LiliumUI::Align::Center, true);
-  c.drawBox(724, 4, 68, 26, LiliumUI::kColDangerBg, LiliumUI::kColDangerBorder);
-  c.drawText(724, 4, 68, 26, LiliumUI::kColDangerText, L"閉じる", 2, LiliumUI::Align::Center, true);
-
-  // Text composition line (y=42..80)
-  c.drawBox(12, 42, 776, 38, 0xF7F9FB, LiliumUI::kColTealDark);
   wchar_t pre[64] = L"";
   if (st->converting && st->candCount > 0) {
     wcsncpy(pre, st->cands[st->candSel], 63);
@@ -527,48 +524,68 @@ static void renderOverlay(ImeDaemonState * st) {
     st->romaji.getPreeditDisplay(pre, 64);
   }
 
-  int tx = 20;
-  if (st->compBuf[0]) {
-    int cw = c.measureWidth(st->compBuf, 2);
-    c.drawText(tx, 42, 760, 38, LiliumUI::kColText, st->compBuf, 2, LiliumUI::Align::Left, true);
-    tx += cw;
-  }
-  if (pre[0]) {
-    int pw = c.measureWidth(pre, 2);
-    c.fillRect(tx, 47, pw + 2, 28, st->converting ? LiliumUI::kColTealSoft : 0xFFF3D6);
-    c.drawText(tx, 42, pw + 12, 38, st->converting ? LiliumUI::kColTealDeep : 0x8A4E00,
-               pre, 2, LiliumUI::Align::Left, true);
-    c.fillRect(tx, 75, pw, 2, LiliumUI::kColTealDark);
-  } else {
-    c.fillRect(tx, 49, 2, 24, LiliumUI::kColTealDark);
-  }
-
-  // Candidate row (y=86..126)
-  c.drawBox(12, 86, 776, 40, LiliumUI::kColRowAlt, LiliumUI::kColBorder);
-  if (st->converting && st->candCount > 0) {
-    int cx = 20;
-    for (int i = 0; i < 8 && (st->candPageStart + i) < st->candCount; ++i) {
-      int idx = st->candPageStart + i;
-      bool sel = (idx == st->candSel);
-      wchar_t pill[64];
-      _snwprintf(pill, 64, L"%d.%ls", i + 1, st->cands[idx]);
-      pill[63] = L'\0';
-      int pw = c.measureWidth(pill, 2) + 16;
-      if (cx + pw > 780) break;
-      c.drawBox(cx, 91, pw, 30, sel ? LiliumUI::kColTeal : LiliumUI::kColWhite, LiliumUI::kColTealDark);
-      c.drawText(cx, 91, pw, 30, sel ? LiliumUI::kColWhite : LiliumUI::kColText,
-                 pill, 2, LiliumUI::Align::Center, true);
-      cx += pw + 8;
+  bool prevConv = st->lastOverlayConv;
+  if (fullRedraw ||
+      prevConv != st->converting ||
+      wcscmp(st->lastOverlayComp, st->compBuf) != 0 ||
+      wcscmp(st->lastOverlayPre, pre) != 0) {
+    c.drawBox(12, 42, 776, 38, 0xF7F9FB, LiliumUI::kColTealDark);
+    int tx = 20;
+    if (st->compBuf[0]) {
+      int cw = c.measureWidth(st->compBuf, 2);
+      c.drawText(tx, 42, 760, 38, LiliumUI::kColText, st->compBuf, 2, LiliumUI::Align::Left, true);
+      tx += cw;
     }
-  } else {
-    c.drawText(20, 86, 760, 40, LiliumUI::kColMuted,
-               L"文字入力 -> [Space]Mozc変換 -> [Enter]外部アプリへ送信  ([F7]カタカナ / [Esc]中止)",
-               2, LiliumUI::Align::Left, true);
+    if (pre[0]) {
+      int pw = c.measureWidth(pre, 2);
+      c.fillRect(tx, 47, pw + 2, 28, st->converting ? LiliumUI::kColTealSoft : 0xFFF3D6);
+      c.drawText(tx, 42, pw + 12, 38, st->converting ? LiliumUI::kColTealDeep : 0x8A4E00,
+                 pre, 2, LiliumUI::Align::Left, true);
+      c.fillRect(tx, 75, pw, 2, LiliumUI::kColTealDark);
+    } else {
+      c.fillRect(tx, 49, 2, 24, LiliumUI::kColTealDark);
+    }
+    wcsncpy(st->lastOverlayComp, st->compBuf, 63);
+    st->lastOverlayComp[63] = L'\0';
+    wcsncpy(st->lastOverlayPre, pre, 63);
+    st->lastOverlayPre[63] = L'\0';
+    st->lastOverlayConv = st->converting;
+    expandDirtyRect(outDirty, 12, 42, 788, 80);
   }
 
-  c.drawText(14, 132, 772, 26, LiliumUI::kColMuted,
-             L"[F2]あ/abc/ABC/12x   [1-8/←→]候補   [Enter]送信確定   [Esc]キャンセル",
-             2, LiliumUI::Align::Left, true);
+  bool candChanged = fullRedraw ||
+                     (prevConv != st->converting) ||
+                     (st->converting &&
+                      (st->lastOverlayCandCount != st->candCount ||
+                       st->lastOverlayCandSel != st->candSel ||
+                       st->lastOverlayCandPage != st->candPageStart));
+  if (candChanged) {
+    c.drawBox(12, 86, 776, 40, LiliumUI::kColRowAlt, LiliumUI::kColBorder);
+    if (st->converting && st->candCount > 0) {
+      int cx = 20;
+      for (int i = 0; i < 8 && (st->candPageStart + i) < st->candCount; ++i) {
+        int idx = st->candPageStart + i;
+        bool sel = (idx == st->candSel);
+        wchar_t pill[64];
+        _snwprintf(pill, 64, L"%d.%ls", i + 1, st->cands[idx]);
+        pill[63] = L'\0';
+        int pw = c.measureWidth(pill, 2) + 16;
+        if (cx + pw > 780) break;
+        c.drawBox(cx, 91, pw, 30, sel ? LiliumUI::kColTeal : LiliumUI::kColWhite, LiliumUI::kColTealDark);
+        c.drawText(cx, 91, pw, 30, sel ? LiliumUI::kColWhite : LiliumUI::kColText,
+                   pill, 2, LiliumUI::Align::Center, true);
+        cx += pw + 8;
+      }
+    } else {
+      c.drawText(20, 86, 760, 40, LiliumUI::kColMuted,
+                 L"文字入力 -> [Space]Mozc変換 -> [Enter]外部アプリへ送信  ([F7]カタカナ / [Esc]中止)",
+                 2, LiliumUI::Align::Left, true);
+    }
+    st->lastOverlayCandCount = st->candCount;
+    st->lastOverlayCandSel = st->candSel;
+    st->lastOverlayCandPage = st->candPageStart;
+    expandDirtyRect(outDirty, 12, 86, 788, 126);
+  }
 }
 
 static HWND findEditChildWindow(HWND parent, int depth) {
@@ -639,7 +656,31 @@ static void injectTextToTargetWindow(HWND target, const wchar_t * text) {
     postCharsToWindowEdit(target, text);
   }
 #else
-  postCharsToWindowEdit(target, text);
+  HWND fgNow = GetForegroundWindow();
+  bool sent = false;
+  if (target && IsWindow(target) && (fgNow == target || IsChild(target, fgNow))) {
+    HMODULE hCore = GetModuleHandleW(L"coredll.dll");
+    if (hCore) {
+      typedef BOOL (WINAPI * PFN_PostKeybdMessage)(HWND, UINT, UINT, UINT, UINT *, UINT *);
+      PFN_PostKeybdMessage pPostKeybd = reinterpret_cast<PFN_PostKeybdMessage>(
+          reinterpret_cast<void *>(GetProcAddress(hCore, TEXT("PostKeybdMessage"))));
+      if (pPostKeybd) {
+        size_t len = wcslen(text);
+        if (len > 0 && len <= 63) {
+          UINT shifts[64] = {};
+          UINT chars[64] = {};
+          for (size_t i = 0; i < len; ++i) {
+            shifts[i] = 0x0080; // KeyStateDownFlag
+            chars[i] = static_cast<UINT>(text[i]);
+          }
+          sent = (pPostKeybd(fgNow, 0, 0x0080, static_cast<UINT>(len), shifts, chars) != FALSE);
+        }
+      }
+    }
+  }
+  if (!sent) {
+    postCharsToWindowEdit(target, text);
+  }
 #endif
 }
 
@@ -654,7 +695,8 @@ static void openOverlay(ImeDaemonState * st, HWND explicitTarget) {
   st->candSel = 0;
   st->candPageStart = 0;
   st->overlayVisible = true;
-  renderOverlay(st);
+  st->overlayChromeDrawn = false;
+  renderOverlay(st, true, nullptr);
   ShowWindow(st->hOverlay, SW_SHOW);
   SetWindowPos(st->hOverlay, HWND_TOPMOST, kOverlayX, kOverlayY, kOverlayW, kOverlayH, SWP_SHOWWINDOW);
   SetForegroundWindow(st->hOverlay);
@@ -751,11 +793,21 @@ static LRESULT CALLBACK daemonWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
       }
       return 0;
 
+    case WM_TIMER:
+      if (wParam == kTimerSaveUser) {
+        KillTimer(hWnd, kTimerSaveUser);
+        flushUserHistoryIfDirty(st);
+      }
+      return 0;
+
     case WM_CLOSE:
+      flushUserHistoryIfDirty(st);
       DestroyWindow(hWnd);
       return 0;
 
     case WM_DESTROY:
+      KillTimer(hWnd, kTimerSaveUser);
+      flushUserHistoryIfDirty(st);
       PostQuitMessage(0);
       return 0;
 
@@ -774,7 +826,13 @@ static LRESULT CALLBACK overlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
       PAINTSTRUCT ps;
       HDC hdc = BeginPaint(hWnd, &ps);
       if (st && st->memDC) {
-        BitBlt(hdc, 0, 0, kOverlayW, kOverlayH, st->memDC, 0, 0, SRCCOPY);
+        int x = ps.rcPaint.left;
+        int y = ps.rcPaint.top;
+        int w = ps.rcPaint.right - x;
+        int h = ps.rcPaint.bottom - y;
+        if (w > 0 && h > 0) {
+          BitBlt(hdc, x, y, w, h, st->memDC, x, y, SRCCOPY);
+        }
       }
       EndPaint(hWnd, &ps);
       return 0;
@@ -869,8 +927,9 @@ static LRESULT CALLBACK overlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
           }
         }
       }
-      renderOverlay(st);
-      InvalidateRect(hWnd, NULL, FALSE);
+      RECT dirty = {};
+      renderOverlay(st, false, &dirty);
+      if (!IsRectEmpty(&dirty)) InvalidateRect(hWnd, &dirty, FALSE);
       return 0;
     }
 
@@ -882,8 +941,9 @@ static LRESULT CALLBACK overlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
         if (x >= 280 && x < 390) {
           overlayCommitCurrentSeg(st);
           st->inputMode = (st->inputMode + 1) % 4;
-          renderOverlay(st);
-          InvalidateRect(hWnd, NULL, FALSE);
+          RECT dirty = {};
+          renderOverlay(st, false, &dirty);
+          if (!IsRectEmpty(&dirty)) InvalidateRect(hWnd, &dirty, FALSE);
         } else if (x >= 650 && x < 718) {
           closeOverlay(st, true);
         } else if (x >= 724 && x < 792) {
@@ -1002,6 +1062,7 @@ int main(int /*argc*/, char * /*argv*/[]) {
 #endif
   }
   freeOverlayBackbuffer(st);
+  flushUserHistoryIfDirty(st);
   if (st->hOverlay) DestroyWindow(st->hOverlay);
   if (st->shm) UnmapViewOfFile(st->shm);
   if (st->hMap) CloseHandle(st->hMap);

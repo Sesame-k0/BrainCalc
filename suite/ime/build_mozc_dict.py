@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Builds compressed Mozc OSS dictionary -> suite/ime/lilium_ime.dic (LIME v1 format).
+Builds uncompressed Mozc OSS dictionary -> suite/ime/lilium_ime.dic (LIME v2 format).
 - Downloads Mozc OSS dictionary00.txt..dictionary09.txt into suite/ime/mozc_raw/ (cached).
 - Filters surfaces against MisakiFont supported glyphs so 0 tofu boxes appear on Brain.
-- Selects top frequency/utility Mozc entries + essential kana/symbols (~42,000 entries).
-- Compresses sorted 4KB blocks using raw RFC 1951 DEFLATE for lilium_inflate_raw().
+- Selects top frequency/utility Mozc entries + essential kana/symbols (~51,000 pairs, ~970 KB).
+- Writes flat sorted UTF-16LE records + O(1) offset table for instant in-RAM binary search.
 """
 
 import heapq
@@ -14,7 +14,6 @@ import re
 import struct
 import sys
 import urllib.request
-import zlib
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
@@ -25,11 +24,10 @@ DEFAULT_OUT = os.path.join(SCRIPT_DIR, "lilium_ime.dic")
 MOZC_BASE_URL = "https://raw.githubusercontent.com/google/mozc/master/src/data/dictionary_oss"
 MOZC_FILES = [f"dictionary{i:02d}.txt" for i in range(10)]
 
-BLOCK_RAW_LIMIT = 4096
 MAX_READING_LEN = 15
 MAX_SURFACE_LEN = 24
 MAX_CANDS_PER_READING = 12
-TARGET_TOTAL_PAIRS = 45000
+TARGET_TOTAL_PAIRS = 51000
 
 
 def load_misaki_glyphs():
@@ -240,105 +238,72 @@ def encode_record(reading, cands):
     return b"".join(parts)
 
 
-def compress_raw_deflate(data):
-    comp = zlib.compressobj(9, zlib.DEFLATED, -15)
-    return comp.compress(data) + comp.flush()
-
-
 def write_lime_dict(out_path, records, total_pairs):
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     header_size = 24
-    blocks_blob = bytearray()
-    block_entries = []  # (relOffset, compSize, rawSize, firstReading)
+    index_offset = header_size
+    pool_offset = index_offset + len(records) * 4
 
-    cur_raw = bytearray()
-    cur_first = None
-
-    def flush_block():
-        nonlocal cur_raw, cur_first
-        if not cur_raw:
-            return
-        comp = compress_raw_deflate(bytes(cur_raw))
-        rel_off = len(blocks_blob)
-        blocks_blob.extend(comp)
-        block_entries.append((rel_off, len(comp), len(cur_raw), cur_first))
-        cur_raw = bytearray()
-        cur_first = None
-
+    index_table = bytearray()
+    pool_blob = bytearray()
     for r, cands in records:
-        rec = encode_record(r, cands)
-        if cur_raw and len(cur_raw) + len(rec) > BLOCK_RAW_LIMIT:
-            flush_block()
-        if cur_first is None:
-            cur_first = r
-        cur_raw.extend(rec)
-    flush_block()
+        index_table.extend(struct.pack("<I", len(pool_blob)))
+        pool_blob.extend(encode_record(r, cands))
 
-    index_offset = header_size + len(blocks_blob)
     header = struct.pack(
         "<4sIIIII",
         b"LIME",
-        1,
+        2,
         len(records),
-        len(block_entries),
-        index_offset,
         total_pairs,
+        index_offset,
+        pool_offset,
     )
 
     tmp_path = out_path + ".tmp"
     with open(tmp_path, "wb") as f:
         f.write(header)
-        f.write(blocks_blob)
-        for rel_off, comp_sz, raw_sz, first_r in block_entries:
-            file_off = header_size + rel_off
-            r_utf16 = first_r.encode("utf-16le")
-            padded = r_utf16[:30].ljust(32, b"\x00")
-            f.write(struct.pack("<IHH", file_off, comp_sz, raw_sz))
-            f.write(padded)
+        f.write(index_table)
+        f.write(pool_blob)
     os.replace(tmp_path, out_path)
     sz = os.path.getsize(out_path)
-    print(f"[SUCCESS] Built {out_path}: {len(records)} readings, {total_pairs} pairs, "
-          f"{len(block_entries)} blocks, {sz:,} bytes ({sz/1024:.1f} KB)")
+    print(f"[SUCCESS] Built LIME v2 {out_path}: {len(records)} readings, {total_pairs} pairs, "
+          f"{sz:,} bytes ({sz/1024:.1f} KB)")
 
 
 def self_test_lime(dic_path):
     with open(dic_path, "rb") as f:
         data = f.read()
-    magic, ver, r_cnt, b_cnt, idx_off, p_cnt = struct.unpack_from("<4sIIIII", data, 0)
-    assert magic == b"LIME" and ver == 1, f"Bad header: {magic} v{ver}"
-    blocks = []
-    for i in range(b_cnt):
-        foff, csz, rsz = struct.unpack_from("<IHH", data, idx_off + i * 40)
-        raw_fr = data[idx_off + i * 40 + 8 : idx_off + i * 40 + 40]
-        fr = raw_fr.decode("utf-16le").split("\x00", 1)[0]
-        blocks.append((foff, csz, rsz, fr))
+    magic, ver, r_cnt, p_cnt, idx_off, pool_off = struct.unpack_from("<4sIIIII", data, 0)
+    assert magic == b"LIME" and ver == 2, f"Bad header: {magic} v{ver}"
+    assert idx_off == 24 and pool_off == idx_off + r_cnt * 4
+
+    def read_record_at(rec_idx):
+        rel_off = struct.unpack_from("<I", data, idx_off + rec_idx * 4)[0]
+        pos = pool_off + rel_off
+        rlen = data[pos]; pos += 1
+        r = data[pos : pos + rlen * 2].decode("utf-16le"); pos += rlen * 2
+        ccnt = data[pos]; pos += 1
+        cands = []
+        for _ in range(ccnt):
+            slen = data[pos]; pos += 1
+            s = data[pos : pos + slen * 2].decode("utf-16le"); pos += slen * 2
+            cands.append(s)
+        return r, cands
 
     def lookup(target):
-        lo, hi = 0, len(blocks) - 1
-        b_idx = 0
+        lo, hi = 0, r_cnt - 1
         tk = utf16_key(target)
         while lo <= hi:
             mid = (lo + hi) // 2
-            if utf16_key(blocks[mid][3]) <= tk:
-                b_idx = mid
+            r, cands = read_record_at(mid)
+            rk = utf16_key(r)
+            if rk == tk:
+                return cands
+            if rk < tk:
                 lo = mid + 1
             else:
                 hi = mid - 1
-        foff, csz, rsz, _ = blocks[b_idx]
-        raw = zlib.decompress(data[foff : foff + csz], -15)
-        assert len(raw) == rsz
-        pos = 0
-        while pos < len(raw):
-            rlen = raw[pos]; pos += 1
-            r = raw[pos : pos + rlen * 2].decode("utf-16le"); pos += rlen * 2
-            ccnt = raw[pos]; pos += 1
-            cands = []
-            for _ in range(ccnt):
-                slen = raw[pos]; pos += 1
-                s = raw[pos : pos + slen * 2].decode("utf-16le"); pos += slen * 2
-                cands.append(s)
-            if r == target:
-                return cands
         return []
 
     for test_r, expected in [

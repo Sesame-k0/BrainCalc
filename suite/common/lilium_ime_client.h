@@ -84,15 +84,27 @@ public:
   void open(const wchar_t * title, const wchar_t * hint, const wchar_t * initialText, int maxChars);
   void close();
   bool isOpen() const { return m_open; }
+  bool hasDrawnChrome() const { return m_chromeDrawn; }
   const wchar_t * text() const { return m_buf; }
 
-  void render(LiliumUI::Canvas & c, bool drawSidebarGuide = true) const;
+  void render(LiliumUI::Canvas & c, bool drawSidebarGuide = true);
   // Returns true if key consumed; sets outConfirmed when user submits, outClosed when dialog closes.
   bool handleKey(WPARAM vkCode, bool isShift, bool & outConfirmed, bool & outClosed);
   bool handleClick(int x, int y, bool & outConfirmed, bool & outClosed);
 
 private:
   bool m_open;
+  bool m_chromeDrawn;
+  int m_lastInputMode;
+  int m_lastBtnFocus;
+  int m_lastCursor;
+  bool m_lastConverting;
+  bool m_lastRomajiHas;
+  int m_lastCandCount;
+  int m_lastCandSel;
+  int m_lastCandPageStart;
+  wchar_t m_lastBuf[kMaxBuf];
+  wchar_t m_lastPre[kMaxReadingChars];
   wchar_t m_title[64];
   wchar_t m_hint[96];
   wchar_t m_buf[kMaxBuf];

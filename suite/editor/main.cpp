@@ -120,10 +120,30 @@ struct EditorState {
   int viewScroll = 0;
 
   // Editor wrapped visual lines & IME
+  enum EditDirtyFlags : uint32_t {
+    kEditDirtyHeader = 1u << 0,
+    kEditDirtyAllRows = 1u << 1,
+    kEditDirtyCurRow = 1u << 2,
+    kEditDirtyQuickBar = 1u << 3,
+    kEditDirtySidebar = 1u << 4,
+  };
   VisEditRow * editRows = nullptr; // [kMaxEditVisLines]
   int editRowCount = 0;
   int editScrollRow = 0;
   int inputMode = 0; // 0=あ(IME), 1=abc, 2=ABC, 3=12x記号/MD
+  bool editChromeDrawn = false;
+  uint32_t editDirtyFlags = 0;
+  int prevCursorVisRow = -1;
+  int prevEditScrollRow = -1;
+  int prevEditRowCount = -1;
+  bool prevCursorRowWrapped = false;
+  bool prevEdDirty = false;
+  bool prevEdSavedToast = false;
+  int prevEdInputMode = -1;
+  bool prevEdConverting = false;
+  int prevEdCandCount = -1;
+  int prevEdCandSel = -1;
+  int prevEdCandPage = -1;
 
   LiliumIME::RomajiEngine romaji;
   bool converting = false;
@@ -493,11 +513,11 @@ static void rebuildEditWrapRows(EditorState * st, int maxWidthPx) {
       int pos = lineStart;
       while (pos < hardEnd && st->editRowCount < kMaxEditVisLines) {
         int len = 0;
-        wchar_t tmp[128] = L"";
+        int w = 0;
         while (pos + len < hardEnd && len < 120) {
-          tmp[len] = st->textBuf[pos + len];
-          tmp[len + 1] = L'\0';
-          if (::MisakiFont::measureTextWidth(tmp, len + 1, 2) > maxWidthPx && len > 0) break;
+          int cw = ::MisakiFont::measureCharWidth(static_cast<uint16_t>(st->textBuf[pos + len]), 2);
+          if (w + cw > maxWidthPx && len > 0) break;
+          w += cw;
           ++len;
         }
         if (len == 0) len = 1;
@@ -898,130 +918,199 @@ static void renderEditorSidebarKeyGrid(LiliumUI::Canvas & c, int mode) {
              LiliumUI::kColText, L"保存して戻る", 2, LiliumUI::Align::Center, true);
 }
 
-static void renderEditScreen(LiliumUI::Canvas & c, EditorState * st) {
-  c.fillRect(0, 0, LiliumUI::kMainW, LiliumUI::kScreenH, LiliumUI::kColBgMain);
+static void drawSingleEditRow(LiliumUI::Canvas & c, const EditorState * st,
+                              int edX, int edY, int edW, int lineH, int idx, int cursorVisRow) {
+  const VisEditRow & row = st->editRows[idx];
+  int ry = edY + 6 + (idx - st->editScrollRow) * lineH;
+  int tx = edX + 10;
+  bool isCur = (idx == cursorVisRow);
+  c.fillRect(edX + 2, ry, edW - 4, lineH, isCur ? 0xF5FBFA : LiliumUI::kColWhite);
 
-  wchar_t badge[32] = L"編集";
-  DWORD now = GetTickCount();
-  if (st->savedToastTick != 0 && (now - st->savedToastTick) < 2500) {
-    wcscpy(badge, L"保存済!");
-  } else if (st->dirty) {
-    wcscpy(badge, L"編集中*");
+  if (isCur) {
+    int leftLen = st->cursorPos - row.startOffset;
+    int rightLen = row.endOffset - st->cursorPos;
+    wchar_t leftTxt[128] = L"", rightTxt[128] = L"";
+    if (leftLen > 0) {
+      if (leftLen > 127) leftLen = 127;
+      wcsncpy(leftTxt, st->textBuf + row.startOffset, static_cast<size_t>(leftLen));
+      leftTxt[leftLen] = L'\0';
+      int lw = c.measureWidth(leftTxt, 2);
+      c.drawText(tx, ry, edW - 24, lineH, LiliumUI::kColText, leftTxt, 2, LiliumUI::Align::Left, true);
+      tx += lw;
+    }
+
+    wchar_t pre[64] = L"";
+    if (st->converting && st->candCount > 0) {
+      wcsncpy(pre, st->cands[st->candSel], 63);
+    } else {
+      st->romaji.getPreeditDisplay(pre, 64);
+    }
+    if (pre[0]) {
+      int pw = c.measureWidth(pre, 2);
+      c.fillRect(tx, ry + 1, pw + 2, lineH - 2, st->converting ? LiliumUI::kColTealSoft : 0xFFF3D6);
+      c.drawText(tx, ry, pw + 10, lineH, st->converting ? LiliumUI::kColTealDeep : 0x8A4E00,
+                 pre, 2, LiliumUI::Align::Left, true);
+      c.fillRect(tx, ry + lineH - 2, pw, 2, LiliumUI::kColTealDark);
+      tx += pw + 2;
+    } else {
+      c.fillRect(tx, ry + 2, 2, lineH - 4, LiliumUI::kColTealDark);
+      tx += 3;
+    }
+
+    if (rightLen > 0) {
+      if (rightLen > 127) rightLen = 127;
+      wcsncpy(rightTxt, st->textBuf + st->cursorPos, static_cast<size_t>(rightLen));
+      rightTxt[rightLen] = L'\0';
+      c.drawText(tx, ry, (edX + edW - 14) - tx, lineH, LiliumUI::kColText,
+                 rightTxt, 2, LiliumUI::Align::Left, true);
+    }
+  } else {
+    int len = row.endOffset - row.startOffset;
+    if (len > 0) {
+      if (len > 127) len = 127;
+      wchar_t lineTxt[128] = L"";
+      wcsncpy(lineTxt, st->textBuf + row.startOffset, static_cast<size_t>(len));
+      lineTxt[len] = L'\0';
+      c.drawText(tx, ry, edW - 24, lineH, LiliumUI::kColText, lineTxt, 2, LiliumUI::Align::Left, true);
+    }
   }
-  LiliumUI::renderTopHeader(c, st->activeName, badge);
+}
+
+static void renderEditScreen(LiliumUI::Canvas & c, EditorState * st) {
+  bool full = c.fullRedraw || !st->editChromeDrawn;
 
   const int edX = 12, edY = 48, edW = LiliumUI::kMainW - 24, edH = 338;
   const int lineH = 22;
   const int visRows = (edH - 12) / lineH; // 14 lines
   ensureEditorCursorVisible(st, visRows);
-
-  c.drawBox(edX, edY, edW, edH, LiliumUI::kColWhite, LiliumUI::kColTealDark);
-
   int cursorVisRow = findEditRowForCursor(st);
-  for (int r = 0; r < visRows; ++r) {
-    int idx = st->editScrollRow + r;
-    if (idx >= st->editRowCount) break;
-    const VisEditRow & row = st->editRows[idx];
-    int ry = edY + 6 + r * lineH;
-    int tx = edX + 10;
+  const VisEditRow & curRow = st->editRows[cursorVisRow];
 
-    if (idx == cursorVisRow) {
-      c.fillRect(edX + 2, ry, edW - 12, lineH, 0xF5FBFA);
-      int leftLen = st->cursorPos - row.startOffset;
-      int rightLen = row.endOffset - st->cursorPos;
-      wchar_t leftTxt[128] = L"", rightTxt[128] = L"";
-      if (leftLen > 0) {
-        if (leftLen > 127) leftLen = 127;
-        wcsncpy(leftTxt, st->textBuf + row.startOffset, static_cast<size_t>(leftLen));
-        leftTxt[leftLen] = L'\0';
-        int lw = c.measureWidth(leftTxt, 2);
-        c.drawText(tx, ry, edW - 24, lineH, LiliumUI::kColText, leftTxt, 2, LiliumUI::Align::Left, true);
-        tx += lw;
-      }
+  if (full) {
+    c.fillRect(0, 0, LiliumUI::kMainW, LiliumUI::kScreenH, LiliumUI::kColBgMain);
+    c.drawBox(edX, edY, edW, edH, LiliumUI::kColWhite, LiliumUI::kColTealDark);
+    c.fillRect(0, 440, LiliumUI::kMainW, 40, LiliumUI::kColSidebar);
+    c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
+    c.drawText(12, 440, LiliumUI::kMainW - 24, 40, LiliumUI::kColTextSub,
+               L"[F2]入力切替 [Spc]漢字変換 [1-8/←→]候補 [F1]保存 [F3]プレビュー",
+               2, LiliumUI::Align::Left, true);
+    st->editChromeDrawn = true;
+  }
 
-      wchar_t pre[64] = L"";
-      if (st->converting && st->candCount > 0) {
-        wcsncpy(pre, st->cands[st->candSel], 63);
-      } else {
-        st->romaji.getPreeditDisplay(pre, 64);
-      }
-      if (pre[0]) {
-        int pw = c.measureWidth(pre, 2);
-        c.fillRect(tx, ry + 1, pw + 2, lineH - 2, st->converting ? LiliumUI::kColTealSoft : 0xFFF3D6);
-        c.drawText(tx, ry, pw + 10, lineH, st->converting ? LiliumUI::kColTealDeep : 0x8A4E00,
-                   pre, 2, LiliumUI::Align::Left, true);
-        c.fillRect(tx, ry + lineH - 2, pw, 2, LiliumUI::kColTealDark);
-        tx += pw + 2;
-      } else {
-        c.fillRect(tx, ry + 2, 2, lineH - 4, LiliumUI::kColTealDark);
-        tx += 3;
-      }
+  DWORD now = GetTickCount();
+  bool toastActive = (st->savedToastTick != 0 && (now - st->savedToastTick) < 2500);
+  if (full || toastActive != st->prevEdSavedToast || st->dirty != st->prevEdDirty ||
+      (st->editDirtyFlags & EditorState::kEditDirtyHeader)) {
+    wchar_t badge[32] = L"編集";
+    if (toastActive) {
+      wcscpy(badge, L"保存済!");
+    } else if (st->dirty) {
+      wcscpy(badge, L"編集中*");
+    }
+    LiliumUI::renderTopHeader(c, st->activeName, badge);
+    st->prevEdSavedToast = toastActive;
+    st->prevEdDirty = st->dirty;
+  }
 
-      if (rightLen > 0) {
-        if (rightLen > 127) rightLen = 127;
-        wcsncpy(rightTxt, st->textBuf + st->cursorPos, static_cast<size_t>(rightLen));
-        rightTxt[rightLen] = L'\0';
-        c.drawText(tx, ry, (edX + edW - 14) - tx, lineH, LiliumUI::kColText,
-                   rightTxt, 2, LiliumUI::Align::Left, true);
-      }
-    } else {
-      int len = row.endOffset - row.startOffset;
-      if (len > 0) {
-        if (len > 127) len = 127;
-        wchar_t lineTxt[128] = L"";
-        wcsncpy(lineTxt, st->textBuf + row.startOffset, static_cast<size_t>(len));
-        lineTxt[len] = L'\0';
-        c.drawText(tx, ry, edW - 24, lineH, LiliumUI::kColText, lineTxt, 2, LiliumUI::Align::Left, true);
-      }
+  bool scrollChanged = (st->editScrollRow != st->prevEditScrollRow);
+  bool rowCountChanged = (st->editRowCount != st->prevEditRowCount);
+  bool curRowIsContinuation = (cursorVisRow > 0 && !st->editRows[cursorVisRow - 1].hardEnd);
+  bool drawAllRows = full || scrollChanged || rowCountChanged ||
+                     !curRow.hardEnd || st->prevCursorRowWrapped || curRowIsContinuation ||
+                     (st->editDirtyFlags & EditorState::kEditDirtyAllRows);
+  if (drawAllRows) {
+    if (!full) {
+      c.fillRect(edX + 2, edY + 2, edW - 4, edH - 4, LiliumUI::kColWhite);
+    }
+    for (int r = 0; r < visRows; ++r) {
+      int idx = st->editScrollRow + r;
+      if (idx >= st->editRowCount) break;
+      drawSingleEditRow(c, st, edX, edY, edW, lineH, idx, cursorVisRow);
+    }
+  } else if ((st->editDirtyFlags & EditorState::kEditDirtyCurRow) || cursorVisRow != st->prevCursorVisRow) {
+    if (st->prevCursorVisRow != cursorVisRow &&
+        st->prevCursorVisRow >= st->editScrollRow &&
+        st->prevCursorVisRow < st->editScrollRow + visRows &&
+        st->prevCursorVisRow < st->editRowCount) {
+      drawSingleEditRow(c, st, edX, edY, edW, lineH, st->prevCursorVisRow, cursorVisRow);
+    }
+    if (cursorVisRow >= st->editScrollRow &&
+        cursorVisRow < st->editScrollRow + visRows &&
+        cursorVisRow < st->editRowCount) {
+      drawSingleEditRow(c, st, edX, edY, edW, lineH, cursorVisRow, cursorVisRow);
     }
   }
+
+  st->prevCursorVisRow = cursorVisRow;
+  st->prevEditScrollRow = st->editScrollRow;
+  st->prevEditRowCount = st->editRowCount;
+  st->prevCursorRowWrapped = !curRow.hardEnd;
 
   // IME Candidate Bar OR Markdown Quick-Insert Bar (y=390..434)
-  c.drawBox(12, 390, LiliumUI::kMainW - 24, 44, LiliumUI::kColRowAlt, LiliumUI::kColBorder);
-  if (st->converting && st->candCount > 0) {
-    int cx = 18;
-    for (int i = 0; i < 8 && (st->candPageStart + i) < st->candCount; ++i) {
-      int idx = st->candPageStart + i;
-      bool sel = (idx == st->candSel);
-      wchar_t pill[64];
-      _snwprintf(pill, 64, L"%d.%ls", i + 1, st->cands[idx]);
-      pill[63] = L'\0';
-      int pw = c.measureWidth(pill, 2) + 14;
-      if (cx + pw > LiliumUI::kMainW - 20) break;
-      c.drawBox(cx, 396, pw, 32,
-                sel ? LiliumUI::kColTeal : LiliumUI::kColWhite,
-                sel ? LiliumUI::kColTealDark : LiliumUI::kColBorderStrong);
-      c.drawText(cx, 396, pw, 32,
-                 sel ? LiliumUI::kColWhite : LiliumUI::kColText,
-                 pill, 2, LiliumUI::Align::Center, true);
-      cx += pw + 6;
+  bool barDirty = full ||
+                  (st->prevEdConverting != st->converting) ||
+                  (st->converting && (st->prevEdCandCount != st->candCount ||
+                                      st->prevEdCandSel != st->candSel ||
+                                      st->prevEdCandPage != st->candPageStart)) ||
+                  (st->editDirtyFlags & EditorState::kEditDirtyQuickBar);
+  if (barDirty) {
+    c.drawBox(12, 390, LiliumUI::kMainW - 24, 44, LiliumUI::kColRowAlt, LiliumUI::kColBorder);
+    if (st->converting && st->candCount > 0) {
+      int cx = 18;
+      for (int i = 0; i < 8 && (st->candPageStart + i) < st->candCount; ++i) {
+        int idx = st->candPageStart + i;
+        bool sel = (idx == st->candSel);
+        wchar_t pill[64];
+        _snwprintf(pill, 64, L"%d.%ls", i + 1, st->cands[idx]);
+        pill[63] = L'\0';
+        int pw = c.measureWidth(pill, 2) + 14;
+        if (cx + pw > LiliumUI::kMainW - 20) break;
+        c.drawBox(cx, 396, pw, 32,
+                  sel ? LiliumUI::kColTeal : LiliumUI::kColWhite,
+                  sel ? LiliumUI::kColTealDark : LiliumUI::kColBorderStrong);
+        c.drawText(cx, 396, pw, 32,
+                   sel ? LiliumUI::kColWhite : LiliumUI::kColText,
+                   pill, 2, LiliumUI::Align::Center, true);
+        cx += pw + 6;
+      }
+    } else {
+      static constexpr const wchar_t * kQuickBtns[8] = {
+        L"あ/A", L"# ", L"- ", L"* ", L"`", L"> ", L"- [ ] ", L"---"
+      };
+      for (int b = 0; b < 8; ++b) {
+        int bx = 18 + b * 76;
+        c.drawBox(bx, 396, 70, 32,
+                  b == 0 ? LiliumUI::kColTealSoft : LiliumUI::kColWhite,
+                  b == 0 ? LiliumUI::kColTealDark : LiliumUI::kColBorderStrong);
+        c.drawText(bx, 396, 70, 32,
+                   b == 0 ? LiliumUI::kColTealDeep : LiliumUI::kColText,
+                   kQuickBtns[b], 2, LiliumUI::Align::Center, true);
+      }
     }
-  } else {
-    static constexpr const wchar_t * kQuickBtns[8] = {
-      L"あ/A", L"# ", L"- ", L"* ", L"`", L"> ", L"- [ ] ", L"---"
-    };
-    for (int b = 0; b < 8; ++b) {
-      int bx = 18 + b * 76;
-      c.drawBox(bx, 396, 70, 32,
-                b == 0 ? LiliumUI::kColTealSoft : LiliumUI::kColWhite,
-                b == 0 ? LiliumUI::kColTealDark : LiliumUI::kColBorderStrong);
-      c.drawText(bx, 396, 70, 32,
-                 b == 0 ? LiliumUI::kColTealDeep : LiliumUI::kColText,
-                 kQuickBtns[b], 2, LiliumUI::Align::Center, true);
-    }
+    st->prevEdConverting = st->converting;
+    st->prevEdCandCount = st->candCount;
+    st->prevEdCandSel = st->candSel;
+    st->prevEdCandPage = st->candPageStart;
   }
 
-  c.fillRect(0, 440, LiliumUI::kMainW, 40, LiliumUI::kColSidebar);
-  c.fillRect(0, 440, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
-  c.drawText(12, 440, LiliumUI::kMainW - 24, 40, LiliumUI::kColTextSub,
-             L"[F2]入力切替 [Spc]漢字変換 [1-8/←→]候補 [F1]保存 [F3]プレビュー",
-             2, LiliumUI::Align::Left, true);
-
-  renderEditorSidebarKeyGrid(c, st->inputMode);
+  if (full || st->prevEdInputMode != st->inputMode ||
+      (st->editDirtyFlags & EditorState::kEditDirtySidebar)) {
+    renderEditorSidebarKeyGrid(c, st->inputMode);
+    st->prevEdInputMode = st->inputMode;
+  }
+  st->editDirtyFlags = 0;
 }
 
 static void onRender(LiliumUI::Canvas & c, void * userData) {
   EditorState * st = static_cast<EditorState *>(userData);
+  if (st->modal == ModalKind::TextInput && st->inputModal.isOpen() &&
+      !c.fullRedraw && st->inputModal.hasDrawnChrome()) {
+    st->inputModal.render(c, true);
+    return;
+  }
+  if (st->screen != Screen::Edit || st->modal != ModalKind::None) {
+    st->editChromeDrawn = false;
+  }
   if (st->screen == Screen::List) renderListScreen(c, st);
   else if (st->screen == Screen::Viewer) renderViewerScreen(c, st);
   else renderEditScreen(c, st);
@@ -1095,7 +1184,7 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     st->inputModal.handleKey(vkCode, isShift, confirmed, closed);
     if (confirmed) handleModalConfirm(st);
     if (closed) st->modal = ModalKind::None;
-    st->window.requestRepaint(true);
+    st->window.requestRepaint(confirmed || closed);
     return;
   }
 
@@ -1194,7 +1283,8 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     if (st->converting) commitEditorCandidate(st);
     else if (st->romaji.hasContent()) commitEditorRawPreedit(st);
     st->inputMode = (st->inputMode + 1) % 4;
-    st->window.requestRepaint(true);
+    st->editDirtyFlags |= EditorState::kEditDirtyCurRow | EditorState::kEditDirtySidebar;
+    st->window.requestRepaint(false);
     return;
   }
   if (vkCode == VK_F1) {
@@ -1202,7 +1292,8 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     else if (st->romaji.hasContent()) commitEditorRawPreedit(st);
     saveNoteContent(st);
     scanNoteFiles(st);
-    st->window.requestRepaint(true);
+    st->editDirtyFlags |= EditorState::kEditDirtyHeader | EditorState::kEditDirtyCurRow;
+    st->window.requestRepaint(false);
     return;
   }
   if (vkCode == VK_F3) {
@@ -1219,13 +1310,15 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     if (vkCode == VK_SPACE || vkCode == VK_RIGHT || vkCode == VK_DOWN) {
       st->candSel = (st->candSel + 1) % st->candCount;
       st->candPageStart = (st->candSel / 8) * 8;
-      st->window.requestRepaint(true);
+      st->editDirtyFlags |= EditorState::kEditDirtyCurRow | EditorState::kEditDirtyQuickBar;
+      st->window.requestRepaint(false);
       return;
     }
     if (vkCode == VK_LEFT || vkCode == VK_UP) {
       st->candSel = (st->candSel + st->candCount - 1) % st->candCount;
       st->candPageStart = (st->candSel / 8) * 8;
-      st->window.requestRepaint(true);
+      st->editDirtyFlags |= EditorState::kEditDirtyCurRow | EditorState::kEditDirtyQuickBar;
+      st->window.requestRepaint(false);
       return;
     }
     if (vkCode >= '1' && vkCode <= '8') {
@@ -1234,23 +1327,27 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
         st->candSel = pick;
         commitEditorCandidate(st);
       }
-      st->window.requestRepaint(true);
+      st->editDirtyFlags |= EditorState::kEditDirtyCurRow | EditorState::kEditDirtyQuickBar;
+      st->window.requestRepaint(false);
       return;
     }
     if (vkCode == VK_F7) {
       commitEditorKatakana(st);
-      st->window.requestRepaint(true);
+      st->editDirtyFlags |= EditorState::kEditDirtyCurRow | EditorState::kEditDirtyQuickBar;
+      st->window.requestRepaint(false);
       return;
     }
     if (vkCode == VK_RETURN) {
       commitEditorCandidate(st);
-      st->window.requestRepaint(true);
+      st->editDirtyFlags |= EditorState::kEditDirtyCurRow | EditorState::kEditDirtyQuickBar;
+      st->window.requestRepaint(false);
       return;
     }
     if (vkCode == VK_ESCAPE || vkCode == VK_BACK) {
       st->converting = false;
       st->candCount = 0;
-      st->window.requestRepaint(true);
+      st->editDirtyFlags |= EditorState::kEditDirtyCurRow | EditorState::kEditDirtyQuickBar;
+      st->window.requestRepaint(false);
       return;
     }
     commitEditorCandidate(st);
@@ -1259,41 +1356,48 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
   if (vkCode == VK_ESCAPE) {
     if (st->romaji.hasContent()) {
       st->romaji.reset();
+      st->editDirtyFlags |= EditorState::kEditDirtyCurRow;
+      st->window.requestRepaint(false);
     } else {
       saveNoteContent(st);
       rebuildViewerLines(st);
       st->screen = Screen::Viewer;
+      st->window.requestRepaint(true);
     }
-    st->window.requestRepaint(true);
     return;
   }
 
   if (vkCode == VK_BACK) {
     if (!st->romaji.backspace()) backspaceEditor(st);
-    st->window.requestRepaint(true);
+    st->editDirtyFlags |= EditorState::kEditDirtyCurRow;
+    st->window.requestRepaint(false);
     return;
   }
   if (vkCode == VK_DELETE) {
     if (st->romaji.hasContent()) st->romaji.reset();
     else deleteEditor(st);
-    st->window.requestRepaint(true);
+    st->editDirtyFlags |= EditorState::kEditDirtyCurRow;
+    st->window.requestRepaint(false);
     return;
   }
   if (vkCode == VK_F7 && st->romaji.hasContent()) {
     commitEditorKatakana(st);
-    st->window.requestRepaint(true);
+    st->editDirtyFlags |= EditorState::kEditDirtyCurRow;
+    st->window.requestRepaint(false);
     return;
   }
   if (vkCode == VK_RETURN) {
     if (st->romaji.hasContent()) commitEditorRawPreedit(st);
     else insertEditorText(st, L"\n");
-    st->window.requestRepaint(true);
+    st->editDirtyFlags |= EditorState::kEditDirtyAllRows;
+    st->window.requestRepaint(false);
     return;
   }
   if (vkCode == VK_PRIOR) { // PgUp convenient newline shortcut on Brain
     if (st->romaji.hasContent()) commitEditorRawPreedit(st);
     insertEditorText(st, L"\n");
-    st->window.requestRepaint(true);
+    st->editDirtyFlags |= EditorState::kEditDirtyAllRows;
+    st->window.requestRepaint(false);
     return;
   }
   if (vkCode == VK_SPACE) {
@@ -1302,18 +1406,21 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     } else {
       insertEditorText(st, L" ");
     }
-    st->window.requestRepaint(true);
+    st->editDirtyFlags |= EditorState::kEditDirtyCurRow | EditorState::kEditDirtyQuickBar;
+    st->window.requestRepaint(false);
     return;
   }
 
   if (vkCode == VK_LEFT) {
     if (!st->romaji.hasContent() && st->cursorPos > 0) --st->cursorPos;
-    st->window.requestRepaint(true);
+    st->editDirtyFlags |= EditorState::kEditDirtyCurRow;
+    st->window.requestRepaint(false);
     return;
   }
   if (vkCode == VK_RIGHT) {
     if (!st->romaji.hasContent() && st->cursorPos < st->textLen) ++st->cursorPos;
-    st->window.requestRepaint(true);
+    st->editDirtyFlags |= EditorState::kEditDirtyCurRow;
+    st->window.requestRepaint(false);
     return;
   }
   if (vkCode == VK_UP) {
@@ -1325,7 +1432,8 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
       int prevLen = st->editRows[r - 1].endOffset - st->editRows[r - 1].startOffset;
       st->cursorPos = st->editRows[r - 1].startOffset + (col < prevLen ? col : prevLen);
     }
-    st->window.requestRepaint(true);
+    st->editDirtyFlags |= EditorState::kEditDirtyCurRow;
+    st->window.requestRepaint(false);
     return;
   }
   if (vkCode == VK_DOWN) {
@@ -1337,7 +1445,8 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
       int nextLen = st->editRows[r + 1].endOffset - st->editRows[r + 1].startOffset;
       st->cursorPos = st->editRows[r + 1].startOffset + (col < nextLen ? col : nextLen);
     }
-    st->window.requestRepaint(true);
+    st->editDirtyFlags |= EditorState::kEditDirtyCurRow;
+    st->window.requestRepaint(false);
     return;
   }
 
@@ -1381,7 +1490,8 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
       insertEditorText(st, ch);
     }
   }
-  st->window.requestRepaint(true);
+  st->editDirtyFlags |= EditorState::kEditDirtyCurRow;
+  st->window.requestRepaint(false);
 }
 
 static void onClick(int x, int y, void * userData) {
@@ -1392,7 +1502,7 @@ static void onClick(int x, int y, void * userData) {
     st->inputModal.handleClick(x, y, confirmed, closed);
     if (confirmed) handleModalConfirm(st);
     if (closed) st->modal = ModalKind::None;
-    st->window.requestRepaint(true);
+    st->window.requestRepaint(confirmed || closed);
     return;
   }
 
@@ -1440,7 +1550,8 @@ static void onClick(int x, int y, void * userData) {
           else {
             if (st->romaji.hasContent()) commitEditorRawPreedit(st);
             insertEditorText(st, kSnippets[b]);
-            st->window.requestRepaint(true);
+            st->editDirtyFlags |= EditorState::kEditDirtyCurRow;
+            st->window.requestRepaint(false);
           }
           return;
         }

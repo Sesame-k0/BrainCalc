@@ -6,7 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <tlhelp32.h>
 #include <wchar.h>
+#include <wctype.h>
 
 namespace {
 
@@ -215,6 +217,147 @@ static bool extractExeIconToCache(const wchar_t * exePath, uint32_t ** outPixels
   return ok;
 }
 
+static bool containsNoCaseW(const wchar_t * hay, const wchar_t * needle) {
+  if (!hay || !needle || !needle[0]) return false;
+  size_t nLen = wcslen(needle);
+  for (size_t i = 0; hay[i] != L'\0'; ++i) {
+    size_t j = 0;
+    while (j < nLen && hay[i + j] != L'\0' &&
+           towlower(static_cast<wint_t>(hay[i + j])) == towlower(static_cast<wint_t>(needle[j]))) {
+      ++j;
+    }
+    if (j == nLen) return true;
+  }
+  return false;
+}
+
+static const wchar_t * baseFileNameW(const wchar_t * path) {
+  if (!path) return L"";
+  const wchar_t * last = path;
+  for (const wchar_t * p = path; *p; ++p) {
+    if (*p == L'\\' || *p == L'/') last = p + 1;
+  }
+  return last;
+}
+
+static bool isCeOpenerEntry(const AppEntry & app) {
+  return containsNoCaseW(app.name, L"ceopener") ||
+         containsNoCaseW(app.exePath, L"ceopener") ||
+         containsNoCaseW(app.relDesc, L"ceopener");
+}
+
+static void closeSnapSafe(HANDLE hSnap) {
+  if (hSnap == INVALID_HANDLE_VALUE) return;
+#if defined(_WIN32_WCE) || defined(__MINGW32CE__)
+  CloseToolhelp32Snapshot(hSnap);
+#else
+  CloseHandle(hSnap);
+#endif
+}
+
+static DWORD createProcSnapFlags() {
+  DWORD flags = TH32CS_SNAPPROCESS;
+#ifdef TH32CS_SNAPNOHEAPS
+  flags |= TH32CS_SNAPNOHEAPS;
+#endif
+  return flags;
+}
+
+static int snapshotMatchingPids(const wchar_t * exeBase, DWORD * outPids, int maxPids) {
+  if (!exeBase || !exeBase[0] || !outPids || maxPids <= 0) return 0;
+  HANDLE hSnap = CreateToolhelp32Snapshot(createProcSnapFlags(), 0);
+  if (hSnap == INVALID_HANDLE_VALUE) return 0;
+  int cnt = 0;
+  PROCESSENTRY32 pe = {};
+  pe.dwSize = sizeof(pe);
+  if (Process32First(hSnap, &pe)) {
+    do {
+      const wchar_t * base = baseFileNameW(pe.szExeFile);
+      if (_wcsicmp(base, exeBase) == 0 || containsNoCaseW(base, L"ceopener")) {
+        if (cnt < maxPids) outPids[cnt++] = pe.th32ProcessID;
+      }
+    } while (Process32Next(hSnap, &pe));
+  }
+  closeSnapSafe(hSnap);
+  return cnt;
+}
+
+static bool pidInList(DWORD pid, const DWORD * list, int count) {
+  for (int i = 0; i < count; ++i) {
+    if (list[i] == pid) return true;
+  }
+  return false;
+}
+
+static DWORD findSpawnedChildPid(const wchar_t * exeBase, DWORD parentPid,
+                                 const DWORD * beforePids, int beforeCnt) {
+  HANDLE hSnap = CreateToolhelp32Snapshot(createProcSnapFlags(), 0);
+  if (hSnap == INVALID_HANDLE_VALUE) return 0;
+  DWORD found = 0;
+  DWORD selfPid = GetCurrentProcessId();
+  PROCESSENTRY32 pe = {};
+  pe.dwSize = sizeof(pe);
+  if (Process32First(hSnap, &pe)) {
+    do {
+      if (pe.th32ProcessID == 0 || pe.th32ProcessID == selfPid || pe.th32ProcessID == parentPid) {
+        continue;
+      }
+      if (pe.th32ParentProcessID == parentPid) {
+        found = pe.th32ProcessID;
+        break;
+      }
+      const wchar_t * base = baseFileNameW(pe.szExeFile);
+      if (!pidInList(pe.th32ProcessID, beforePids, beforeCnt) &&
+          ((exeBase && exeBase[0] && _wcsicmp(base, exeBase) == 0) ||
+           containsNoCaseW(base, L"ceopener"))) {
+        found = pe.th32ProcessID;
+        break;
+      }
+    } while (Process32Next(hSnap, &pe));
+  }
+  closeSnapSafe(hSnap);
+  return found;
+}
+
+static bool isPidAlive(DWORD pid) {
+  if (pid == 0) return false;
+  HANDLE hSnap = CreateToolhelp32Snapshot(createProcSnapFlags(), 0);
+  if (hSnap == INVALID_HANDLE_VALUE) return false;
+  bool alive = false;
+  PROCESSENTRY32 pe = {};
+  pe.dwSize = sizeof(pe);
+  if (Process32First(hSnap, &pe)) {
+    do {
+      if (pe.th32ProcessID == pid) {
+        alive = true;
+        break;
+      }
+    } while (Process32Next(hSnap, &pe));
+  }
+  closeSnapSafe(hSnap);
+  return alive;
+}
+
+static void pumpPendingMessages() {
+  MSG msg;
+  while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+    if (msg.message == WM_QUIT) {
+      PostQuitMessage(static_cast<int>(msg.wParam));
+      break;
+    }
+    TranslateMessage(&msg);
+    DispatchMessageW(&msg);
+  }
+}
+
+static void pumpWaitProcess(HANDLE hProc) {
+  for (;;) {
+    DWORD waitRes = WaitForSingleObject(hProc, 50);
+    if (waitRes == WAIT_OBJECT_0 || waitRes == WAIT_FAILED) break;
+    pumpPendingMessages();
+  }
+}
+
 static bool resolveFolderAppExe(const wchar_t * folderPath, const wchar_t * folderName,
                                 wchar_t * outExePath, wchar_t * outIconFallbackExe) {
   outExePath[0] = L'\0';
@@ -227,35 +370,72 @@ static bool resolveFolderAppExe(const wchar_t * folderPath, const wchar_t * fold
     outIconFallbackExe[MAX_PATH - 1] = L'\0';
   }
 
-  // 1. PW-SB4 style AppMain.cfg target
+  // 1. PW-SB4 / Brain AppMain.cfg target (UTF-8 / UTF-16LE)
   wchar_t cfgPath[MAX_PATH] = L"";
   LiliumUI::joinPath(folderPath, L"AppMain.cfg", cfgPath, MAX_PATH);
   if (fileExists(cfgPath)) {
     FILE * fp = _wfopen(cfgPath, L"rb");
     if (fp) {
-      char buf[128] = {};
-      size_t n = fread(buf, 1, sizeof(buf) - 1, fp);
+      uint8_t raw[256] = {};
+      size_t n = fread(raw, 1, sizeof(raw) - 2, fp);
       fclose(fp);
-      buf[n] = '\0';
-      char * p = buf;
-      while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') ++p;
-      char * end = p;
-      while (*end && *end != '\r' && *end != '\n' && *end != '\t') ++end;
-      while (end > p && end[-1] == ' ') --end;
-      *end = '\0';
-      if (*p) {
-        wchar_t targetW[96] = L"";
-        MultiByteToWideChar(CP_UTF8, 0, p, -1, targetW, 88);
-        targetW[87] = L'\0';
-        if (!hasExeSuffix(targetW)) {
-          wcsncat(targetW, L".exe", 95 - wcslen(targetW));
+      wchar_t targetW[MAX_PATH] = L"";
+      if (n >= 2 && raw[0] == 0xFF && raw[1] == 0xFE) {
+        size_t wcnt = (n - 2) / 2;
+        if (wcnt >= MAX_PATH) wcnt = MAX_PATH - 1;
+        for (size_t i = 0; i < wcnt; ++i) {
+          targetW[i] = static_cast<wchar_t>(raw[2 + i * 2] | (raw[3 + i * 2] << 8));
         }
-        wchar_t cand[MAX_PATH] = L"";
-        LiliumUI::joinPath(folderPath, targetW, cand, MAX_PATH);
-        if (fileExists(cand)) {
-          wcsncpy(outExePath, cand, MAX_PATH - 1);
-          outExePath[MAX_PATH - 1] = L'\0';
-          return true;
+        targetW[wcnt] = L'\0';
+      } else {
+        size_t start = (n >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF) ? 3 : 0;
+        raw[n] = '\0';
+        MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast<const char *>(raw + start), -1, targetW, MAX_PATH - 1);
+        targetW[MAX_PATH - 1] = L'\0';
+      }
+
+      // Trim whitespace and first line only
+      int s = 0;
+      while (targetW[s] == L' ' || targetW[s] == L'\t' || targetW[s] == L'\r' || targetW[s] == L'\n') ++s;
+      int e = s;
+      while (targetW[e] && targetW[e] != L'\r' && targetW[e] != L'\n' && targetW[e] != L'\t') ++e;
+      while (e > s && targetW[e - 1] == L' ') --e;
+      wchar_t cleaned[MAX_PATH] = L"";
+      int len = e - s;
+      if (len > 0) {
+        if (len >= MAX_PATH) len = MAX_PATH - 1;
+        wcsncpy(cleaned, targetW + s, static_cast<size_t>(len));
+        cleaned[len] = L'\0';
+        for (int k = 0; cleaned[k]; ++k) {
+          if (cleaned[k] == L'/') cleaned[k] = L'\\';
+        }
+        const wchar_t * rel = cleaned;
+        if (rel[0] == L'.' && rel[1] == L'\\') rel += 2;
+        if (rel[0]) {
+          wchar_t variants[2][MAX_PATH] = {};
+          wcsncpy(variants[0], rel, MAX_PATH - 1);
+          wcsncpy(variants[1], rel, MAX_PATH - 1);
+          if (!hasExeSuffix(variants[1]) && wcslen(variants[1]) + 4 < MAX_PATH) {
+            wcscat(variants[1], L".exe");
+          }
+          for (int v = 0; v < 2; ++v) {
+            if (!variants[v][0]) continue;
+            if (variants[v][0] == L'\\' || (variants[v][1] == L':' && variants[v][2] == L'\\')) {
+              if (fileExists(variants[v])) {
+                wcsncpy(outExePath, variants[v], MAX_PATH - 1);
+                outExePath[MAX_PATH - 1] = L'\0';
+                return true;
+              }
+            } else {
+              wchar_t cand[MAX_PATH] = L"";
+              LiliumUI::joinPath(folderPath, variants[v], cand, MAX_PATH);
+              if (fileExists(cand)) {
+                wcsncpy(outExePath, cand, MAX_PATH - 1);
+                outExePath[MAX_PATH - 1] = L'\0';
+                return true;
+              }
+            }
+          }
         }
       }
     }
@@ -886,9 +1066,45 @@ static void launchSelectedApp(LauncherState * st) {
     return;
   }
 
+  const bool isCeOpener = !app.isLiliumSuite && isCeOpenerEntry(app);
+  if (isCeOpener) {
+    HWND hExisting = FindWindowW(L"ceOpener", NULL);
+    if (hExisting && IsWindow(hExisting)) {
+      st->window.setVisible(false);
+      LiliumUI::restoreBrainTaskBar();
+      SetForegroundWindow(hExisting);
+      while (IsWindow(hExisting)) {
+        Sleep(50);
+        pumpPendingMessages();
+      }
+      st->dict = LiliumUI::queryDictStatus();
+      st->window.setVisible(true);
+      return;
+    }
+  }
+
+  const wchar_t * exeBase = baseFileNameW(app.exePath);
+  DWORD beforePids[32] = {};
+  int beforeCnt = (!app.isLiliumSuite) ? snapshotMatchingPids(exeBase, beforePids, 32) : 0;
+  bool hadCeOpenerBefore = (FindWindowW(L"ceOpener", NULL) != NULL);
+
+  // Hide Launcher and restore taskbar BEFORE launching external/hostility-sensitive apps like ceOpener
+  st->window.setVisible(false);
+  if (!app.isLiliumSuite) {
+    LiliumUI::restoreBrainTaskBar();
+  }
+
+  DWORD tLaunch = GetTickCount();
 #ifdef _WIN32_WCE
-  wchar_t cmdLineBuf[64] = L"--from-launcher";
-  LPWSTR cmdLinePtr = app.isLiliumSuite ? cmdLineBuf : NULL;
+  wchar_t cmdLineBuf[64] = L"";
+  LPWSTR cmdLinePtr = NULL;
+  if (app.isLiliumSuite) {
+    wcscpy(cmdLineBuf, L"--from-launcher");
+    cmdLinePtr = cmdLineBuf;
+  } else if (isCeOpener) {
+    wcscpy(cmdLineBuf, L"1");
+    cmdLinePtr = cmdLineBuf;
+  }
   PROCESS_INFORMATION pi = {};
   BOOL ok = CreateProcessW(app.exePath, cmdLinePtr, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi);
 #else
@@ -909,6 +1125,7 @@ static void launchSelectedApp(LauncherState * st) {
 
   if (!ok) {
     DWORD err = GetLastError();
+    st->window.setVisible(true);
     _snwprintf(st->errLine1, 96, L"起動に失敗しました (Code: %lu)", static_cast<unsigned long>(err));
     _snwprintf(st->errLine2, 96, L"%s", app.relDesc);
     st->errLine1[95] = L'\0';
@@ -919,24 +1136,45 @@ static void launchSelectedApp(LauncherState * st) {
     return;
   }
 
-  st->window.setVisible(false);
+  pumpWaitProcess(pi.hProcess);
+  DWORD parentPid = pi.dwProcessId;
+  CloseHandle(pi.hThread);
+  CloseHandle(pi.hProcess);
 
-  for (;;) {
-    DWORD waitRes = WaitForSingleObject(pi.hProcess, 50);
-    if (waitRes == WAIT_OBJECT_0 || waitRes == WAIT_FAILED) break;
-    MSG msg;
-    while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
-      if (msg.message == WM_QUIT) {
-        PostQuitMessage(static_cast<int>(msg.wParam));
-        break;
+  if (!app.isLiliumSuite && (GetTickCount() - tLaunch) < 3000) {
+    DWORD tPoll = GetTickCount();
+    DWORD childPid = 0;
+    HWND hCeWnd = NULL;
+    while ((GetTickCount() - tPoll) < 2000) {
+      childPid = findSpawnedChildPid(exeBase, parentPid, beforePids, beforeCnt);
+      hCeWnd = (!hadCeOpenerBefore) ? FindWindowW(L"ceOpener", NULL) : NULL;
+      if (childPid != 0 || (hCeWnd && IsWindow(hCeWnd))) break;
+      pumpPendingMessages();
+      Sleep(40);
+    }
+    if (childPid != 0) {
+#ifdef _WIN32_WCE
+      HANDLE hChild = OpenProcess(0, FALSE, childPid);
+#else
+      HANDLE hChild = OpenProcess(SYNCHRONIZE, FALSE, childPid);
+#endif
+      if (hChild) {
+        pumpWaitProcess(hChild);
+        CloseHandle(hChild);
+      } else {
+        while (isPidAlive(childPid)) {
+          pumpPendingMessages();
+          Sleep(50);
+        }
       }
-      TranslateMessage(&msg);
-      DispatchMessageW(&msg);
+    } else if (hCeWnd && IsWindow(hCeWnd)) {
+      while (IsWindow(hCeWnd)) {
+        pumpPendingMessages();
+        Sleep(50);
+      }
     }
   }
 
-  CloseHandle(pi.hThread);
-  CloseHandle(pi.hProcess);
   st->dict = LiliumUI::queryDictStatus();
   st->window.setVisible(true);
 }

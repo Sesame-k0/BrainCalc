@@ -4,38 +4,41 @@
 [![Platform](https://img.shields.io/badge/Platform-SHARP%20Brain%20(Windows%20CE%206.0)-blue.svg)]()
 [![Base](https://img.shields.io/badge/Base-Upsilon%20%2F%20NumWorks%20Epsilon-orange.svg)](https://github.com/UpsilonNumworks/Upsilon)
 
-**Lilium**（リリウム）は、フランス NumWorks 社の高性能グラフ関数電卓 OS（[Upsilon](https://github.com/UpsilonNumworks/Upsilon) / [Epsilon](https://github.com/numworks/epsilon)）をベースに、SHARP 製カラー電子辞書「**Brain**」（Windows Embedded CE 6.0 搭載モデル）向けに最適化・移植したネイティブアプリケーションです。
+**Lilium** は、SHARP 製カラー電子辞書「**Brain**」（Windows Embedded CE 6.0 / ARM926EJ-S）向けに開発された、軽量統合アプリケーションスイートです。
 
-洗練されたテーマカラー（`#4fbfaf` ティールブルー）の UI、高校・大学レベルの高等数学計算、2D 関数グラフ描画、数値計算、統計、確率分布、方程式ソルバーなどの高精度な電卓機能を、Brain のキーボードと大画面カラー液晶で快適に利用できます。
+NumWorks / [Upsilon](https://github.com/UpsilonNumworks/Upsilon)（[Epsilon](https://github.com/numworks/epsilon)）ベースのグラフ関数・経理計算対応電卓を中核に、4×3 グリッドの専用ランチャー、常駐型日本語 IME（Mozc OSS 辞書ベース）、Markdown エディタ、時間割、ファイラ、タスクマネージャ、ライフゲーム、サイレント版 DOOM を 1 つの統一デザイン（`#4fbfaf` ティールブルー × フラット UI × 美咲フォント）で提供します。
+
+---
+
+## 📦 スイート構成 (Applications)
+
+ランチャーから各アプリや `apps/` 内の外部 Brain アプリを起動できます。
+
+| アプリ | 実行ファイル | 主な機能 |
+|---|---|---|
+| **Lilium Launcher** | `AppMain_.exe` | 4×3 Launchpad 風アイコン一覧、アプリ並び替え、外部フォルダアプリ（`AppMain.cfg` / `AppMain.exe` / アイコン抽出）認識・起動、多段階ローダー（`ceOpener` 等）追跡、辞書解放確認＆自動再起動 |
+| **Lilium Calc** | `apps/LiliumCalc.exe` | NumWorks / Upsilon ベースのグラフ関数電卓 + 統合経理電卓モード（税込/税抜・粗利/原価/売価・GT・日数/定数計算等）、右側日本語解説バー、状態自動保存（`brain_state.bin`） |
+| **Lilium Editor** | `apps/LiliumEditor.exe` | Markdown エディタ＆ビューワ（見出し・箇条書き・チェックボックス・コード・引用・表のプレビュー、Lilium IME による直接日本語入力、クイック記号入力） |
+| **Lilium TimeTable** | `apps/LiliumTimeTable.exe` | 高校 45/50 分・大学 90/100 分プリセット対応の時間割管理、対開講設定、曜日表示・配色カスタマイズ、終了時刻・休み時間の後続コマ自動追従、`.ttb` ファイル管理 |
+| **Lilium Filer** | `apps/LiliumFiler.exe` | システム重要領域の削除・新規書込保護付きファイラ、テキスト/HEX ビューワ、アイコンツールバー、Lilium IME 対応ファイル名変更 |
+| **Lilium TaskMgr** | `apps/LiliumTaskMgr.exe` | プロセス一覧・ウィンドウ一覧・RAM 推移グラフ、Brain 内蔵辞書シェルの安全なメモリ解放・再起動 |
+| **Lilium Clock** | `apps/LiliumClock.exe` | デジタル時計、ストップウォッチ、カウントダウンタイマー |
+| **Lilium Life** | `apps/LiliumLife.exe` | Conway's Life / Brian's Brain / Langton's Ant 等を内蔵したセルオートマトン＆スクリーンセーバー |
+| **Lilium DOOM** | `apps/doom.exe` + `apps/freedoom1.zwad` | doomgeneric + 音声省略・Episode 1 軽量化 ZWAD によるサイレント DOOM |
+| **Lilium IME** | `apps/LiliumIME.exe` + `apps/lilium_ime.dic` | 常駐型ローマ字漢字変換デーモン。非圧縮インメモリバイナリ辞書（LIME v2、約 920 KB / 51,000 ペア）により即時変換を実現し、共有メモリ IPC および外部アプリ用フローティングオーバーレイを提供 |
 
 ---
 
 ## 🌟 主な特徴 (Features)
 
-- **Brain の画面仕様に最適化した 800×480 解像度**:
-  - 右端 54px のフレキシブルタッチキー領域を除外した有効領域（800×480）で描画。
-  - 左側（640×480）: 電卓画面（320×240 を自前の整数 2 倍最近傍補間で高速展開）。
-  - 右側（160×480）: NumWorks デザインと調和したライトテーマの入力支援サイドバー。
-- **洗練されたテーマカラー (`#4fbfaf`) & スッキリしたタイトルバー**:
-  - タイトルバーおよびサイドバーのアクセントカラーにティールブルー（`#4fbfaf`）を採用。
-  - ホーム画面のタイトルバーには「HOME」とシンプルに表示。
-  - 余分な時計表示を排し、バッテリー残量と Shift / Alpha ロック状態のみをスマートに表示。
-- **状態自動保存・復元（Auto Save & Restore）**:
-  - アプリ終了時に、定義した関数・変数・計算履歴および電卓設定（角度単位や複素数モードなど）をバイナリ（`brain_state.bin`）として自動保存。
-  - 次回起動時に自動復元されるため、電源を切っても作業環境がそのまま維持されます。
-- **クッキリと判読性の高い「美咲ゴシック」フォント採用**:
-  - 8ドットフォントの名作「[美咲ゴシック](https://littlelimit.net/misaki.htm)」をアプリ内に同梱。
-  - 原寸（1倍: 8px）および整数倍（2倍: 16px）スケーリングにより、文字の滲みや偽色を抑え、Brain 実機と PC シミュレータでシャープな日本語・数学記号を表示。
-- **実機キーボードに合わせた 3 モード切替キーマッピング**:
-  - `[Brain English / 国語 (F2)]` キーで **数字モード (12x)** → **通常モード (abc)** → **大文字モード (ABC)** をトグル切替。
-  - 数字モード時は QWERTY 配列が直感的なテンキー・四則演算・累乗・虚数単位 $i$・定数ショートカットに変化。
-  - 銀色キー対応: `F1` (関数ツールボックス), `F9` (変数メニュー), `F10 / HOME` (ホーム画面), `PgUp / PgDn` (かっこ `(` / `)` またはグラフ拡大・縮小)。
-- **実機バッテリー残量のリアルタイム連動**:
-  - Windows CE の `GetSystemPowerStatusEx2()` API と連動し、Brain 本体のバッテリー残量を電卓画面上部のタイトルバーに正確に表示。
-- **軽量・高速なレスポンス設計**:
-  - `pushRect` 差分矩形更新により、画面全体の無駄な再描画と転送バス帯域を大幅削減。
-  - ノンブロッキングなメッセージ処理（`MsgWaitForMultipleObjects`）により、キー入力の遅延や取りこぼしを徹底解消。
-  - 起動時に OS タスクバー（`HHTaskBar`）を自動非表示化し、完全な全画面最前面（`HWND_TOPMOST`）で実行。終了時に安全に復帰。
+- **Brain 800×480 解像度・差分矩形転送設計**:
+  - テキストエディタ・IME モーダル・各種画面で変更行・変更領域のみの差分描画を行い、ARM9 + バス帯域の制約下でも軽快に応答します。
+  - タスクバー（`HHTaskBar`）を起動時に自動非表示化し、外部アプリ（`ceOpener` 等）起動時は安全に復帰・引き渡しを行います。
+- **判読性の高い「美咲フォント」採用**:
+  - 8 ドットビットマップフォント「[美咲フォント](https://littlelimit.net/misaki.htm)」を同梱し、仮名文字領域（`0x3000..0x30FF`）を含め O(1) ルックアップテーブルで高速描画します。
+- **統一キーボード操作**:
+  - `[F2]`（英語/国語キー相当）で各アプリのタブ切替や入力モード（`あ (IME)` / `abc` / `ABC` / `12x`）を切り替えられます。
+  - 電卓画面では右側 160px にキーガイド・設定状態を日本語表示します。
 
 ---
 
@@ -43,87 +46,91 @@
 
 - **OS**: Microsoft Windows Embedded CE 6.0 Core
 - **CPU**: ARM926EJ-S / i.MX28 (Armv5TEJ)
-- **対象シリーズ**:
-  - 高校生・中学生・大学生・ビジネス向け SHARP Brain 各機種
-  - PW-SH3, SH4, SH5, SH6, SH7
-  - PW-H7700, PW-SBシリーズ, PW-SAシリーズ 等
+- **対象シリーズ**: PW-SH3 / SH4 / SH5 / SH6 / SH7 / H7700 / PW-SB シリーズ / PW-SA シリーズ など 800×480 液晶搭載 SHARP Brain 各機種
 
 ---
 
 ## 🚀 インストール方法 (How to Install)
 
-1. [Releases](../../releases) から最新の `Lilium.zip` をダウンロードして解凍します。
-2. 解凍して生成された `Lilium` フォルダ（以下のファイルが含まれます）を、microSD カードのアプリ配置先（例: `アプリ` フォルダ）にそのままコピーします。
-   ```text
-   Lilium/
-   ├── AppMain.exe          # Brain起動用ローダー (188KB, PW-SB4等に必須)
-   ├── AppMain.cfg          # ローダー設定ファイル (8バイト)
-   ├── AppMain_.exe         # 電卓本体バイナリ (約2.2MB, WinCE ARM)
-   ├── index.din            # アプリアイコン・定義ファイル
-   ├── font.ttf             # 同梱日本語フォント (美咲ゴシック)
-   └── brain_state.bin      # (自動生成) 状態保存ファイル
-   ```
-3. microSD カードを Brain に挿入し、ホームメニューの「追加アプリ」等から **Lilium** を起動してください。
+ビルドされた `output/release/simulator/brain/Lilium` フォルダ（またはリリースの `Lilium` フォルダ）を microSD カードのアプリ配置先（例: `アプリ/Lilium`）にコピーし、Brain 本体の「追加アプリ」から起動します。
+
+```text
+Lilium/
+├── AppMain.exe            # Brain 起動ローダー (PW-SB4 等に対応)
+├── AppMain.cfg            # ローダー設定
+├── AppMain_.exe           # Lilium Launcher 本体 (WinCE ARM)
+├── index.din              # Brain アプリアイコン・定義ファイル
+├── font.ttf               # 同梱フォント (美咲ゴシック)
+├── misaki_gothic.ttf
+├── scripts/
+└── apps/
+    ├── LiliumCalc.exe
+    ├── LiliumEditor.exe
+    ├── LiliumTimeTable.exe
+    ├── LiliumFiler.exe
+    ├── LiliumTaskMgr.exe
+    ├── LiliumClock.exe
+    ├── LiliumLife.exe
+    ├── LiliumIME.exe
+    ├── lilium_ime.dic     # Mozc OSS 由来 LIME v2 非圧縮辞書 (約 920 KB)
+    ├── doom.exe
+    └── freedoom1.zwad     # Freedoom Episode 1 圧縮 ZWAD
+```
 
 ---
 
-## ⌨️ 操作方法・キーボード対応表
+## ⌨️ 操作方法 (Controls)
 
-詳細な仕様は [KEY-MAPPING.md](file:///c:/K0Project/Program/BrainCalc/資料/KEY-MAPPING.md) を参照してください。
-
-### モード切替
-- **`[F2]`（Brain English / 国語キー）**: 「**数字モード (12x)**」→「**通常モード (abc)**」→「**大文字モード (ABC)**」をトグル切替
-
-### 基本キー
+### 電卓 (Lilium Calc)
 | キー | 動作 |
 |---|---|
-| `[決定 / Enter]` | 数字モード時は `EXE`（計算実行）、通常・大文字モード時は `OK` |
-| `[戻る / Esc]` | 1 つ前の画面に戻る / 計算キャンセル |
-| `[削除 / BackSpace]` | 1 文字削除 |
-| `[スペース]` | 空白入力 |
-| `[矢印キー (▲▼◀▶)]` | カーソル移動 / グラフのスクロール |
-| `[>>↑ / PageUp]` | 数字モード: `(` / 通常モード: グラフ拡大 |
-| `[>>↓ / PageDown]` | 数字モード: `)` / 通常モード: グラフ縮小 |
+| `[F2]` | 入力モード切替: `12x`（数字） / `abc`（小文字） / `ABC`（大文字） |
+| `[F1]` / `[F9]` | Toolbox（関数一覧） / Var（変数一覧） |
+| `[F10 / HOME]` | 電卓ホーム画面へ戻る（メニュー選択画面から抜ける） |
+| `[PgUp / PgDn]` | `12x`: `(` / `)`、その他・グラフ: ズームイン / ズームアウト |
+| `[F5 / F7]` | 終了確認ダイアログ（ランチャーへ戻る） |
 
-### 銀色キー・機能キー
-| キー | 割り当て |
+### 日本語入力 (Lilium IME / Editor / モーダル)
+| キー | 動作 |
 |---|---|
-| `[調べる / F1]` | **Toolbox**（数学関数・コマンド一覧パレット） |
-| `[ツール / F9]` | **Var**（変数ストア・一覧メニュー） |
-| `[HOME / F10]` | **Home**（電卓ホーム画面へ戻る） |
-| `[F5 / F7]` | **終了確認ダイアログ** 表示 |
-
-### 数字モード（12x）時の配列
-- **上段 (Q〜P)**: `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `0`
-- **中段 (A〜L)**: `+`, `-`, `*`, `/`, `=`, `x^n`, `ℯ`, `ANS`, `STO`
-- **下段 (Z〜ー)**: `√`, `x,n,t`, `i` (虚数), `π`, `log`, `,`, `.`, `-`
+| `[F2]` | 入力モード切替: `あ (IME)` / `abc` / `ABC` / `12x` |
+| `[Space]` | 漢字変換・次候補 |
+| `[1-8]` / `[←→]` | 候補確定 / 候補移動 |
+| `[F7]` | カタカナ変換・確定 |
+| `[Enter]` | 未変換文字・候補の確定（Editor では確定後に改行入力） |
+| `[Ctrl+Space]` / `[Alt+Space]` / `[F11]` | 外部アプリ実行中の Lilium IME オーバーレイ呼出（WinCE 環境では `[F11]` / `[変換]` 等にも対応） |
 
 ---
 
 ## 🛠️ ビルド方法 (How to Build)
 
-### 開発環境
-- **OS**: Windows 10 / 11 (MSYS2 MinGW64 環境)
-- **クロスコンパイラ**: [CeGCC](https://sourceforge.net/projects/cegcc/) (`arm-mingw32ce-g++` 9.3.0) + Cygwin64 ランタイム
-
-### 1. PC ホスト検証版のビルド (Windows 上で動作確認)
+### 1. PC ホスト検証版 (Windows MSYS2 MinGW64)
 ```bash
 ./build_brain.sh --host
 ```
-- 出力バイナリ: `output/release/simulator/brain-host/AppMain.exe`
-- ダブルクリックで PC 上で動作確認できます。
+- 出力先: `output/release/simulator/brain-host/Lilium/`
+- ランチャー起動: `output/release/simulator/brain-host/Lilium/AppMain.exe`
 
-### 2. SHARP Brain 実機向けバイナリのビルド (Windows CE 6.0 ARM)
+### 2. SHARP Brain 実機版 (Windows CE 6.0 ARM / CeGCC)
 ```bash
 ./build_brain.sh
 ```
-- 出力フォルダ: `output/release/simulator/brain/Lilium/`
-- このフォルダを microSD カードにコピーして実機で起動します。
+- クロスコンパイラ: CeGCC (`arm-mingw32ce-g++`) + Cygwin ランタイム
+- 出力先: `output/release/simulator/brain/Lilium/`
+
+### 3. IME 辞書の再生成（任意）
+```bash
+python suite/ime/build_mozc_dict.py
+```
+- Google Mozc OSS 辞書データから美咲フォント対応語彙を抽出し、`suite/ime/lilium_ime.dic`（LIME v2 形式）を生成します。
 
 ---
 
-## 📜 ライセンス (License)
+## 📜 ライセンス・謝辞 (License & Attributions)
 
-- **Lilium**: CC BY-NC-SA 4.0
-- **NumWorks Epsilon / Upsilon**: CC BY-NC-SA 4.0 (NumWorks & Upsilon Project)
-- **美咲ゴシック**: フリーフォント ([Little Limit](https://littlelimit.net/misaki.htm))
+- **Lilium Calc / Epsilon / Upsilon 派生部分**: [CC BY-NC-SA 4.0](LICENSE.md)（NumWorks Epsilon / Upsilon / KhiCAS ベース）
+- **Lilium Suite 独自コンポーネント**（Launcher, Filer, TaskMgr, Clock, Life, TimeTable, Editor, IME クライアント/デーモン）: クリーンルーム新規実装
+- **Lilium DOOM (`doomgeneric` 移植)**: GNU GPL v2（原著: ozkl / doomgeneric・id Software Doom engine）
+- **Freedoom Phase 1 (`freedoom1.zwad` 元データ)**: 3-Clause BSD License ([Freedoom Project](https://freedoom.github.io/))
+- **美咲フォント**: フリーフォント（[Little Limit](https://littlelimit.net/misaki.htm)）
+- **日本語変換辞書元データ**: Google Mozc Open Source Dictionary (`dictionary_oss`, BSD-3-Clause)
