@@ -132,6 +132,10 @@ EDITOR_OUT="${APPS_DIR}/LiliumEditor.exe"
 echo "[INFO] Building Lilium Editor -> ${EDITOR_OUT}..."
 ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/editor/main.cpp ${SUITE_COMMON_SRCS} -o "${EDITOR_OUT}" ${SUITE_LDFLAGS}
 
+INSPECT_OUT="${APPS_DIR}/LiliumInspect.exe"
+echo "[INFO] Building Lilium Inspector -> ${INSPECT_OUT}..."
+${SUITE_CXX} ${SUITE_CXXFLAGS} suite/inspector/main.cpp ${SUITE_COMMON_SRCS} -o "${INSPECT_OUT}" ${SUITE_LDFLAGS}
+
 IME_OUT="${APPS_DIR}/LiliumIME.exe"
 echo "[INFO] Building Lilium IME -> ${IME_OUT}..."
 ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/ime/main.cpp ${SUITE_COMMON_SRCS} -o "${IME_OUT}" ${SUITE_LDFLAGS}
@@ -270,10 +274,10 @@ echo "==========================================================================
 echo "[SUCCESS] Build completed!"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
   echo "  Launcher   : ${DIST_DIR}/AppMain.exe (LiliumLauncher.exe)"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumIME.exe, doom.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumInspect.exe, LiliumIME.exe, doom.exe"
 else
   echo "  Launcher   : ${DIST_DIR}/AppMain_.exe"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumIME.exe, doom.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumInspect.exe, LiliumIME.exe, doom.exe"
   echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe [loader], AppMain.cfg, AppMain_.exe [Launcher], index.din, font.ttf, apps/)"
 fi
 echo "=============================================================================="
