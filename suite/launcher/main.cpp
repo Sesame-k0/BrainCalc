@@ -1,5 +1,6 @@
 #include "../common/lilium_ui.h"
 #include "../common/lilium_ime_client.h"
+#include "../common/lilium_settings.h"
 
 #include <new>
 #include <shellapi.h>
@@ -34,7 +35,7 @@ struct AppEntry {
   wchar_t workDir[MAX_PATH];
   wchar_t relDesc[96];
   wchar_t orderKey[96];
-  int builtInKind; // 0=Calc, 1=TaskMgr, 2=Clock, 3=Filer, 4=DOOM, 5=Life, 6=TimeTable, 7=CashCalc, -1=External
+  int builtInKind; // 0=Calc, 1=TaskMgr, 2=Clock, 3=Filer, 4=DOOM, 5=Life, 6=TimeTable, 7=Editor, 8=Setting, -1=External
   bool isLiliumSuite;
   bool isFolderApp;
   bool hasCustomIcon;
@@ -52,6 +53,7 @@ enum class ModalState {
 struct LauncherState {
   LiliumUI::AppWindow window;
   LiliumUI::DictStatus dict = {};
+  LiliumSettings::Config settings = {};
   AppEntry apps[kMaxApps] = {};
   int appCount = 0;
   int selectedIndex = 0;
@@ -59,38 +61,21 @@ struct LauncherState {
   bool reorderMode = false;
   HANDLE imeProcess = NULL;
   bool imeDaemonRunning = false;
+  int lastPillMin = -1;
+  int lastPillBat = -1;
+  bool lastPillIme = false;
   ModalState modal = ModalState::None;
   int modalFocus = 1; // 0: Yes/Quit, 1: Cancel
   wchar_t errLine1[96] = L"";
   wchar_t errLine2[96] = L"";
 };
 
+static void startResidentImeDaemon(LauncherState * st);
+static void stopResidentImeDaemon(LauncherState * st);
+
 static bool fileExists(const wchar_t * path) {
   DWORD attr = GetFileAttributesW(path);
   return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY) == 0;
-}
-
-static bool hasExeSuffix(const wchar_t * name) {
-  size_t len = wcslen(name);
-  return len >= 4 && _wcsicmp(name + len - 4, L".exe") == 0;
-}
-
-static bool isBuiltInRelName(const wchar_t * fileName) {
-  static constexpr const wchar_t * kBuiltInFiles[9] = {
-    L"LiliumCalc.exe",
-    L"LiliumTaskMgr.exe",
-    L"LiliumClock.exe",
-    L"LiliumFiler.exe",
-    L"doom.exe",
-    L"LiliumLife.exe",
-    L"LiliumTimeTable.exe",
-    L"LiliumEditor.exe",
-    L"LiliumIME.exe" // Resident background IME daemon (hidden from Launchpad grid)
-  };
-  for (int i = 0; i < 9; ++i) {
-    if (_wcsicmp(fileName, kBuiltInFiles[i]) == 0) return true;
-  }
-  return false;
 }
 
 static void freeAppEntries(LauncherState * st) {
@@ -350,343 +335,40 @@ static void pumpPendingMessages() {
   }
 }
 
-static void pumpWaitProcess(HANDLE hProc) {
+static void pumpWaitProcess(LauncherState * st, HANDLE hProc, bool allowHwKeepAlive) {
   for (;;) {
     DWORD waitRes = WaitForSingleObject(hProc, 50);
     if (waitRes == WAIT_OBJECT_0 || waitRes == WAIT_FAILED) break;
     pumpPendingMessages();
-  }
-}
-
-static bool resolveFolderAppExe(const wchar_t * folderPath, const wchar_t * folderName,
-                                wchar_t * outExePath, wchar_t * outIconFallbackExe) {
-  outExePath[0] = L'\0';
-  if (outIconFallbackExe) outIconFallbackExe[0] = L'\0';
-
-  wchar_t appMainExe[MAX_PATH] = L"";
-  LiliumUI::joinPath(folderPath, L"AppMain.exe", appMainExe, MAX_PATH);
-  if (outIconFallbackExe && fileExists(appMainExe)) {
-    wcsncpy(outIconFallbackExe, appMainExe, MAX_PATH - 1);
-    outIconFallbackExe[MAX_PATH - 1] = L'\0';
-  }
-
-  // 1. PW-SB4 / Brain AppMain.cfg target (UTF-8 / UTF-16LE)
-  wchar_t cfgPath[MAX_PATH] = L"";
-  LiliumUI::joinPath(folderPath, L"AppMain.cfg", cfgPath, MAX_PATH);
-  if (fileExists(cfgPath)) {
-    FILE * fp = _wfopen(cfgPath, L"rb");
-    if (fp) {
-      uint8_t raw[256] = {};
-      size_t n = fread(raw, 1, sizeof(raw) - 2, fp);
-      fclose(fp);
-      wchar_t targetW[MAX_PATH] = L"";
-      if (n >= 2 && raw[0] == 0xFF && raw[1] == 0xFE) {
-        size_t wcnt = (n - 2) / 2;
-        if (wcnt >= MAX_PATH) wcnt = MAX_PATH - 1;
-        for (size_t i = 0; i < wcnt; ++i) {
-          targetW[i] = static_cast<wchar_t>(raw[2 + i * 2] | (raw[3 + i * 2] << 8));
-        }
-        targetW[wcnt] = L'\0';
-      } else {
-        size_t start = (n >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF) ? 3 : 0;
-        raw[n] = '\0';
-        MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast<const char *>(raw + start), -1, targetW, MAX_PATH - 1);
-        targetW[MAX_PATH - 1] = L'\0';
-      }
-
-      // Trim whitespace and first line only
-      int s = 0;
-      while (targetW[s] == L' ' || targetW[s] == L'\t' || targetW[s] == L'\r' || targetW[s] == L'\n') ++s;
-      int e = s;
-      while (targetW[e] && targetW[e] != L'\r' && targetW[e] != L'\n' && targetW[e] != L'\t') ++e;
-      while (e > s && targetW[e - 1] == L' ') --e;
-      wchar_t cleaned[MAX_PATH] = L"";
-      int len = e - s;
-      if (len > 0) {
-        if (len >= MAX_PATH) len = MAX_PATH - 1;
-        wcsncpy(cleaned, targetW + s, static_cast<size_t>(len));
-        cleaned[len] = L'\0';
-        for (int k = 0; cleaned[k]; ++k) {
-          if (cleaned[k] == L'/') cleaned[k] = L'\\';
-        }
-        const wchar_t * rel = cleaned;
-        if (rel[0] == L'.' && rel[1] == L'\\') rel += 2;
-        if (rel[0]) {
-          wchar_t variants[2][MAX_PATH] = {};
-          wcsncpy(variants[0], rel, MAX_PATH - 1);
-          wcsncpy(variants[1], rel, MAX_PATH - 1);
-          if (!hasExeSuffix(variants[1]) && wcslen(variants[1]) + 4 < MAX_PATH) {
-            wcscat(variants[1], L".exe");
-          }
-          for (int v = 0; v < 2; ++v) {
-            if (!variants[v][0]) continue;
-            if (variants[v][0] == L'\\' || (variants[v][1] == L':' && variants[v][2] == L'\\')) {
-              if (fileExists(variants[v])) {
-                wcsncpy(outExePath, variants[v], MAX_PATH - 1);
-                outExePath[MAX_PATH - 1] = L'\0';
-                return true;
-              }
-            } else {
-              wchar_t cand[MAX_PATH] = L"";
-              LiliumUI::joinPath(folderPath, variants[v], cand, MAX_PATH);
-              if (fileExists(cand)) {
-                wcsncpy(outExePath, cand, MAX_PATH - 1);
-                outExePath[MAX_PATH - 1] = L'\0';
-                return true;
-              }
-            }
-          }
-        }
-      }
+    if (allowHwKeepAlive && st) {
+      LiliumSettings::tickHardwareKeepAlive(st->settings);
     }
   }
-
-  // 2. AppMain_.exe -> 3. AppMain.exe -> 4. <FolderName>.exe
-  wchar_t cand[MAX_PATH] = L"";
-  LiliumUI::joinPath(folderPath, L"AppMain_.exe", cand, MAX_PATH);
-  if (fileExists(cand)) {
-    wcsncpy(outExePath, cand, MAX_PATH - 1);
-    outExePath[MAX_PATH - 1] = L'\0';
-    return true;
-  }
-  if (fileExists(appMainExe)) {
-    wcsncpy(outExePath, appMainExe, MAX_PATH - 1);
-    outExePath[MAX_PATH - 1] = L'\0';
-    return true;
-  }
-
-  wchar_t sameName[64] = L"";
-  _snwprintf(sameName, 64, L"%s.exe", folderName);
-  sameName[63] = L'\0';
-  LiliumUI::joinPath(folderPath, sameName, cand, MAX_PATH);
-  if (fileExists(cand)) {
-    wcsncpy(outExePath, cand, MAX_PATH - 1);
-    outExePath[MAX_PATH - 1] = L'\0';
-    return true;
-  }
-
-  // 5. First *.exe in the folder
-  wchar_t pat[MAX_PATH] = L"";
-  LiliumUI::joinPath(folderPath, L"*.exe", pat, MAX_PATH);
-  WIN32_FIND_DATAW fd = {};
-  HANDLE hFind = FindFirstFileW(pat, &fd);
-  if (hFind != INVALID_HANDLE_VALUE) {
-    do {
-      if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
-        LiliumUI::joinPath(folderPath, fd.cFileName, cand, MAX_PATH);
-        wcsncpy(outExePath, cand, MAX_PATH - 1);
-        outExePath[MAX_PATH - 1] = L'\0';
-        FindClose(hFind);
-        return true;
-      }
-    } while (FindNextFileW(hFind, &fd));
-    FindClose(hFind);
-  }
-  return false;
 }
 
-static bool containsNoCase(const wchar_t * haystack, const wchar_t * needle) {
-  if (!haystack || !needle || !needle[0]) return false;
-  size_t hLen = wcslen(haystack);
-  size_t nLen = wcslen(needle);
-  if (hLen < nLen) return false;
-  for (size_t i = 0; i + nLen <= hLen; ++i) {
-    if (_wcsnicmp(haystack + i, needle, nLen) == 0) return true;
-  }
-  return false;
-}
-
-static void trimTrailingSlashInPlace(wchar_t * path) {
-  if (!path) return;
-  size_t len = wcslen(path);
-  while (len > 1 && (path[len - 1] == L'\\' || path[len - 1] == L'/')) {
-    if (len == 3 && path[1] == L':') break;
-    path[--len] = L'\0';
-  }
-}
-
-static void getParentDirAndSelfName(const wchar_t * rootDir,
-                                    wchar_t * outParentDir, size_t maxParentLen,
-                                    wchar_t * outSelfName, size_t maxSelfLen) {
-  outParentDir[0] = L'\0';
-  outSelfName[0] = L'\0';
-  if (!rootDir || !rootDir[0]) return;
-
-  wchar_t clean[MAX_PATH] = L"";
-  wcsncpy(clean, rootDir, MAX_PATH - 1);
-  clean[MAX_PATH - 1] = L'\0';
-  trimTrailingSlashInPlace(clean);
-
-  wchar_t * lastSlash = wcsrchr(clean, L'\\');
-  wchar_t * fslash = wcsrchr(clean, L'/');
-  if (fslash && (!lastSlash || fslash > lastSlash)) lastSlash = fslash;
-  if (!lastSlash) return;
-
-  wcsncpy(outSelfName, lastSlash + 1, maxSelfLen - 1);
-  outSelfName[maxSelfLen - 1] = L'\0';
-
-  if (lastSlash == clean) {
-    wcsncpy(outParentDir, L"\\", maxParentLen - 1);
+static void syncImeDaemonWithSettings(LauncherState * st) {
+  if (!st) return;
+  if (st->settings.imeResident) {
+    startResidentImeDaemon(st);
   } else {
-    *lastSlash = L'\0';
-    if (wcslen(clean) == 2 && clean[1] == L':') {
-      _snwprintf(outParentDir, maxParentLen, L"%s\\", clean);
-    } else {
-      wcsncpy(outParentDir, clean, maxParentLen - 1);
-    }
+    stopResidentImeDaemon(st);
   }
-  outParentDir[maxParentLen - 1] = L'\0';
-}
-
-static bool isKnownNonAppDir(const wchar_t * name) {
-  static constexpr const wchar_t * kSkipDirs[] = {
-    L".git", L"apps", L"build", L"cegcc", L"cegcc_build", L"cegcc_stage",
-    L"common", L"docs", L"doom", L"doom_obj", L"escher", L"ion", L"kandinsky",
-    L"khycas", L"liba", L"lz4", L"misakifont", L"poincare", L"python",
-    L"release", L"scripts", L"suite", L"tools", L"tests",
-    L"System Volume Information", L"$RECYCLE.BIN", L"RECYCLER"
-  };
-  for (int i = 0; i < static_cast<int>(sizeof(kSkipDirs) / sizeof(kSkipDirs[0])); ++i) {
-    if (_wcsicmp(name, kSkipDirs[i]) == 0) return true;
-  }
-  return false;
-}
-
-static bool isDuplicateAppPath(const LauncherState * st, const wchar_t * exePath) {
-  for (int i = 0; i < st->appCount; ++i) {
-    if (_wcsicmp(st->apps[i].exePath, exePath) == 0) return true;
-  }
-  return false;
-}
-
-static void addBuiltInEntry(LauncherState * st, const wchar_t * appsDir,
-                            const wchar_t * displayName, const wchar_t * fileName, int kind) {
-  if (!st || st->appCount >= kMaxApps) return;
-  AppEntry & e = st->apps[st->appCount++];
-  memset(&e, 0, sizeof(e));
-  wcsncpy(e.name, displayName, 47);
-  LiliumUI::joinPath(appsDir, fileName, e.exePath, MAX_PATH);
-  wcsncpy(e.workDir, appsDir, MAX_PATH - 1);
-  _snwprintf(e.relDesc, 96, L"apps\\%s", fileName);
-  e.relDesc[95] = L'\0';
-  wcsncpy(e.orderKey, fileName, 95);
-  e.orderKey[95] = L'\0';
-  e.builtInKind = kind;
-  e.isLiliumSuite = true;
-}
-
-static void scanSiblingAppDirs(LauncherState * st, const wchar_t * parentDir,
-                               const wchar_t * selfFolderName, const wchar_t * keyPrefix) {
-  if (!st || !parentDir || !parentDir[0]) return;
-
-  wchar_t pat[MAX_PATH] = L"";
-  LiliumUI::joinPath(parentDir, L"*", pat, MAX_PATH);
-  WIN32_FIND_DATAW fd = {};
-  HANDLE hFind = FindFirstFileW(pat, &fd);
-  if (hFind == INVALID_HANDLE_VALUE) return;
-
-  do {
-    if (st->appCount >= kMaxApps) break;
-    if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
-    if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) continue;
-    if (selfFolderName && selfFolderName[0] && _wcsicmp(fd.cFileName, selfFolderName) == 0) continue;
-    // Exclude any external backup folder named Lilium... (e.g., "Lilium Classic")
-    if (containsNoCase(fd.cFileName, L"Lilium")) continue;
-    if (isKnownNonAppDir(fd.cFileName)) continue;
-
-    wchar_t folderPath[MAX_PATH] = L"";
-    LiliumUI::joinPath(parentDir, fd.cFileName, folderPath, MAX_PATH);
-    wchar_t targetExe[MAX_PATH] = L"";
-    wchar_t iconFallbackExe[MAX_PATH] = L"";
-    if (!resolveFolderAppExe(folderPath, fd.cFileName, targetExe, iconFallbackExe)) {
-      continue;
-    }
-
-    const wchar_t * exeBase = wcsrchr(targetExe, L'\\');
-    exeBase = exeBase ? (exeBase + 1) : targetExe;
-    if (containsNoCase(exeBase, L"Lilium")) continue;
-    if (isDuplicateAppPath(st, targetExe)) continue;
-
-    AppEntry & e = st->apps[st->appCount++];
-    memset(&e, 0, sizeof(e));
-    wcsncpy(e.name, fd.cFileName, 47);
-    e.name[47] = L'\0';
-    wcsncpy(e.exePath, targetExe, MAX_PATH - 1);
-    wcsncpy(e.workDir, folderPath, MAX_PATH - 1);
-    _snwprintf(e.relDesc, 96, L"%s\\%s", keyPrefix, fd.cFileName);
-    e.relDesc[95] = L'\0';
-    wcsncpy(e.orderKey, e.relDesc, 95);
-    e.orderKey[95] = L'\0';
-    e.builtInKind = -1;
-    e.isLiliumSuite = false;
-    e.isFolderApp = true;
-    e.hasCustomIcon = extractExeIconToCache(targetExe, &e.cachedIcon);
-    if (!e.hasCustomIcon && iconFallbackExe[0] && _wcsicmp(iconFallbackExe, targetExe) != 0) {
-      e.hasCustomIcon = extractExeIconToCache(iconFallbackExe, &e.cachedIcon);
-    }
-  } while (FindNextFileW(hFind, &fd));
-  FindClose(hFind);
-}
-
-static void getOrderFilePath(wchar_t * outPath, size_t maxLen) {
-  wchar_t rootDir[MAX_PATH] = L"";
-  LiliumUI::getLiliumRootDir(rootDir, MAX_PATH);
-  LiliumUI::joinPath(rootDir, L"launcher_order.cfg", outPath, maxLen);
 }
 
 static void saveLauncherOrder(const LauncherState * st) {
   if (!st || st->appCount <= 0) return;
-  wchar_t path[MAX_PATH] = L"";
-  getOrderFilePath(path, MAX_PATH);
-  FILE * fp = _wfopen(path, L"wb");
-  if (!fp) return;
+  LiliumSettings::DiscoveredApp vis[kMaxApps] = {};
   for (int i = 0; i < st->appCount; ++i) {
-    char utf8[256] = {};
-    WideCharToMultiByte(CP_UTF8, 0, st->apps[i].orderKey, -1, utf8, sizeof(utf8) - 1, NULL, NULL);
-    utf8[sizeof(utf8) - 1] = '\0';
-    if (utf8[0]) {
-      fprintf(fp, "%s\n", utf8);
-    }
+    wcsncpy(vis[i].name, st->apps[i].name, 47);
+    wcsncpy(vis[i].exePath, st->apps[i].exePath, MAX_PATH - 1);
+    wcsncpy(vis[i].workDir, st->apps[i].workDir, MAX_PATH - 1);
+    wcsncpy(vis[i].relDesc, st->apps[i].relDesc, 95);
+    wcsncpy(vis[i].orderKey, st->apps[i].orderKey, 95);
+    vis[i].builtInKind = st->apps[i].builtInKind;
+    vis[i].isLiliumSuite = st->apps[i].isLiliumSuite;
+    vis[i].isFolderApp = st->apps[i].isFolderApp;
   }
-  fclose(fp);
-}
-
-static void applySavedLauncherOrder(LauncherState * st) {
-  if (!st || st->appCount <= 1) return;
-  wchar_t path[MAX_PATH] = L"";
-  getOrderFilePath(path, MAX_PATH);
-  FILE * fp = _wfopen(path, L"rb");
-  if (!fp) return;
-
-  int writeIdx = 0;
-  char line[256] = {};
-  while (writeIdx < st->appCount && fgets(line, sizeof(line), fp) != NULL) {
-    size_t len = strlen(line);
-    while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r' ||
-                       line[len - 1] == ' ' || line[len - 1] == '\t')) {
-      line[--len] = '\0';
-    }
-    if (!line[0]) continue;
-    wchar_t keyW[96] = L"";
-    MultiByteToWideChar(CP_UTF8, 0, line, -1, keyW, 95);
-    keyW[95] = L'\0';
-    if (!keyW[0]) continue;
-
-    for (int k = writeIdx; k < st->appCount; ++k) {
-      if (_wcsicmp(st->apps[k].orderKey, keyW) == 0) {
-        if (k != writeIdx) {
-          AppEntry moving = st->apps[k];
-          for (int m = k; m > writeIdx; --m) {
-            st->apps[m] = st->apps[m - 1];
-          }
-          st->apps[writeIdx] = moving;
-        }
-        ++writeIdx;
-        break;
-      }
-    }
-  }
-  fclose(fp);
+  LiliumSettings::saveVisibleOrderPreservingHidden(vis, st->appCount);
 }
 
 static void scanApps(LauncherState * st, bool preserveSelection = true) {
@@ -698,116 +380,27 @@ static void scanApps(LauncherState * st, bool preserveSelection = true) {
   }
   freeAppEntries(st);
 
-  wchar_t rootDir[MAX_PATH] = L"";
-  LiliumUI::getLiliumRootDir(rootDir, MAX_PATH);
-  wchar_t appsDir[MAX_PATH] = L"";
-  LiliumUI::joinPath(rootDir, L"apps", appsDir, MAX_PATH);
-
-  // 1. Canonical built-in Lilium Suite apps first
-  addBuiltInEntry(st, appsDir, L"Lilium Calc", L"LiliumCalc.exe", 0);
-  addBuiltInEntry(st, appsDir, L"Lilium TaskMgr", L"LiliumTaskMgr.exe", 1);
-  addBuiltInEntry(st, appsDir, L"Lilium Clock", L"LiliumClock.exe", 2);
-  addBuiltInEntry(st, appsDir, L"Lilium Filer", L"LiliumFiler.exe", 3);
-  addBuiltInEntry(st, appsDir, L"DOOM", L"doom.exe", 4);
-  addBuiltInEntry(st, appsDir, L"Lilium Life", L"LiliumLife.exe", 5);
-  addBuiltInEntry(st, appsDir, L"Lilium TimeTable", L"LiliumTimeTable.exe", 6);
-  addBuiltInEntry(st, appsDir, L"Lilium Editor", L"LiliumEditor.exe", 7);
-  const int extStart = st->appCount;
-
-  // 2. Dynamic scan of apps\* for additional EXEs and Brain app subfolders
-  wchar_t pat[MAX_PATH] = L"";
-  LiliumUI::joinPath(appsDir, L"*", pat, MAX_PATH);
-  WIN32_FIND_DATAW fd = {};
-  HANDLE hFind = FindFirstFileW(pat, &fd);
-  if (hFind != INVALID_HANDLE_VALUE) {
-    do {
-      if (st->appCount >= kMaxApps) break;
-      if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) continue;
-
-      bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-      if (!isDir) {
-        if (!hasExeSuffix(fd.cFileName) || isBuiltInRelName(fd.cFileName)) continue;
-
-        AppEntry & e = st->apps[st->appCount++];
-        memset(&e, 0, sizeof(e));
-        wcsncpy(e.name, fd.cFileName, 47);
-        e.name[47] = L'\0';
-        size_t nl = wcslen(e.name);
-        if (nl >= 4 && _wcsicmp(e.name + nl - 4, L".exe") == 0) {
-          e.name[nl - 4] = L'\0';
-        }
-        LiliumUI::joinPath(appsDir, fd.cFileName, e.exePath, MAX_PATH);
-        wcsncpy(e.workDir, appsDir, MAX_PATH - 1);
-        _snwprintf(e.relDesc, 96, L"apps\\%s", fd.cFileName);
-        e.relDesc[95] = L'\0';
-        wcsncpy(e.orderKey, e.relDesc, 95);
-        e.orderKey[95] = L'\0';
-        e.builtInKind = -1;
-        e.isLiliumSuite = (_wcsnicmp(fd.cFileName, L"Lilium", 6) == 0);
-        e.hasCustomIcon = extractExeIconToCache(e.exePath, &e.cachedIcon);
-      } else {
-        wchar_t folderPath[MAX_PATH] = L"";
-        LiliumUI::joinPath(appsDir, fd.cFileName, folderPath, MAX_PATH);
-        wchar_t targetExe[MAX_PATH] = L"";
-        wchar_t iconFallbackExe[MAX_PATH] = L"";
-        if (!resolveFolderAppExe(folderPath, fd.cFileName, targetExe, iconFallbackExe)) {
-          continue;
-        }
-
-        AppEntry & e = st->apps[st->appCount++];
-        memset(&e, 0, sizeof(e));
-        wcsncpy(e.name, fd.cFileName, 47);
-        e.name[47] = L'\0';
-        wcsncpy(e.exePath, targetExe, MAX_PATH - 1);
-        wcsncpy(e.workDir, folderPath, MAX_PATH - 1);
-        _snwprintf(e.relDesc, 96, L"apps\\%s", fd.cFileName);
-        e.relDesc[95] = L'\0';
-        wcsncpy(e.orderKey, e.relDesc, 95);
-        e.orderKey[95] = L'\0';
-        e.builtInKind = -1;
-        e.isLiliumSuite = false;
-        e.isFolderApp = true;
-        e.hasCustomIcon = extractExeIconToCache(targetExe, &e.cachedIcon);
-        if (!e.hasCustomIcon && iconFallbackExe[0] && _wcsicmp(iconFallbackExe, targetExe) != 0) {
-          e.hasCustomIcon = extractExeIconToCache(iconFallbackExe, &e.cachedIcon);
-        }
+  LiliumSettings::DiscoveredApp disc[kMaxApps] = {};
+  int n = LiliumSettings::scanAllLauncherApps(disc, kMaxApps, false, &st->settings);
+  for (int i = 0; i < n; ++i) {
+    AppEntry & e = st->apps[st->appCount++];
+    memset(&e, 0, sizeof(e));
+    wcsncpy(e.name, disc[i].name, 47);
+    wcsncpy(e.exePath, disc[i].exePath, MAX_PATH - 1);
+    wcsncpy(e.workDir, disc[i].workDir, MAX_PATH - 1);
+    wcsncpy(e.relDesc, disc[i].relDesc, 95);
+    wcsncpy(e.orderKey, disc[i].orderKey, 95);
+    e.builtInKind = disc[i].builtInKind;
+    e.isLiliumSuite = disc[i].isLiliumSuite;
+    e.isFolderApp = disc[i].isFolderApp;
+    if (e.builtInKind == -1) {
+      e.hasCustomIcon = extractExeIconToCache(e.exePath, &e.cachedIcon);
+      if (!e.hasCustomIcon && disc[i].iconFallbackExe[0] &&
+          _wcsicmp(disc[i].iconFallbackExe, e.exePath) != 0) {
+        e.hasCustomIcon = extractExeIconToCache(disc[i].iconFallbackExe, &e.cachedIcon);
       }
-    } while (FindNextFileW(hFind, &fd));
-    FindClose(hFind);
-  }
-
-  // 3. Scan sibling app folders in parentDir(rootDir) (and \NAND3\アプリ on WinCE)
-  //    Strictly excluding any external folder/EXE named "Lilium..." (e.g. "Lilium Classic")
-  wchar_t parentDir[MAX_PATH] = L"";
-  wchar_t selfName[MAX_PATH] = L"";
-  getParentDirAndSelfName(rootDir, parentDir, MAX_PATH, selfName, MAX_PATH);
-  if (parentDir[0]) {
-    scanSiblingAppDirs(st, parentDir, selfName, L"sibling");
-  }
-#ifdef _WIN32_WCE
-  wchar_t ceAppsRoot[MAX_PATH] = L"\\NAND3\\アプリ";
-  wchar_t trimmedParent[MAX_PATH] = L"";
-  wcsncpy(trimmedParent, parentDir, MAX_PATH - 1);
-  trimmedParent[MAX_PATH - 1] = L'\0';
-  trimTrailingSlashInPlace(trimmedParent);
-  if (_wcsicmp(trimmedParent, ceAppsRoot) != 0) {
-    scanSiblingAppDirs(st, ceAppsRoot, selfName, L"nand3app");
-  }
-#endif
-
-  // Sort dynamically discovered apps alphabetically while preserving built-in defaults first
-  for (int i = extStart + 1; i < st->appCount; ++i) {
-    AppEntry tmp = st->apps[i];
-    int j = i - 1;
-    while (j >= extStart && _wcsicmp(st->apps[j].name, tmp.name) > 0) {
-      st->apps[j + 1] = st->apps[j];
-      --j;
     }
-    st->apps[j + 1] = tmp;
   }
-
-  // Reapply user's saved icon order from launcher_order.cfg if present
-  applySavedLauncherOrder(st);
 
   if (preserveSelection && prevKey[0]) {
     for (int i = 0; i < st->appCount; ++i) {
@@ -947,6 +540,20 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, const AppEntry & a
     c.fillRect(x + 16, y + 29, 24, 2, LiliumUI::kColCharcoal);
     c.fillRect(x + 16, y + 34, 20, 2, LiliumUI::kColMuted);
     c.fillRect(x + 16, y + 39, 16, 2, LiliumUI::kColTeal);
+  } else if (app.builtInKind == 8) {
+    // Lilium Setting flat teal + charcoal gear emblem
+    const int cx = x + 28;
+    const int cy = y + 28;
+    c.fillRect(cx - 4, y + 10, 8, 36, LiliumUI::kColCharcoal);
+    c.fillRect(x + 10, cy - 4, 36, 8, LiliumUI::kColCharcoal);
+    c.fillRect(cx - 13, cy - 13, 7, 7, LiliumUI::kColCharcoal);
+    c.fillRect(cx + 6,  cy - 13, 7, 7, LiliumUI::kColCharcoal);
+    c.fillRect(cx - 13, cy + 6,  7, 7, LiliumUI::kColCharcoal);
+    c.fillRect(cx + 6,  cy + 6,  7, 7, LiliumUI::kColCharcoal);
+    c.fillRect(cx - 13, cy - 13, 26, 26, LiliumUI::kColTealDark);
+    c.drawBox(cx - 11, cy - 11, 22, 22, LiliumUI::kColTeal, LiliumUI::kColCharcoal);
+    c.drawBox(cx - 5, cy - 5, 10, 10, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
+    c.fillRect(cx - 2, cy - 2, 4, 4, LiliumUI::kColTealDark);
   } else if (app.hasCustomIcon && app.cachedIcon) {
     // Extracted 48x48 EXE icon inside crisp 56x56 frame
     c.drawBox(x, y, 56, 56, LiliumUI::kColWhite, selected ? LiliumUI::kColTeal : LiliumUI::kColBorder);
@@ -1049,11 +656,17 @@ static void renderTopStatusPills(LiliumUI::Canvas & c, LauncherState * st) {
   metaBuf[31] = L'\0';
   c.drawBox(638, 8, 146, 26, LiliumUI::kColWhite, LiliumUI::kColTealDark);
   c.drawText(638, 8, 146, 26, LiliumUI::kColTealDeep, metaBuf, 2, LiliumUI::Align::Center, true);
+
+  SYSTEMTIME nowTm;
+  GetLocalTime(&nowTm);
+  st->lastPillMin = nowTm.wMinute;
+  st->lastPillBat = batPct;
+  st->lastPillIme = st->imeDaemonRunning;
 }
 
 static void launchSelectedApp(LauncherState * st) {
   if (!st || st->selectedIndex < 0 || st->selectedIndex >= st->appCount) return;
-  const AppEntry & app = st->apps[st->selectedIndex];
+  const AppEntry app = st->apps[st->selectedIndex];
 
   if (!fileExists(app.exePath)) {
     _snwprintf(st->errLine1, 96, L"%s が見つかりません", app.name);
@@ -1066,6 +679,8 @@ static void launchSelectedApp(LauncherState * st) {
     return;
   }
 
+  LiliumSettings::suiteLog(L"Launcher", L"Launch %ls", app.orderKey);
+
   const bool isCeOpener = !app.isLiliumSuite && isCeOpenerEntry(app);
   if (isCeOpener) {
     HWND hExisting = FindWindowW(L"ceOpener", NULL);
@@ -1076,9 +691,15 @@ static void launchSelectedApp(LauncherState * st) {
       while (IsWindow(hExisting)) {
         Sleep(50);
         pumpPendingMessages();
+        LiliumSettings::tickHardwareKeepAlive(st->settings);
       }
+      LiliumSettings::load(st->settings);
+      LiliumSettings::syncSuiteLogFlag(st->settings.logEnabled);
+      syncImeDaemonWithSettings(st);
+      scanApps(st, true);
       st->dict = LiliumUI::queryDictStatus();
       st->window.setVisible(true);
+      st->window.requestRepaint(true);
       return;
     }
   }
@@ -1136,7 +757,8 @@ static void launchSelectedApp(LauncherState * st) {
     return;
   }
 
-  pumpWaitProcess(pi.hProcess);
+  const bool allowKeepAlive = (app.builtInKind != 8);
+  pumpWaitProcess(st, pi.hProcess, allowKeepAlive);
   DWORD parentPid = pi.dwProcessId;
   CloseHandle(pi.hThread);
   CloseHandle(pi.hProcess);
@@ -1159,24 +781,34 @@ static void launchSelectedApp(LauncherState * st) {
       HANDLE hChild = OpenProcess(SYNCHRONIZE, FALSE, childPid);
 #endif
       if (hChild) {
-        pumpWaitProcess(hChild);
+        pumpWaitProcess(st, hChild, true);
         CloseHandle(hChild);
       } else {
         while (isPidAlive(childPid)) {
           pumpPendingMessages();
+          LiliumSettings::tickHardwareKeepAlive(st->settings);
           Sleep(50);
         }
       }
     } else if (hCeWnd && IsWindow(hCeWnd)) {
       while (IsWindow(hCeWnd)) {
         pumpPendingMessages();
+        LiliumSettings::tickHardwareKeepAlive(st->settings);
         Sleep(50);
       }
     }
   }
 
+  LiliumSettings::load(st->settings);
+  LiliumSettings::syncSuiteLogFlag(st->settings.logEnabled);
+  syncImeDaemonWithSettings(st);
+  if (app.builtInKind == 8) {
+    LiliumSettings::applyHardwareSettings(st->settings);
+  }
+  scanApps(st, true);
   st->dict = LiliumUI::queryDictStatus();
   st->window.setVisible(true);
+  st->window.requestRepaint(true);
 }
 
 static void executeSafeLauncherExit(LauncherState * st) {
@@ -1514,6 +1146,9 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
       }
       break;
     case VK_F4:
+      LiliumSettings::load(st->settings);
+      LiliumSettings::syncSuiteLogFlag(st->settings.logEnabled);
+      syncImeDaemonWithSettings(st);
       scanApps(st);
       st->dict = LiliumUI::queryDictStatus();
       st->window.requestRepaint(true);
@@ -1640,8 +1275,20 @@ static void onClick(int x, int y, void * userData) {
 
 static void onTimer(LiliumUI::Canvas & c, void * userData) {
   LauncherState * st = static_cast<LauncherState *>(userData);
+  LiliumSettings::tickHardwareKeepAlive(st->settings);
   if (st->modal != ModalState::None) return;
-  renderTopStatusPills(c, st);
+
+  SYSTEMTIME tm;
+  GetLocalTime(&tm);
+  int batPct = 100;
+  bool chg = false;
+  LiliumUI::queryBattery(batPct, chg);
+  HWND hIme = FindWindowW(LiliumIME::kDaemonClassName, NULL);
+  bool curIme = (hIme != NULL && IsWindow(hIme));
+  if (st->lastPillMin < 0 || tm.wMinute != st->lastPillMin ||
+      batPct != st->lastPillBat || curIme != st->lastPillIme) {
+    renderTopStatusPills(c, st);
+  }
 }
 
 static bool onCloseRequest(void * userData) {
@@ -1705,6 +1352,10 @@ static void stopResidentImeDaemon(LauncherState * st) {
     }
     CloseHandle(st->imeProcess);
     st->imeProcess = NULL;
+  } else if (hIme && IsWindow(hIme)) {
+    for (int ms = 0; ms < 600 && IsWindow(hIme); ms += 30) {
+      Sleep(30);
+    }
   }
   st->imeDaemonRunning = false;
 }
@@ -1716,8 +1367,15 @@ int main(int /*argc*/, char * /*argv*/[]) {
   if (!rawMem) return 1;
   LauncherState * state = new (rawMem) LauncherState();
   state->dict = LiliumUI::queryDictStatus();
+
+  LiliumSettings::captureInitialHardwareBaseline();
+  LiliumSettings::load(state->settings);
+  LiliumSettings::syncSuiteLogFlag(state->settings.logEnabled);
+  LiliumSettings::applyHardwareSettings(state->settings);
+  LiliumSettings::suiteLog(L"Launcher", L"Start %ls", LiliumSettings::kLiliumVersion);
+
   scanApps(state, false);
-  startResidentImeDaemon(state);
+  syncImeDaemonWithSettings(state);
 
   LiliumUI::AppCallbacks cb = {};
   cb.onRender = onRender;
@@ -1725,6 +1383,8 @@ int main(int /*argc*/, char * /*argv*/[]) {
   cb.onClick = onClick;
   cb.onTimer = onTimer;
   cb.onCloseRequest = onCloseRequest;
+  cb.timerIntervalMs = 1000;
+  cb.timerAlwaysFire = true;
 
   int rc = 1;
   if (state->window.create(L"LiliumLauncherWinClass",
@@ -1732,6 +1392,9 @@ int main(int /*argc*/, char * /*argv*/[]) {
                            cb, state, true)) {
     rc = state->window.runLoop();
   }
+
+  LiliumSettings::restoreHardwareDefaultsOnExit(state->settings);
+  LiliumSettings::suiteLog(L"Launcher", L"Exit");
 
   stopResidentImeDaemon(state);
   freeAppEntries(state);

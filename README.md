@@ -6,7 +6,7 @@
 
 **Lilium** は、SHARP 製カラー電子辞書「**Brain**」（Windows Embedded CE 6.0 / ARM926EJ-S）向けに開発された、軽量統合アプリケーションスイートです。
 
-NumWorks / [Upsilon](https://github.com/UpsilonNumworks/Upsilon)（[Epsilon](https://github.com/numworks/epsilon)）ベースのグラフ関数・経理計算対応電卓を中核に、4×3 グリッドの専用ランチャー、常駐型日本語 IME（Mozc OSS 辞書ベース）、Markdown エディタ、時間割、ファイラ、タスクマネージャ、ライフゲーム、サイレント版 DOOM を 1 つの統一デザイン（`#4fbfaf` ティールブルー × フラット UI × 美咲フォント）で提供します。
+NumWorks / [Upsilon](https://github.com/UpsilonNumworks/Upsilon)（[Epsilon](https://github.com/numworks/epsilon)）ベースのグラフ関数・経理計算対応電卓を中核に、4×3 グリッドの専用ランチャー、統合設定アプリ、常駐型日本語 IME（Mozc OSS 辞書ベース）、Markdown エディタ、時間割、ファイラ、タスクマネージャ、ライフゲーム、サイレント版 DOOM を 1 つの統一デザイン（`#4fbfaf` ティールブルー × フラット UI × 美咲フォント）で提供します。
 
 ---
 
@@ -24,6 +24,7 @@ NumWorks / [Upsilon](https://github.com/UpsilonNumworks/Upsilon)（[Epsilon](htt
 | **Lilium TaskMgr** | `apps/LiliumTaskMgr.exe` | プロセス一覧・ウィンドウ一覧・RAM 推移グラフ、Brain 内蔵辞書シェルの安全なメモリ解放・再起動 |
 | **Lilium Clock** | `apps/LiliumClock.exe` | デジタル時計、ストップウォッチ、カウントダウンタイマー |
 | **Lilium Life** | `apps/LiliumLife.exe` | Conway's Life / Brian's Brain / Langton's Ant 等を内蔵したセルオートマトン＆スクリーンセーバー |
+| **Lilium Setting** | `apps/LiliumSetting.exe` | Brain 本体の画面輝度・自動電源OFF・開閉センサー・ランチャー並び順＆表示切替・各アプリ初期値・ログ一括管理（`lilium_settings.cfg`）・バージョン情報 |
 | **Lilium DOOM** | `apps/doom.exe` + `apps/freedoom1.zwad` | doomgeneric + 音声省略・Episode 1 軽量化 ZWAD によるサイレント DOOM |
 | **Lilium IME** | `apps/LiliumIME.exe` + `apps/lilium_ime.dic` | 常駐型ローマ字漢字変換デーモン。非圧縮インメモリバイナリ辞書（LIME v2、約 920 KB / 51,000 ペア）により即時変換を実現し、共有メモリ IPC および外部アプリ用フローティングオーバーレイを提供 |
 
@@ -71,6 +72,7 @@ Lilium/
     ├── LiliumTaskMgr.exe
     ├── LiliumClock.exe
     ├── LiliumLife.exe
+    ├── LiliumSetting.exe
     ├── LiliumIME.exe
     ├── lilium_ime.dic     # Mozc OSS 由来 LIME v2 非圧縮辞書 (約 920 KB)
     ├── doom.exe

@@ -1,4 +1,5 @@
 #include "../common/lilium_ui.h"
+#include "../common/lilium_settings.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -751,6 +752,11 @@ static void onTimer(LiliumUI::Canvas & c, void * userData) {
 int main(int /*argc*/, char * /*argv*/[]) {
   LifeState * state = new LifeState();
   bool manageTaskBar = !LiliumUI::isLaunchedFromLauncherArg();
+
+  LiliumSettings::Config cfg = {};
+  LiliumSettings::load(cfg);
+  state->ruleIndex = cfg.lifeDefaultRule;
+  state->themeIndex = cfg.lifeDefaultTheme;
 
   seedPreset(state);
 

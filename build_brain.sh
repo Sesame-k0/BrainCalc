@@ -83,7 +83,7 @@ if [[ ! -f "${APPS_DIR}/LiliumCalc.exe" ]] || [[ "${OUT_DIR}/epsilon.exe" -nt "$
 fi
 
 # 2. Standalone Lilium Suite apps (Launcher + TaskManager)
-SUITE_COMMON_SRCS="suite/common/lilium_ui.cpp suite/common/lilium_ime_client.cpp ion/src/simulator/brain/misaki_font_data.cpp"
+SUITE_COMMON_SRCS="suite/common/lilium_ui.cpp suite/common/lilium_ime_client.cpp suite/common/lilium_settings.cpp ion/src/simulator/brain/misaki_font_data.cpp"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
   SUITE_CXX="g++"
   DOOM_CC="gcc"
@@ -132,9 +132,10 @@ EDITOR_OUT="${APPS_DIR}/LiliumEditor.exe"
 echo "[INFO] Building Lilium Editor -> ${EDITOR_OUT}..."
 ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/editor/main.cpp ${SUITE_COMMON_SRCS} -o "${EDITOR_OUT}" ${SUITE_LDFLAGS}
 
-INSPECT_OUT="${APPS_DIR}/LiliumInspect.exe"
-echo "[INFO] Building Lilium Inspector -> ${INSPECT_OUT}..."
-${SUITE_CXX} ${SUITE_CXXFLAGS} suite/inspector/main.cpp ${SUITE_COMMON_SRCS} -o "${INSPECT_OUT}" ${SUITE_LDFLAGS}
+SETTING_OUT="${APPS_DIR}/LiliumSetting.exe"
+echo "[INFO] Building Lilium Setting -> ${SETTING_OUT}..."
+${SUITE_CXX} ${SUITE_CXXFLAGS} suite/setting/main.cpp ${SUITE_COMMON_SRCS} -o "${SETTING_OUT}" ${SUITE_LDFLAGS}
+rm -f "${APPS_DIR}/LiliumInspect.exe" 2>/dev/null || true
 
 IME_OUT="${APPS_DIR}/LiliumIME.exe"
 echo "[INFO] Building Lilium IME -> ${IME_OUT}..."
@@ -274,10 +275,10 @@ echo "==========================================================================
 echo "[SUCCESS] Build completed!"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
   echo "  Launcher   : ${DIST_DIR}/AppMain.exe (LiliumLauncher.exe)"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumInspect.exe, LiliumIME.exe, doom.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumSetting.exe, LiliumIME.exe, doom.exe"
 else
   echo "  Launcher   : ${DIST_DIR}/AppMain_.exe"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumInspect.exe, LiliumIME.exe, doom.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumSetting.exe, LiliumIME.exe, doom.exe"
   echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe [loader], AppMain.cfg, AppMain_.exe [Launcher], index.din, font.ttf, apps/)"
 fi
 echo "=============================================================================="

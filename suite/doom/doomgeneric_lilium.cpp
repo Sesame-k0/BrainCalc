@@ -1,4 +1,5 @@
 #include "../common/lilium_ui.h"
+#include "../common/lilium_settings.h"
 #include "doomgeneric.h"
 #include "doomkeys.h"
 
@@ -810,6 +811,12 @@ int main(int /*argc*/, char * /*argv*/[]) {
   };
 
   doomgeneric_Create(5, doomArgv);
+
+  LiliumSettings::Config cfg = {};
+  LiliumSettings::load(cfg);
+  if (cfg.doomLowDetail && LiliumDoom_GetDetail() == 0) {
+    LiliumDoom_ToggleDetail();
+  }
 
   while (!sQuitRequested) {
     doomgeneric_Tick();

@@ -109,6 +109,7 @@ static void resolveConfigFilePath(wchar_t * outPath, size_t maxLen) {
 
 void init() {
   resetKeyMappingsToDefault();
+  sLogEnabled = (BrainLogIsEnabled() != 0);
 
   wchar_t configPath[MAX_PATH] = L"";
   resolveConfigFilePath(configPath, MAX_PATH);
@@ -146,8 +147,7 @@ void init() {
   }
 
   sHelpEnabled = (data.helpEnabled != 0);
-  sLogEnabled = (data.logEnabled != 0);
-  BrainLogSetEnabled(sLogEnabled);
+  sLogEnabled = (BrainLogIsEnabled() != 0);
 
   int count = static_cast<int>(data.keyCount);
   if (count > kActionCount) {

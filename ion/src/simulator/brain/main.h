@@ -16,6 +16,7 @@ void quit();
 
 bool isLaunchedFromLauncher();
 bool resolveRootFilePath(const wchar_t * filename, wchar_t * outPath, size_t maxLen);
+int readSettingInt(const char * key, int defaultVal);
 
 bool restoreBrainState();
 void saveBrainState();

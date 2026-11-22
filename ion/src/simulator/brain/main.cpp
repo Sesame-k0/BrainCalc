@@ -12,11 +12,15 @@
 #include "main.h"
 #include "config.h"
 #include "display.h"
+#include "keyboard.h"
 #include "logger.h"
 #include <ion.h>
 #include <ion/storage.h>
 #include <apps/global_preferences.h>
 #include <poincare/preferences.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <wchar.h>
 
 #if defined(_WIN32_WCE) || defined(__MINGW32CE__)
@@ -451,6 +455,46 @@ bool restoreBrainState() {
   return true;
 }
 
+int readSettingInt(const char * key, int defaultVal) {
+  if (!key || !key[0]) return defaultVal;
+  wchar_t cfgPath[MAX_PATH] = L"";
+  if (!resolveRootFilePath(L"lilium_settings.cfg", cfgPath, MAX_PATH)) return defaultVal;
+  FILE * fp = _wfopen(cfgPath, L"rb");
+  if (!fp) return defaultVal;
+  const size_t keyLen = strlen(key);
+  char line[256] = {};
+  bool firstLine = true;
+  int result = defaultVal;
+  while (fgets(line, sizeof(line), fp) != NULL) {
+    char * p = line;
+    if (firstLine) {
+      firstLine = false;
+      if (static_cast<unsigned char>(p[0]) == 0xEF &&
+          static_cast<unsigned char>(p[1]) == 0xBB &&
+          static_cast<unsigned char>(p[2]) == 0xBF) {
+        p += 3;
+      }
+    }
+    size_t len = strlen(p);
+    while (len > 0 && (p[len - 1] == '\n' || p[len - 1] == '\r' || p[len - 1] == ' ' || p[len - 1] == '\t')) {
+      p[--len] = '\0';
+    }
+    while (*p == ' ' || *p == '\t') ++p;
+    if (strncmp(p, key, keyLen) == 0) {
+      const char * eq = p + keyLen;
+      while (*eq == ' ' || *eq == '\t') ++eq;
+      if (*eq == '=') {
+        ++eq;
+        while (*eq == ' ' || *eq == '\t') ++eq;
+        if (*eq != '\0') result = atoi(eq);
+        break;
+      }
+    }
+  }
+  fclose(fp);
+  return result;
+}
+
 void init() {
   BrainLog("Main::init: start");
   Ion::Simulator::Config::init();
@@ -461,6 +505,11 @@ void init() {
   BrainLog("Main::init: Random::init done");
   Ion::Simulator::Display::init();
   BrainLog("Main::init: Display::init done");
+
+  int defMode = readSettingInt("calc_default_mode", 0);
+  if (defMode >= 0 && defMode <= 2) {
+    Ion::Simulator::Keyboard::setInputMode(static_cast<Ion::Simulator::Keyboard::InputMode>(defMode));
+  }
 
   // A. OSタスクバー／インジケーター（右上バッテリーアイコン等）を非表示化
   hideTaskBar();

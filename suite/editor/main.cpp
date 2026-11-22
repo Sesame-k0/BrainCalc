@@ -1,5 +1,6 @@
 #include "../common/lilium_ui.h"
 #include "../common/lilium_ime_client.h"
+#include "../common/lilium_settings.h"
 
 #include <new>
 #include <stdio.h>
@@ -94,6 +95,7 @@ struct VisEditRow {
 struct EditorState {
   LiliumUI::AppWindow window;
   bool manageTaskBar = false;
+  int tabSpaces = 2;
   wchar_t notesDir[MAX_PATH] = L"";
 
   Screen screen = Screen::List;
@@ -1410,6 +1412,13 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     st->window.requestRepaint(false);
     return;
   }
+  if (vkCode == VK_TAB) {
+    if (st->romaji.hasContent()) commitEditorRawPreedit(st);
+    insertEditorText(st, (st->tabSpaces == 4) ? L"    " : L"  ");
+    st->editDirtyFlags |= EditorState::kEditDirtyCurRow;
+    st->window.requestRepaint(false);
+    return;
+  }
 
   if (vkCode == VK_LEFT) {
     if (!st->romaji.hasContent() && st->cursorPos > 0) --st->cursorPos;
@@ -1603,6 +1612,9 @@ int main(int /*argc*/, char * /*argv*/[]) {
   }
 
   state->manageTaskBar = !LiliumUI::isLaunchedFromLauncherArg();
+  LiliumSettings::Config cfg = {};
+  LiliumSettings::load(cfg);
+  state->tabSpaces = (cfg.editorTabSpaces == 4) ? 4 : 2;
   wchar_t exeDir[MAX_PATH] = L"";
   LiliumUI::getExeDir(exeDir, MAX_PATH);
   LiliumUI::joinPath(exeDir, L"notes", state->notesDir, MAX_PATH);

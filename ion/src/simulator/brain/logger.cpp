@@ -150,6 +150,7 @@ int BrainLogIsEnabled(void) {
 }
 
 void BrainLogInit(void) {
+  sLogEnabled = (Ion::Simulator::Main::readSettingInt("log_enabled", LILIUM_DEBUG_LOG_DEFAULT_ON) != 0);
   sStartTick = GetTickCount();
   sLastStep[0] = '\0';
   sLastDetail[0] = '\0';

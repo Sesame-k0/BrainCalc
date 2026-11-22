@@ -13,7 +13,7 @@
 // BrainLogSetEnabled(true) を呼ぶだけで即座にログ機能を有効化できます。
 // =============================================================================
 #ifndef LILIUM_DEBUG_LOG_DEFAULT_ON
-#define LILIUM_DEBUG_LOG_DEFAULT_ON 1
+#define LILIUM_DEBUG_LOG_DEFAULT_ON 0
 #endif
 
 #ifdef __cplusplus

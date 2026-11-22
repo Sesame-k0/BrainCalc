@@ -1,4 +1,5 @@
 #include "../common/lilium_ui.h"
+#include "../common/lilium_settings.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -22,6 +23,7 @@ struct LapEntry {
 struct ClockState {
   LiliumUI::AppWindow window;
   bool manageTaskBar = false;
+  bool use24h = true;
   ClockMode mode = ClockMode::Clock;
 
   // Timer state
@@ -235,7 +237,22 @@ static void renderClockBody(LiliumUI::Canvas & c, ClockState * st, bool forceSta
   if (forceStatic) {
     c.drawBox(16, 98, LiliumUI::kMainW - 32, 232, LiliumUI::kColWhite, LiliumUI::kColBorder);
   } else {
-    c.fillRect(36, 122, LiliumUI::kMainW - 72, 134, LiliumUI::kColWhite);
+    c.fillRect(24, 104, LiliumUI::kMainW - 48, 152, LiliumUI::kColWhite);
+  }
+
+  int dispH = tm.wHour;
+  int tensDigit = dispH / 10;
+  if (!st->use24h) {
+    bool isPm = (tm.wHour >= 12);
+    dispH = tm.wHour % 12;
+    if (dispH == 0) dispH = 12;
+    tensDigit = (dispH >= 10) ? (dispH / 10) : -1;
+    c.drawBox(26, 104, 48, 22,
+              isPm ? LiliumUI::kColTealDark : LiliumUI::kColTealSoft,
+              isPm ? LiliumUI::kColTealDeep : LiliumUI::kColTealBorder);
+    c.drawText(26, 104, 48, 22,
+               isPm ? LiliumUI::kColWhite : LiliumUI::kColTealDark,
+               isPm ? L"PM" : L"AM", 2, LiliumUI::Align::Center, true);
   }
 
   // Draw HH:MM:SS big 7-segment display
@@ -247,9 +264,9 @@ static void renderClockBody(LiliumUI::Canvas & c, ClockState * st, bool forceSta
   const uint32_t secCol = 0x0E5D52;
   const uint32_t ghostCol = 0xF7F9FB;
 
-  drawSevenSegDigit(c, sx, sy, dw, dh, thick, tm.wHour / 10, onCol, ghostCol);
+  drawSevenSegDigit(c, sx, sy, dw, dh, thick, tensDigit, onCol, ghostCol);
   sx += dw + gap;
-  drawSevenSegDigit(c, sx, sy, dw, dh, thick, tm.wHour % 10, onCol, ghostCol);
+  drawSevenSegDigit(c, sx, sy, dw, dh, thick, dispH % 10, onCol, ghostCol);
   sx += dw + 8;
   drawColon(c, sx + 4, sy, dh, 10, LiliumUI::kColTeal);
   sx += colonW + 8;
@@ -781,6 +798,9 @@ static void onTimer(LiliumUI::Canvas & c, void * userData) {
 int main(int /*argc*/, char * /*argv*/[]) {
   ClockState state;
   state.manageTaskBar = !LiliumUI::isLaunchedFromLauncherArg();
+  LiliumSettings::Config cfg = {};
+  LiliumSettings::load(cfg);
+  state.use24h = cfg.clock24h;
 
   LiliumUI::AppCallbacks cb = {};
   cb.onRender = onRender;
