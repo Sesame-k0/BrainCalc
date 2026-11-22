@@ -1182,6 +1182,7 @@ static void launchSelectedApp(LauncherState * st) {
 static void executeSafeLauncherExit(LauncherState * st) {
   st->dict = LiliumUI::queryDictStatus();
   if (st->dict.running && st->dict.windowReady) {
+    LiliumUI::notifyDictForegroundWake(st->dict.hwnd);
     st->window.requestQuit();
     return;
   }
@@ -1191,11 +1192,9 @@ static void executeSafeLauncherExit(LauncherState * st) {
   st->window.redrawNow();
 
   HWND hSim = NULL;
-  bool ok = LiliumUI::launchDictApp(true, 10000, &hSim);
+  bool ok = LiliumUI::launchDictApp(true, 12000, &hSim);
   if (ok) {
-    if (hSim && IsWindow(hSim)) {
-      SetForegroundWindow(hSim);
-    }
+    LiliumUI::notifyDictForegroundWake(hSim);
     st->window.requestQuit();
     return;
   }

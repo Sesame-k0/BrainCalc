@@ -453,8 +453,9 @@ static bool tryLaunchSingleDictCandidate(const wchar_t * path) {
   if (!path || !path[0]) return false;
 
 #if defined(_WIN32_WCE) || defined(__MINGW32CE__)
+  wchar_t cmdLine[8] = L"1";
   PROCESS_INFORMATION pi = {};
-  BOOL ok = CreateProcessW(path, NULL, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi);
+  BOOL ok = CreateProcessW(path, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi);
 #else
   wchar_t workDir[MAX_PATH] = L"";
   wcsncpy(workDir, path, MAX_PATH - 1);
@@ -462,9 +463,9 @@ static bool tryLaunchSingleDictCandidate(const wchar_t * path) {
   wchar_t * lastSlash = wcsrchr(workDir, L'\\');
   if (lastSlash) *(lastSlash + 1) = L'\0';
 
-  wchar_t cmdLine[MAX_PATH + 8] = L"";
-  _snwprintf(cmdLine, MAX_PATH + 7, L"\"%ls\"", path);
-  cmdLine[MAX_PATH + 7] = L'\0';
+  wchar_t cmdLine[MAX_PATH + 16] = L"";
+  _snwprintf(cmdLine, MAX_PATH + 15, L"\"%ls\" 1", path);
+  cmdLine[MAX_PATH + 15] = L'\0';
 
   STARTUPINFOW si = {};
   si.cb = sizeof(si);
@@ -480,8 +481,8 @@ static bool tryLaunchSingleDictCandidate(const wchar_t * path) {
   return true;
 }
 
-static bool isWindowResponsiveSafe(HWND hWnd) {
-  if (!hWnd || !IsWindow(hWnd) || !IsWindowVisible(hWnd)) return false;
+static bool sendMsgTimeoutSafe(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp, UINT timeoutMs, DWORD_PTR * outRes) {
+  if (!hWnd || !IsWindow(hWnd)) return false;
 #if defined(_WIN32_WCE) || defined(__MINGW32CE__)
   typedef LRESULT(WINAPI * PFN_SendMsgTimeoutW)(HWND, UINT, WPARAM, LPARAM, UINT, UINT, PDWORD_PTR);
   static PFN_SendMsgTimeoutW s_pfnSmt = nullptr;
@@ -490,16 +491,31 @@ static bool isWindowResponsiveSafe(HWND hWnd) {
     s_tested = true;
     HMODULE hCore = GetModuleHandleW(L"coredll.dll");
     if (hCore) {
-      s_pfnSmt = reinterpret_cast<PFN_SendMsgTimeoutW>(GetProcAddress(hCore, L"SendMessageTimeoutW"));
+      void * fn = reinterpret_cast<void *>(GetProcAddress(hCore, L"SendMessageTimeoutW"));
+      s_pfnSmt = reinterpret_cast<PFN_SendMsgTimeoutW>(fn);
     }
   }
-  if (!s_pfnSmt) return true;
+  if (!s_pfnSmt) {
+    if (msg == WM_NULL) return true;
+    LRESULT r = SendMessageW(hWnd, msg, wp, lp);
+    if (outRes) *outRes = static_cast<DWORD_PTR>(r);
+    return true;
+  }
   DWORD_PTR res = 0;
-  return s_pfnSmt(hWnd, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 400, &res) != 0;
+  BOOL ok = s_pfnSmt(hWnd, msg, wp, lp, SMTO_ABORTIFHUNG, timeoutMs, &res);
+  if (outRes) *outRes = res;
+  return ok != 0;
 #else
   DWORD_PTR res = 0;
-  return SendMessageTimeoutW(hWnd, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 400, &res) != 0;
+  BOOL ok = SendMessageTimeoutW(hWnd, msg, wp, lp, SMTO_ABORTIFHUNG, timeoutMs, &res);
+  if (outRes) *outRes = res;
+  return ok != 0;
 #endif
+}
+
+static bool isWindowResponsiveSafe(HWND hWnd) {
+  if (!hWnd || !IsWindow(hWnd) || !IsWindowVisible(hWnd)) return false;
+  return sendMsgTimeoutSafe(hWnd, WM_NULL, 0, 0, 400, nullptr);
 }
 
 } // namespace
@@ -568,13 +584,17 @@ DictStatus queryDictStatus() {
           }
 #endif
           if (wcschr(ds.exePath, L'\\') == nullptr && base[0]) {
-            wchar_t winPath[MAX_PATH] = {};
-            _snwprintf(winPath, MAX_PATH, L"\\Windows\\%ls", base);
-            winPath[MAX_PATH - 1] = L'\0';
-            DWORD attr = GetFileAttributesW(winPath);
-            if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
-              wcsncpy(ds.exePath, winPath, MAX_PATH - 1);
-              ds.exePath[MAX_PATH - 1] = L'\0';
+            static constexpr const wchar_t * kProbeDirs[3] = { L"\\NAND", L"\\NAND2", L"\\Windows" };
+            for (int d = 0; d < 3; ++d) {
+              wchar_t probePath[MAX_PATH] = {};
+              _snwprintf(probePath, MAX_PATH, L"%ls\\%ls", kProbeDirs[d], base);
+              probePath[MAX_PATH - 1] = L'\0';
+              DWORD attr = GetFileAttributesW(probePath);
+              if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+                wcsncpy(ds.exePath, probePath, MAX_PATH - 1);
+                ds.exePath[MAX_PATH - 1] = L'\0';
+                break;
+              }
             }
           }
           if (wcschr(ds.exePath, L'\\') != nullptr) {
@@ -611,9 +631,9 @@ bool launchDictApp(bool waitWindowReady, DWORD timeoutMs, HWND * outHwnd) {
 #endif
     const wchar_t * candidates[] = {
       g_lastKnownDictPath,
-      L"\\Windows\\wceprj.exe",
       L"\\NAND\\wceprj.exe",
       L"\\NAND2\\wceprj.exe",
+      L"\\Windows\\wceprj.exe",
       L"wceprj.exe"
     };
     for (int i = 0; !launched && i < 5; ++i) {
@@ -654,12 +674,35 @@ bool launchDictApp(bool waitWindowReady, DWORD timeoutMs, HWND * outHwnd) {
   return false;
 }
 
-bool terminateDictApp(DWORD timeoutMs) {
+bool terminateDictApp(DWORD timeoutMs, bool * outUsedForce) {
+  if (outUsedForce) *outUsedForce = false;
   DictStatus ds = queryDictStatus();
   if (!ds.running || ds.pid == 0) return true;
 
   if (wcschr(ds.exePath, L'\\') != nullptr) {
     saveDictPathCache(ds.exePath);
+  }
+
+  // Stage 1: Send graceful WM_CLOSE to "SHARP SIM" so wceprj.exe can persist normal-exit state
+  if (ds.hwnd != NULL && ds.windowReady) {
+    sendMsgTimeoutSafe(ds.hwnd, WM_CLOSE, 0, 0, 2500, nullptr);
+    DWORD graceMs = (timeoutMs >= 2500) ? timeoutMs : 2500;
+    DWORD startTick = GetTickCount();
+    while (GetTickCount() - startTick < graceMs) {
+      pumpPaintMessages();
+      if (!queryDictStatus().running) {
+        Sleep(150);
+        return true;
+      }
+      Sleep(100);
+    }
+  }
+
+  // Stage 2: Safety fallback if process remained headless or unresponsive
+  ds = queryDictStatus();
+  if (!ds.running || ds.pid == 0) {
+    Sleep(150);
+    return true;
   }
 
 #if defined(_WIN32_WCE) || defined(__MINGW32CE__)
@@ -671,11 +714,26 @@ bool terminateDictApp(DWORD timeoutMs) {
 
   BOOL ok = TerminateProcess(hProc, 0);
   if (ok) {
-    WaitForSingleObject(hProc, timeoutMs);
+    WaitForSingleObject(hProc, 1500);
   }
   CloseHandle(hProc);
   Sleep(150);
+  if (outUsedForce) *outUsedForce = true;
   return !queryDictStatus().running;
+}
+
+void notifyDictForegroundWake(HWND hSim) {
+  UINT wakeMsg = RegisterWindowMessageW(L"EdPowerOnOff");
+  if (hSim && IsWindow(hSim)) {
+    SetForegroundWindow(hSim);
+    if (wakeMsg) {
+      PostMessageW(hSim, wakeMsg, 2, 0);
+    }
+  }
+  HWND hEdCtrl = FindWindowW(L"EdAppCtrl", NULL);
+  if (hEdCtrl && IsWindow(hEdCtrl) && wakeMsg) {
+    PostMessageW(hEdCtrl, wakeMsg, 2, 0);
+  }
 }
 
 // =============================================================================

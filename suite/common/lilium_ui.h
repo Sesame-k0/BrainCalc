@@ -121,7 +121,8 @@ struct DictStatus {
 
 DictStatus queryDictStatus();
 bool launchDictApp(bool waitWindowReady, DWORD timeoutMs, HWND * outHwnd = nullptr);
-bool terminateDictApp(DWORD timeoutMs);
+bool terminateDictApp(DWORD timeoutMs, bool * outUsedForce = nullptr);
+void notifyDictForegroundWake(HWND hSim);
 void pumpPaintMessages();
 
 // Shared Lilium chrome helpers

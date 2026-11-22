@@ -42,6 +42,7 @@ enum class ModalMode {
   KillConfirm,
   DictReleaseConfirm,
   DictLaunchConfirm,
+  DictStopping,
   DictStarting,
   DictActionResult,
   ProcessDetail,
@@ -530,10 +531,19 @@ static void tryCloseOrKillSelected(TaskMgrState * st, bool forceKill) {
 }
 
 static void executeDictRelease(TaskMgrState * st) {
+  st->modal = ModalMode::DictStopping;
+  st->window.requestRepaint(true);
+  st->window.redrawNow();
+
   int totalMB = 0, beforeAvailMB = 0, usedPct = 0;
   LiliumUI::queryMemoryMB(totalMB, beforeAvailMB, usedPct);
 
-  bool ok = LiliumUI::terminateDictApp(1500);
+  bool usedForce = false;
+  bool ok = LiliumUI::terminateDictApp(3000, &usedForce);
+
+  SetWindowPos(st->window.hwnd(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+  SetForegroundWindow(st->window.hwnd());
+
   refreshSystemSnapshot(st);
 
   int afterAvailMB = 0;
@@ -541,7 +551,9 @@ static void executeDictRelease(TaskMgrState * st) {
   int deltaMB = afterAvailMB - beforeAvailMB;
 
   if (ok) {
-    wcsncpy(st->statusTitle, L"【 電子辞書を解放しました 】", 63);
+    wcsncpy(st->statusTitle,
+            usedForce ? L"【 電子辞書を解放しました (強制) 】" : L"【 電子辞書を正常終了しました 】",
+            63);
     if (deltaMB > 0) {
       _snwprintf(st->statusMsg1, 96, L"空きRAM: %d MB → %d MB (+%d MB解放)",
                  beforeAvailMB, afterAvailMB, deltaMB);
@@ -568,7 +580,7 @@ static void executeDictRestart(TaskMgrState * st) {
   st->window.redrawNow();
 
   HWND hSim = NULL;
-  bool ok = LiliumUI::launchDictApp(true, 8000, &hSim);
+  bool ok = LiliumUI::launchDictApp(true, 12000, &hSim);
 
   // Keep TaskMgr visible on top so result confirmation stays legible
   SetWindowPos(st->window.hwnd(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
@@ -997,12 +1009,12 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                                  L"[←/→]:選択   [Enter]:実行   [Esc]:中止");
   } else if (st->modal == ModalMode::DictReleaseConfirm) {
     static constexpr LiliumUI::ModalButton kDictRelBtns[2] = {
-      { L"強制解放", true },
+      { L"解放する", true },
       { L"キャンセル", false }
     };
     LiliumUI::renderConfirmModal(c, L"【 注意：電子辞書アプリの解放 】",
                                  L"純正電子辞書 (wceprj.exe) を解放しますか？",
-                                 L"RAMを解放 (Launcher終了時に自動再起動)",
+                                 L"正常終了を優先し RAM を解放 (終了時自動再起動)",
                                  kDictRelBtns, 2, st->modalFocus,
                                  L"[←/→]:選択   [Enter]:決定   [Esc]:中止");
   } else if (st->modal == ModalMode::DictLaunchConfirm) {
@@ -1015,6 +1027,11 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                                  L"SHARP Simulator ウィンドウの復帰を確認します。",
                                  kDictStartBtns, 2, st->modalFocus,
                                  L"[←/→]:選択   [Enter]:決定   [Esc]:中止");
+  } else if (st->modal == ModalMode::DictStopping) {
+    LiliumUI::renderConfirmModal(c, L"【 電子辞書を終了中 】",
+                                 L"wceprj.exe へ正常終了要求を送信しています...",
+                                 L"完了まで少しお待ちください。",
+                                 nullptr, 0, 0, L"終了確認後に結果を表示します");
   } else if (st->modal == ModalMode::DictStarting) {
     LiliumUI::renderConfirmModal(c, L"【 電子辞書を起動中 】",
                                  L"wceprj.exe の起動完了を確認しています...",
@@ -1041,7 +1058,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
 static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
   TaskMgrState * st = static_cast<TaskMgrState *>(userData);
 
-  if (st->modal == ModalMode::DictStarting) {
+  if (st->modal == ModalMode::DictStopping || st->modal == ModalMode::DictStarting) {
     return;
   }
 
@@ -1255,7 +1272,7 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
 static void onClick(int x, int y, void * userData) {
   TaskMgrState * st = static_cast<TaskMgrState *>(userData);
 
-  if (st->modal == ModalMode::DictStarting) {
+  if (st->modal == ModalMode::DictStopping || st->modal == ModalMode::DictStarting) {
     return;
   }
 
