@@ -694,6 +694,8 @@ static wchar_t mapEditor12xMarkdown(WPARAM vkCode) {
     case VK_OEM_6: return L']';
     case VK_OEM_1: return L':';
     case VK_OEM_3: return L'`';
+    case VK_PRIOR: return L'、';
+    case VK_NEXT: return L'。';
     default: return L'\0';
   }
 }
@@ -870,18 +872,18 @@ static void renderEditorSidebarKeyGrid(LiliumUI::Canvas & c, int mode) {
   c.drawBox(sx, 66, sw, 58, LiliumUI::kColWhite, LiliumUI::kColBorder);
   c.drawText(sx + 4, 70, sw - 8, 17, LiliumUI::kColText, L"F1:保存 F3:閲覧", 2, LiliumUI::Align::Left, true);
   c.drawText(sx + 4, 88, sw - 8, 17, LiliumUI::kColTextSub, L"F7:カナ Spc:変換", 2, LiliumUI::Align::Left, true);
-  c.drawText(sx + 4, 106, sw - 8, 17, LiliumUI::kColMuted, L"PgUp:改行 Ent:確定", 1, LiliumUI::Align::Left, true);
+  c.drawText(sx + 4, 106, sw - 8, 17, LiliumUI::kColMuted, L"↑↓/ShNM:、。Spc:,.", 1, LiliumUI::Align::Left, true);
 
-  struct KeySpec { const wchar_t * k; const wchar_t * sym; const wchar_t * lo; const wchar_t * up; };
+  struct KeySpec { const wchar_t * k; const wchar_t * sym; const wchar_t * ja; const wchar_t * lo; const wchar_t * up; };
   static constexpr KeySpec kLeft[3][5] = {
-    { {L"Q",L"1",L"q",L"Q"}, {L"W",L"2",L"w",L"W"}, {L"E",L"3",L"e",L"E"}, {L"R",L"4",L"r",L"R"}, {L"T",L"5",L"t",L"T"} },
-    { {L"A",L"#",L"a",L"A"}, {L"S",L"-",L"s",L"S"}, {L"D",L"*",L"d",L"D"}, {L"F",L"/",L"f",L"F"}, {L"G",L"=",L"g",L"G"} },
-    { {L"Z",L"`",L"z",L"Z"}, {L"X",L">",L"x",L"X"}, {L"C",L"_",L"c",L"C"}, {L"V",L":",L"v",L"V"}, {L"B",L"!",L"b",L"B"} }
+    { {L"Q",L"1",L"q",L"q",L"Q"}, {L"W",L"2",L"w",L"w",L"W"}, {L"E",L"3",L"e",L"e",L"E"}, {L"R",L"4",L"r",L"r",L"R"}, {L"T",L"5",L"t",L"t",L"T"} },
+    { {L"A",L"#",L"a",L"a",L"A"}, {L"S",L"-",L"s",L"s",L"S"}, {L"D",L"*",L"d",L"d",L"D"}, {L"F",L"/",L"f",L"f",L"F"}, {L"G",L"=",L"g",L"g",L"G"} },
+    { {L"Z",L"`",L"z",L"z",L"Z"}, {L"X",L">",L"x",L"x",L"X"}, {L"C",L"_",L"c",L"c",L"C"}, {L"V",L":",L"v",L"v",L"V"}, {L"B",L"!",L"b",L"b",L"B"} }
   };
   static constexpr KeySpec kRight[3][5] = {
-    { {L"Y",L"6",L"y",L"Y"}, {L"U",L"7",L"u",L"U"}, {L"I",L"8",L"i",L"I"}, {L"O",L"9",L"o",L"O"}, {L"P",L"0",L"p",L"P"} },
-    { {L"H",L"(",L"h",L"H"}, {L"J",L")",L"j",L"J"}, {L"K",L"[",L"k",L"K"}, {L"L",L"]",L"l",L"L"}, {nullptr,nullptr,nullptr,nullptr} },
-    { {L"N",L",",L"n",L"N"}, {L"M",L".",L"m",L"M"}, {L"ー",L"?",L"-",L"_"}, {nullptr,nullptr,nullptr,nullptr}, {nullptr,nullptr,nullptr,nullptr} }
+    { {L"Y",L"6",L"y",L"y",L"Y"}, {L"U",L"7",L"u",L"u",L"U"}, {L"I",L"8",L"i",L"i",L"I"}, {L"O",L"9",L"o",L"o",L"O"}, {L"P",L"0",L"p",L"p",L"P"} },
+    { {L"H",L"(",L"h",L"h",L"H"}, {L"J",L")",L"j",L"j",L"J"}, {L"K",L"[",L"k",L"k",L"K"}, {L"L",L"]",L"l",L"l",L"L"}, {nullptr,nullptr,nullptr,nullptr,nullptr} },
+    { {L"N",L",",L"n",L"n",L"N"}, {L"M",L".",L"m",L"m",L"M"}, {L"ー",L"?",L"ー",L"-",L"_"}, {L"↑",L"、",L"、",L",",L","}, {L"↓",L"。",L"。",L".",L"."} }
   };
 
   auto drawGrid = [&](int topY, const wchar_t * title, const KeySpec grid[3][5]) {
@@ -898,7 +900,7 @@ static void renderEditorSidebarKeyGrid(LiliumUI::Canvas & c, int mode) {
         uint32_t bd = isDig ? 0x8CB6D4 : LiliumUI::kColBorderStrong;
         c.drawBox(kx, ky, 29, 33, bg, bd);
         c.drawText(kx + 2, ky + 1, 25, 11, LiliumUI::kColLightMuted, ks.k, 1, LiliumUI::Align::Left, true);
-        const wchar_t * lbl = (mode == 3) ? ks.sym : ((mode == 2) ? ks.up : ks.lo);
+        const wchar_t * lbl = (mode == 0) ? ks.ja : ((mode == 1) ? ks.lo : ((mode == 2) ? ks.up : ks.sym));
         uint32_t lcol = (mode == 3) ? (isDig ? 0x104A80 : LiliumUI::kColTealDeep) : modeCol;
         c.drawText(kx + 1, ky + 13, 27, 18, lcol, lbl, 2, LiliumUI::Align::Center, true);
       }
@@ -1076,17 +1078,22 @@ static void renderEditScreen(LiliumUI::Canvas & c, EditorState * st) {
         cx += pw + 6;
       }
     } else {
-      static constexpr const wchar_t * kQuickBtns[8] = {
+      static constexpr const wchar_t * kQuickBtnsIme[8] = {
+        L"あ/A", L"、", L"。", L"# ", L"- ", L"* ", L"> ", L"- [ ] "
+      };
+      static constexpr const wchar_t * kQuickBtnsOther[8] = {
         L"あ/A", L"# ", L"- ", L"* ", L"`", L"> ", L"- [ ] ", L"---"
       };
+      const wchar_t * const * btns = (st->inputMode == 0) ? kQuickBtnsIme : kQuickBtnsOther;
       for (int b = 0; b < 8; ++b) {
         int bx = 18 + b * 76;
+        bool isAccent = (b == 0) || (st->inputMode == 0 && (b == 1 || b == 2));
         c.drawBox(bx, 396, 70, 32,
-                  b == 0 ? LiliumUI::kColTealSoft : LiliumUI::kColWhite,
-                  b == 0 ? LiliumUI::kColTealDark : LiliumUI::kColBorderStrong);
+                  (b == 0) ? LiliumUI::kColTealSoft : (isAccent ? LiliumUI::kColTealHeader : LiliumUI::kColWhite),
+                  isAccent ? LiliumUI::kColTealDark : LiliumUI::kColBorderStrong);
         c.drawText(bx, 396, 70, 32,
-                   b == 0 ? LiliumUI::kColTealDeep : LiliumUI::kColText,
-                   kQuickBtns[b], 2, LiliumUI::Align::Center, true);
+                   isAccent ? LiliumUI::kColTealDeep : LiliumUI::kColText,
+                   btns[b], 2, LiliumUI::Align::Center, true);
       }
     }
     st->prevEdConverting = st->converting;
@@ -1285,7 +1292,7 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     if (st->converting) commitEditorCandidate(st);
     else if (st->romaji.hasContent()) commitEditorRawPreedit(st);
     st->inputMode = (st->inputMode + 1) % 4;
-    st->editDirtyFlags |= EditorState::kEditDirtyCurRow | EditorState::kEditDirtySidebar;
+    st->editDirtyFlags |= EditorState::kEditDirtyCurRow | EditorState::kEditDirtySidebar | EditorState::kEditDirtyQuickBar;
     st->window.requestRepaint(false);
     return;
   }
@@ -1395,13 +1402,6 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     st->window.requestRepaint(false);
     return;
   }
-  if (vkCode == VK_PRIOR) { // PgUp convenient newline shortcut on Brain
-    if (st->romaji.hasContent()) commitEditorRawPreedit(st);
-    insertEditorText(st, L"\n");
-    st->editDirtyFlags |= EditorState::kEditDirtyAllRows;
-    st->window.requestRepaint(false);
-    return;
-  }
   if (vkCode == VK_SPACE) {
     if (st->inputMode == 0 && st->romaji.hasContent()) {
       startEditorConversion(st);
@@ -1460,7 +1460,15 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
   }
 
   if (st->inputMode == 0) {
-    if (vkCode >= 'A' && vkCode <= 'Z') {
+    if (vkCode == VK_PRIOR || (isShift && vkCode == 'N')) {
+      st->romaji.feedChar(',');
+    } else if (vkCode == VK_NEXT || (isShift && vkCode == 'M')) {
+      st->romaji.feedChar('.');
+    } else if (vkCode >= 'A' && vkCode <= 'Z') {
+      if (st->romaji.romLen == 0 && st->romaji.kanaLen == 1 &&
+          (st->romaji.kana[0] == L'、' || st->romaji.kana[0] == L'。')) {
+        commitEditorRawPreedit(st);
+      }
       st->romaji.feedChar(static_cast<char>(vkCode - 'A' + 'a'));
     } else if (vkCode == VK_OEM_MINUS) {
       st->romaji.feedChar('-');
@@ -1473,6 +1481,10 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     } else if (vkCode == VK_OEM_6) {
       st->romaji.feedChar(']');
     } else if (vkCode >= '0' && vkCode <= '9') {
+      if (st->romaji.romLen == 0 && st->romaji.kanaLen == 1 &&
+          (st->romaji.kana[0] == L'、' || st->romaji.kana[0] == L'。')) {
+        commitEditorRawPreedit(st);
+      }
       st->romaji.feedChar(static_cast<char>(vkCode));
     }
   } else if (st->inputMode == 1 || st->inputMode == 2) {
@@ -1485,9 +1497,9 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
       insertEditorText(st, ch);
     } else if (vkCode == VK_OEM_MINUS) {
       insertEditorText(st, isShift ? L"_" : L"-");
-    } else if (vkCode == VK_OEM_PERIOD) {
+    } else if (vkCode == VK_OEM_PERIOD || vkCode == VK_NEXT) {
       insertEditorText(st, L".");
-    } else if (vkCode == VK_OEM_COMMA) {
+    } else if (vkCode == VK_OEM_COMMA || vkCode == VK_PRIOR) {
       insertEditorText(st, L",");
     } else if (vkCode == VK_OEM_2) {
       insertEditorText(st, isShift ? L"?" : L"/");
@@ -1549,18 +1561,29 @@ static void onClick(int x, int y, void * userData) {
       return;
     }
     if (y >= 396 && y < 428 && !st->converting) {
-      static constexpr const wchar_t * kSnippets[8] = {
+      static constexpr const wchar_t * kSnippetsIme[8] = {
+        nullptr, nullptr, nullptr, L"# ", L"- ", L"* ", L"> ", L"- [ ] "
+      };
+      static constexpr const wchar_t * kSnippetsOther[8] = {
         nullptr, L"# ", L"- ", L"* ", L"`", L"> ", L"- [ ] ", L"---"
       };
       for (int b = 0; b < 8; ++b) {
         int bx = 18 + b * 76;
         if (x >= bx && x < bx + 70) {
-          if (b == 0) onKeyDown(VK_F2, false, userData);
-          else {
-            if (st->romaji.hasContent()) commitEditorRawPreedit(st);
-            insertEditorText(st, kSnippets[b]);
+          if (b == 0) {
+            onKeyDown(VK_F2, false, userData);
+          } else if (st->inputMode == 0 && (b == 1 || b == 2)) {
+            st->romaji.feedChar((b == 1) ? ',' : '.');
             st->editDirtyFlags |= EditorState::kEditDirtyCurRow;
             st->window.requestRepaint(false);
+          } else {
+            const wchar_t * snip = (st->inputMode == 0) ? kSnippetsIme[b] : kSnippetsOther[b];
+            if (snip) {
+              if (st->romaji.hasContent()) commitEditorRawPreedit(st);
+              insertEditorText(st, snip);
+              st->editDirtyFlags |= EditorState::kEditDirtyCurRow;
+              st->window.requestRepaint(false);
+            }
           }
           return;
         }

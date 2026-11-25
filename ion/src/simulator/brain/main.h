@@ -15,8 +15,10 @@ void restoreTaskBar();
 void quit();
 
 bool isLaunchedFromLauncher();
+bool isDirectCalcLaunchArg();
 bool resolveRootFilePath(const wchar_t * filename, wchar_t * outPath, size_t maxLen);
 int readSettingInt(const char * key, int defaultVal);
+bool writeSettingInt(const char * section, const char * key, int value);
 
 bool restoreBrainState();
 void saveBrainState();

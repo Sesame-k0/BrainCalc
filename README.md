@@ -24,7 +24,7 @@ NumWorks / [Upsilon](https://github.com/UpsilonNumworks/Upsilon)（[Epsilon](htt
 | **Lilium TaskMgr** | `apps/LiliumTaskMgr.exe` | プロセス一覧・ウィンドウ一覧・RAM 推移グラフ、Brain 内蔵辞書シェルの安全なメモリ解放・再起動 |
 | **Lilium Clock** | `apps/LiliumClock.exe` | デジタル時計、ストップウォッチ、カウントダウンタイマー |
 | **Lilium Life** | `apps/LiliumLife.exe` | Conway's Life / Brian's Brain / Langton's Ant 等を内蔵したセルオートマトン＆スクリーンセーバー |
-| **Lilium Setting** | `apps/LiliumSetting.exe` | Brain 本体の画面輝度・自動電源OFF・開閉センサー・ランチャー並び順＆表示切替・各アプリ初期値・ログ一括管理（`lilium_settings.cfg`）・バージョン情報 |
+| **Lilium Setting** | `apps/LiliumSetting.exe` | Brain 本体の画面輝度・自動電源OFF・開閉センサー・電卓直起動（ランチャー省略＆終了時辞書直戻）・ランチャー並び順＆表示切替・各アプリ初期値・ログ一括管理（`lilium_settings.cfg`）・バージョン情報 |
 | **Lilium DOOM** | `apps/doom.exe` + `apps/freedoom1.zwad` | doomgeneric + 音声省略・Episode 1 軽量化 ZWAD によるサイレント DOOM |
 | **Lilium IME** | `apps/LiliumIME.exe` + `apps/lilium_ime.dic` | 常駐型ローマ字漢字変換デーモン。非圧縮インメモリバイナリ辞書（LIME v2、約 920 KB / 51,000 ペア）により即時変換を実現し、共有メモリ IPC および外部アプリ用フローティングオーバーレイを提供 |
 
@@ -96,6 +96,7 @@ Lilium/
 | キー | 動作 |
 |---|---|
 | `[F2]` | 入力モード切替: `あ (IME)` / `abc` / `ABC` / `12x` |
+| `[>>↑]` / `[>>↓]`（または `[Shift]+N` / `[Shift]+M`） | `あ`/`12x`: `、` / `。` 入力（`、` / `。` 単体に `[Space]` 1回で `,` / `.` へ変換） |
 | `[Space]` | 漢字変換・次候補 |
 | `[1-8]` / `[←→]` | 候補確定 / 候補移動 |
 | `[F7]` | カタカナ変換・確定 |

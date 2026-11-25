@@ -328,6 +328,7 @@ static void flushUserHistoryIfDirty(ImeDaemonState * st) {
 
 static void recordUserChoice(ImeDaemonState * st, const wchar_t * reading, const wchar_t * surface) {
   if (!reading || !reading[0] || !surface || !surface[0]) return;
+  if (wcscmp(reading, L"、") == 0 || wcscmp(reading, L"。") == 0) return;
   for (int i = 0; i < st->userLearnCount; ++i) {
     if (wcscmp(st->userLearn[i].reading, reading) == 0 &&
         wcscmp(st->userLearn[i].surface, surface) == 0) {
@@ -356,6 +357,21 @@ static int queryDictWithClause(ImeDaemonState * st, const wchar_t * reading,
   int rLen = static_cast<int>(wcslen(reading));
   outSegLen = rLen;
   if (rLen <= 0) return 0;
+
+  if (wcscmp(reading, L"、") == 0) {
+    appendUniqueCand(outCands, cnt, LiliumIME::kMaxCands, L",");
+    appendUniqueCand(outCands, cnt, LiliumIME::kMaxCands, L"、");
+    appendUniqueCand(outCands, cnt, LiliumIME::kMaxCands, L"，");
+    outSegLen = 1;
+    return cnt;
+  }
+  if (wcscmp(reading, L"。") == 0) {
+    appendUniqueCand(outCands, cnt, LiliumIME::kMaxCands, L".");
+    appendUniqueCand(outCands, cnt, LiliumIME::kMaxCands, L"。");
+    appendUniqueCand(outCands, cnt, LiliumIME::kMaxCands, L"．");
+    outSegLen = 1;
+    return cnt;
+  }
 
   // 1. User learned top hits for full reading
   for (int i = 0; i < st->userLearnCount; ++i) {
@@ -899,17 +915,42 @@ static LRESULT CALLBACK overlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
         st->converting = false;
         st->candCount = 0;
       } else if (st->inputMode == 0) {
-        if (wParam >= 'A' && wParam <= 'Z') {
+        bool isShift = ((GetKeyState(VK_SHIFT) & 0x8000) != 0 ||
+                        (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
+#ifdef _WIN32_WCE
+        if ((GetKeyState(VK_CAPITAL) & 0x8000) != 0 ||
+            (GetAsyncKeyState(VK_CAPITAL) & 0x8000) != 0) {
+          isShift = true;
+        }
+#endif
+        if (wParam == VK_PRIOR || (isShift && wParam == 'N')) {
           if (st->converting) overlayCommitCurrentSeg(st);
+          st->romaji.feedChar(',');
+        } else if (wParam == VK_NEXT || (isShift && wParam == 'M')) {
+          if (st->converting) overlayCommitCurrentSeg(st);
+          st->romaji.feedChar('.');
+        } else if (wParam >= 'A' && wParam <= 'Z') {
+          if (st->converting) overlayCommitCurrentSeg(st);
+          else if (st->romaji.romLen == 0 && st->romaji.kanaLen == 1 &&
+                   (st->romaji.kana[0] == L'、' || st->romaji.kana[0] == L'。')) {
+            overlayCommitCurrentSeg(st);
+          }
           st->romaji.feedChar(static_cast<char>(wParam - 'A' + 'a'));
         } else if (wParam >= '0' && wParam <= '9') {
           if (st->converting) overlayCommitCurrentSeg(st);
+          else if (st->romaji.romLen == 0 && st->romaji.kanaLen == 1 &&
+                   (st->romaji.kana[0] == L'、' || st->romaji.kana[0] == L'。')) {
+            overlayCommitCurrentSeg(st);
+          }
           st->romaji.feedChar(static_cast<char>(wParam));
         } else if (wParam == VK_OEM_MINUS) {
+          if (st->converting) overlayCommitCurrentSeg(st);
           st->romaji.feedChar('-');
         } else if (wParam == VK_OEM_PERIOD) {
+          if (st->converting) overlayCommitCurrentSeg(st);
           st->romaji.feedChar('.');
         } else if (wParam == VK_OEM_COMMA) {
+          if (st->converting) overlayCommitCurrentSeg(st);
           st->romaji.feedChar(',');
         }
       } else {
@@ -918,6 +959,10 @@ static LRESULT CALLBACK overlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
           ch = static_cast<wchar_t>((st->inputMode == 2) ? wParam : (wParam - 'A' + 'a'));
         } else if (wParam >= '0' && wParam <= '9') {
           ch = static_cast<wchar_t>(wParam);
+        } else if (wParam == VK_PRIOR) {
+          ch = L',';
+        } else if (wParam == VK_NEXT) {
+          ch = L'.';
         }
         if (ch) {
           size_t l = wcslen(st->compBuf);

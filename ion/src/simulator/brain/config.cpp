@@ -90,6 +90,8 @@ static_assert(kActionCount <= 64, "LiliumConfigData::keys[64] capacity exceeded"
 
 static bool sHelpEnabled = true;
 static bool sLogEnabled = (LILIUM_DEBUG_LOG_DEFAULT_ON != 0);
+static bool sDirectCalcBoot = false;
+static bool sIniDirty = false;
 
 #pragma pack(push, 1)
 struct LiliumConfigData {
@@ -109,7 +111,10 @@ static void resolveConfigFilePath(wchar_t * outPath, size_t maxLen) {
 
 void init() {
   resetKeyMappingsToDefault();
+  BrainLogSetEnabled(Main::readSettingInt("log_enabled", LILIUM_DEBUG_LOG_DEFAULT_ON) != 0);
   sLogEnabled = (BrainLogIsEnabled() != 0);
+  sDirectCalcBoot = (Main::readSettingInt("direct_calc_boot", 0) != 0);
+  sIniDirty = false;
 
   wchar_t configPath[MAX_PATH] = L"";
   resolveConfigFilePath(configPath, MAX_PATH);
@@ -205,6 +210,12 @@ void save() {
   } else {
     BrainLog("Config::save: CreateFileW failed");
   }
+
+  if (sIniDirty) {
+    Main::writeSettingInt("general", "direct_calc_boot", sDirectCalcBoot ? 1 : 0);
+    Main::writeSettingInt("general", "log_enabled", sLogEnabled ? 1 : 0);
+    sIniDirty = false;
+  }
 }
 
 bool isHelpEnabled() {
@@ -221,7 +232,17 @@ bool isLogEnabled() {
 
 void setLogEnabled(bool enabled) {
   sLogEnabled = enabled;
+  sIniDirty = true;
   BrainLogSetEnabled(enabled);
+}
+
+bool isDirectCalcBootEnabled() {
+  return sDirectCalcBoot;
+}
+
+void setDirectCalcBootEnabled(bool enabled) {
+  sDirectCalcBoot = enabled;
+  sIniDirty = true;
 }
 
 int getActionCount() {

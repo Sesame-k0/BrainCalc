@@ -155,6 +155,11 @@ bool isLaunchedFromLauncher() {
   return false;
 }
 
+bool isDirectCalcLaunchArg() {
+  const wchar_t * cmd = GetCommandLineW();
+  return (cmd && wcsstr(cmd, L"--direct-calc") != nullptr);
+}
+
 bool resolveRootFilePath(const wchar_t * filename, wchar_t * outPath, size_t maxLen) {
   if (!filename || !outPath || maxLen == 0) return false;
   wchar_t exeDir[MAX_PATH] = L"";
@@ -493,6 +498,127 @@ int readSettingInt(const char * key, int defaultVal) {
   }
   fclose(fp);
   return result;
+}
+
+bool writeSettingInt(const char * section, const char * key, int value) {
+  if (!key || !key[0]) return false;
+  wchar_t cfgPath[MAX_PATH] = L"";
+  if (!resolveRootFilePath(L"lilium_settings.cfg", cfgPath, MAX_PATH)) return false;
+
+  char * orig = nullptr;
+  long origSize = 0;
+  FILE * rf = _wfopen(cfgPath, L"rb");
+  if (rf) {
+    fseek(rf, 0, SEEK_END);
+    origSize = ftell(rf);
+    if (origSize < 0) origSize = 0;
+    if (origSize > 65536) origSize = 65536;
+    fseek(rf, 0, SEEK_SET);
+    orig = static_cast<char *>(malloc(static_cast<size_t>(origSize) + 2));
+    if (orig) {
+      size_t got = fread(orig, 1, static_cast<size_t>(origSize), rf);
+      orig[got] = '\0';
+      origSize = static_cast<long>(got);
+    }
+    fclose(rf);
+  }
+
+  FILE * wf = _wfopen(cfgPath, L"wb");
+  if (!wf) {
+    free(orig);
+    return false;
+  }
+
+  const size_t keyLen = strlen(key);
+  char secHeader[64] = "";
+  if (section && section[0]) {
+    snprintf(secHeader, sizeof(secHeader), "[%s]", section);
+  }
+
+  bool replacedKey = false;
+  bool insertedInSec = false;
+
+  if (orig && origSize > 0) {
+    long pos = 0;
+    if (origSize >= 3 &&
+        static_cast<unsigned char>(orig[0]) == 0xEF &&
+        static_cast<unsigned char>(orig[1]) == 0xBB &&
+        static_cast<unsigned char>(orig[2]) == 0xBF) {
+      pos = 3;
+    }
+    while (pos < origSize) {
+      long lineStart = pos;
+      while (pos < origSize && orig[pos] != '\n') ++pos;
+      long lineEnd = pos;
+      if (pos < origSize && orig[pos] == '\n') ++pos;
+
+      long trimEnd = lineEnd;
+      while (trimEnd > lineStart && (orig[trimEnd - 1] == '\r' || orig[trimEnd - 1] == ' ' || orig[trimEnd - 1] == '\t')) {
+        --trimEnd;
+      }
+      long trimStart = lineStart;
+      while (trimStart < trimEnd && (orig[trimStart] == ' ' || orig[trimStart] == '\t')) {
+        ++trimStart;
+      }
+
+      long tLen = trimEnd - trimStart;
+      bool matchesKey = false;
+      if (!replacedKey && tLen > static_cast<long>(keyLen) &&
+          strncmp(orig + trimStart, key, keyLen) == 0) {
+        long eqPos = trimStart + static_cast<long>(keyLen);
+        while (eqPos < trimEnd && (orig[eqPos] == ' ' || orig[eqPos] == '\t')) ++eqPos;
+        if (eqPos < trimEnd && orig[eqPos] == '=') {
+          matchesKey = true;
+        }
+      }
+
+      if (matchesKey) {
+        fprintf(wf, "%s=%d\n", key, value);
+        replacedKey = true;
+      } else {
+        fwrite(orig + lineStart, 1, static_cast<size_t>(lineEnd - lineStart), wf);
+        fputc('\n', wf);
+
+        if (!replacedKey && !insertedInSec && secHeader[0]) {
+          // Check if this line was the target [section] header AND key isn't already below
+          if (tLen == static_cast<long>(strlen(secHeader)) &&
+              strncmp(orig + trimStart, secHeader, static_cast<size_t>(tLen)) == 0) {
+            // Look ahead to see if key= exists later in file before blindly inserting
+            bool existsLater = false;
+            long scan = pos;
+            while (scan < origSize) {
+              long ls = scan;
+              while (scan < origSize && orig[scan] != '\n') ++scan;
+              long le = scan;
+              if (scan < origSize && orig[scan] == '\n') ++scan;
+              while (ls < le && (orig[ls] == ' ' || orig[ls] == '\t')) ++ls;
+              if (le - ls > static_cast<long>(keyLen) &&
+                  strncmp(orig + ls, key, keyLen) == 0) {
+                long ep = ls + static_cast<long>(keyLen);
+                while (ep < le && (orig[ep] == ' ' || orig[ep] == '\t')) ++ep;
+                if (ep < le && orig[ep] == '=') { existsLater = true; break; }
+              }
+            }
+            if (!existsLater) {
+              fprintf(wf, "%s=%d\n", key, value);
+              insertedInSec = true;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!replacedKey && !insertedInSec) {
+    if (secHeader[0]) {
+      fprintf(wf, "%s\n", secHeader);
+    }
+    fprintf(wf, "%s=%d\n", key, value);
+  }
+
+  fclose(wf);
+  free(orig);
+  return true;
 }
 
 void init() {

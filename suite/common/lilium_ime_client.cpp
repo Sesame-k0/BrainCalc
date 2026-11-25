@@ -384,6 +384,22 @@ int ImeClient::queryCandidates(const wchar_t * reading, wchar_t outCands[kMaxCan
     }
   }
 
+  // Offline / standalone fallback
+  if (wcscmp(reading, L"、") == 0) {
+    wcsncpy(outCands[0], L",", kMaxCandChars - 1);
+    wcsncpy(outCands[1], L"、", kMaxCandChars - 1);
+    wcsncpy(outCands[2], L"，", kMaxCandChars - 1);
+    outSegLen = 1;
+    return 3;
+  }
+  if (wcscmp(reading, L"。") == 0) {
+    wcsncpy(outCands[0], L".", kMaxCandChars - 1);
+    wcsncpy(outCands[1], L"。", kMaxCandChars - 1);
+    wcsncpy(outCands[2], L"．", kMaxCandChars - 1);
+    outSegLen = 1;
+    return 3;
+  }
+
   // Fallback if daemon unavailable: Hiragana + Katakana
   wcsncpy(outCands[0], reading, kMaxCandChars - 1);
   outCands[0][kMaxCandChars - 1] = L'\0';
@@ -610,6 +626,8 @@ wchar_t TextInputModal::map12xSymbol(WPARAM vkCode) const {
     case VK_OEM_4: return L'[';
     case VK_OEM_6: return L']';
     case VK_OEM_1: return L':';
+    case VK_PRIOR: return L'、';
+    case VK_NEXT: return L'。';
     default: return L'\0';
   }
 }
@@ -806,7 +824,11 @@ bool TextInputModal::handleKey(WPARAM vkCode, bool isShift, bool & outConfirmed,
   }
 
   if (vkCode == VK_F4) {
-    cancelPreeditOrConv();
+    m_converting = false;
+    m_candCount = 0;
+    m_candSel = 0;
+    m_candPageStart = 0;
+    m_romaji.reset();
     m_buf[0] = L'\0';
     m_cursor = 0;
     return true;
@@ -907,7 +929,19 @@ bool TextInputModal::handleKey(WPARAM vkCode, bool isShift, bool & outConfirmed,
   }
 
   if (m_inputMode == 0) {
+    if (vkCode == VK_PRIOR || (isShift && vkCode == 'N')) {
+      m_romaji.feedChar(',');
+      return true;
+    }
+    if (vkCode == VK_NEXT || (isShift && vkCode == 'M')) {
+      m_romaji.feedChar('.');
+      return true;
+    }
     if (vkCode >= 'A' && vkCode <= 'Z') {
+      if (m_romaji.romLen == 0 && m_romaji.kanaLen == 1 &&
+          (m_romaji.kana[0] == L'、' || m_romaji.kana[0] == L'。')) {
+        commitRawPreedit();
+      }
       m_romaji.feedChar(static_cast<char>(vkCode - 'A' + 'a'));
       return true;
     }
@@ -917,6 +951,10 @@ bool TextInputModal::handleKey(WPARAM vkCode, bool isShift, bool & outConfirmed,
     if (vkCode == VK_OEM_4) { m_romaji.feedChar('['); return true; }
     if (vkCode == VK_OEM_6) { m_romaji.feedChar(']'); return true; }
     if (vkCode >= '0' && vkCode <= '9') {
+      if (m_romaji.romLen == 0 && m_romaji.kanaLen == 1 &&
+          (m_romaji.kana[0] == L'、' || m_romaji.kana[0] == L'。')) {
+        commitRawPreedit();
+      }
       m_romaji.feedChar(static_cast<char>(vkCode));
       return true;
     }
@@ -939,8 +977,8 @@ bool TextInputModal::handleKey(WPARAM vkCode, bool isShift, bool & outConfirmed,
       return true;
     }
     if (vkCode == VK_OEM_MINUS) { insertStrAtCursor(isShift ? L"_" : L"-"); return true; }
-    if (vkCode == VK_OEM_PERIOD) { insertStrAtCursor(L"."); return true; }
-    if (vkCode == VK_OEM_COMMA) { insertStrAtCursor(L","); return true; }
+    if (vkCode == VK_OEM_PERIOD || vkCode == VK_NEXT) { insertStrAtCursor(L"."); return true; }
+    if (vkCode == VK_OEM_COMMA || vkCode == VK_PRIOR) { insertStrAtCursor(L","); return true; }
     if (vkCode == VK_OEM_2) { insertStrAtCursor(isShift ? L"?" : L"/"); return true; }
     return true;
   }

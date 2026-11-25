@@ -22,6 +22,7 @@ static constexpr int kMaxApps = 64;
 struct Config {
   bool logEnabled = false;       // [general] log_enabled (0/1, default 0)
   bool restoreHwOnExit = true;   // [general] restore_hw_on_exit (0/1, default 1)
+  bool directCalcBoot = false;   // [general] direct_calc_boot (0/1, default 0)
   int brightnessLevel = 0;       // [hardware] brightness_level (0=Brain標準, 1..5)
   bool backlightDimOff = false;  // [hardware] backlight_dim_off (0/1, default 0)
   int powerOffSec = -1;          // [hardware] power_off_sec (-1=Brain標準, 0=無効, 60,180,300,600,1800)

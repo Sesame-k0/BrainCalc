@@ -734,15 +734,15 @@ static constexpr int kBtnExitH = 42;
 static int sExitConfirmFocus = 0; // 0: 終了する, 1: 設定, 2: キャンセル
 static int sLastExitConfirmFocus = -1;
 
-// B. 設定メインダイアログ (640x444, 5項目 + 下部ボタン)
+// B. 設定メインダイアログ (640x444, 6項目 + 下部ボタン)
 static constexpr int kSettingsDialogW = 640;
 static constexpr int kSettingsDialogH = 444;
 static constexpr int kSettingsDialogX = (kBrainScreenWidth - kSettingsDialogW) / 2;  // 80
 static constexpr int kSettingsDialogY = (kBrainScreenHeight - kSettingsDialogH) / 2; // 18
-static constexpr int kSettingsRowCount = 5;
-static constexpr int kSettingsRowH = 48;
+static constexpr int kSettingsRowCount = 6;
+static constexpr int kSettingsRowH = 44;
 
-static int sSettingsFocus = 0;    // 0: ヘルプ, 1: ログ, 2: キー変更, 3: リセット, 4: LLCubicガイド, 5: 下部ボタン
+static int sSettingsFocus = 0;    // 0: ヘルプ, 1: ログ, 2: 電卓直起動, 3: キー変更, 4: リセット, 5: 総合ガイド, 6: 下部ボタン
 static int sSettingsSubFocus = 0; // 0: 完了して保存, 1: キャンセル
 static int sLastSettingsFocus = -1;
 static int sLastSettingsSubFocus = -1;
@@ -844,15 +844,20 @@ static void renderExitConfirmBase(HDC hdc) {
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
   // 4. メッセージ文
+  const wchar_t * exitLine1 = L"Lilium を終了してホーム画面に戻りますか？";
+  const wchar_t * exitLine2 = L"設定画面を開くこともできます。";
+  if (Main::isDirectCalcLaunchArg() && Config::isDirectCalcBootEnabled()) {
+    exitLine1 = L"Lilium Calc を終了して電子辞書に戻りますか？";
+    exitLine2 = L"「設定」で直接起動をOFFにするとランチャーへ戻れます。";
+  } else if (Main::isLaunchedFromLauncher()) {
+    exitLine1 = L"Lilium Calc を終了してランチャーに戻りますか？";
+  }
   drawTextLine(hdc, kExitDialogX, kExitDialogY + 52, kExitDialogW, 20,
-               RGB(42, 50, 60),
-               Main::isLaunchedFromLauncher()
-                 ? L"Lilium Calc を終了してランチャーに戻りますか？"
-                 : L"Lilium を終了してホーム画面に戻りますか？",
+               RGB(42, 50, 60), exitLine1,
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   SelectObject(hdc, sUiFontSmall);
   drawTextLine(hdc, kExitDialogX, kExitDialogY + 76, kExitDialogW, 20,
-               RGB(70, 80, 92), L"設定画面を開くこともできます。",
+               RGB(70, 80, 92), exitLine2,
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
   // 5. ボタン群 (3ボタン: 全て非選択ベース状態で描画)
@@ -905,77 +910,95 @@ static void renderExitConfirmDialog(HDC hdc) {
 }
 
 static constexpr int kSettingsRowY[kSettingsRowCount] = {
-  kSettingsDialogY + 48,
-  kSettingsDialogY + 102,
-  kSettingsDialogY + 156,
-  kSettingsDialogY + 210,
-  kSettingsDialogY + 264
+  kSettingsDialogY + 42,
+  kSettingsDialogY + 91,
+  kSettingsDialogY + 140,
+  kSettingsDialogY + 189,
+  kSettingsDialogY + 238,
+  kSettingsDialogY + 287
 };
-static constexpr int kSettingsBtnY = kSettingsDialogY + 332;
+static constexpr int kSettingsBtnY = kSettingsDialogY + 344;
 
 static void renderSettingsRowContent(HDC hdc, int r) {
   int ry = kSettingsRowY[r];
   if (r == 0) {
     SelectObject(hdc, sUiFontBold);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 5, 320, 20, RGB(30, 40, 50), L"■ 日本語ヘルプ表示");
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 4, 340, 18, RGB(30, 40, 50), L"■ 日本語ヘルプ表示");
     SelectObject(hdc, sUiFontTiny);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 28, 420, 15, RGB(90, 100, 110),
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 23, 412, 15, RGB(90, 100, 110),
                  L"右側サイドバーに現在選択中の項目の日本語解説を表示します");
     SelectObject(hdc, sUiFontBold);
     if (Config::isHelpEnabled()) {
-      drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(226, 245, 242), RGB(79, 191, 175));
-      drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(22, 116, 104),
+      drawBox(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(226, 245, 242), RGB(79, 191, 175));
+      drawTextLine(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(22, 116, 104),
                    L"【 有効 (ON) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     } else {
-      drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(242, 244, 247), RGB(200, 208, 216));
-      drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(110, 120, 130),
+      drawBox(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(242, 244, 247), RGB(200, 208, 216));
+      drawTextLine(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(110, 120, 130),
                    L"【 無効 (OFF) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
   } else if (r == 1) {
     SelectObject(hdc, sUiFontBold);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 5, 320, 20, RGB(30, 40, 50), L"■ デバッグログ出力");
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 4, 340, 18, RGB(30, 40, 50), L"■ デバッグログ出力");
     SelectObject(hdc, sUiFontTiny);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 28, 420, 15, RGB(90, 100, 110),
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 23, 412, 15, RGB(90, 100, 110),
                  L"lilium_debug.log を出力します（通常はOFF推奨）");
     SelectObject(hdc, sUiFontBold);
     if (Config::isLogEnabled()) {
-      drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(255, 236, 234), RGB(220, 70, 55));
-      drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(190, 50, 40),
+      drawBox(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(255, 236, 234), RGB(220, 70, 55));
+      drawTextLine(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(190, 50, 40),
                    L"【 ON (記録中) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     } else {
-      drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(226, 245, 242), RGB(79, 191, 175));
-      drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(22, 116, 104),
+      drawBox(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(226, 245, 242), RGB(79, 191, 175));
+      drawTextLine(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(22, 116, 104),
                    L"【 OFF (高速) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
   } else if (r == 2) {
     SelectObject(hdc, sUiFontBold);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 5, 340, 20, RGB(30, 40, 50), L"■ キー配置の変更 (キーリマップ)");
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 4, 410, 18, RGB(30, 40, 50),
+                 L"■ 起動時すぐ電卓を開く (ランチャー省略)");
     SelectObject(hdc, sUiFontTiny);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 28, 420, 15, RGB(90, 100, 110),
-                 L"数字入力モード(12x)時の各物理キーへの電卓機能の割り当てを変更します");
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 23, 412, 15, RGB(90, 100, 110),
+                 L"ON: 起動直後に電卓へ飛び終了時辞書へ戻る / OFFでランチャー復帰");
     SelectObject(hdc, sUiFontBold);
-    drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(242, 248, 247), RGB(160, 205, 198));
-    drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(25, 95, 88),
-                 L"設定を開く ＞", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    if (Config::isDirectCalcBootEnabled()) {
+      drawBox(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(226, 245, 242), RGB(79, 191, 175));
+      drawTextLine(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(22, 116, 104),
+                   L"【 ON (直起動) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    } else {
+      drawBox(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(242, 244, 247), RGB(200, 208, 216));
+      drawTextLine(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(110, 120, 130),
+                   L"【 OFF (標準) 】", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    }
   } else if (r == 3) {
     SelectObject(hdc, sUiFontBold);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 5, 320, 20, RGB(30, 40, 50), L"■ キー設定のリセット");
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 4, 340, 18, RGB(30, 40, 50), L"■ キー配置の変更 (キーリマップ)");
     SelectObject(hdc, sUiFontTiny);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 28, 420, 15, RGB(90, 100, 110),
-                 L"キー配置の割り当てをすべて初期設定（デフォルト）に戻します");
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 23, 412, 15, RGB(90, 100, 110),
+                 L"数字入力モード(12x)時の各物理キーへの電卓機能の割り当てを変更します");
     SelectObject(hdc, sUiFontBold);
-    drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(255, 245, 244), RGB(220, 180, 175));
-    drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(180, 60, 50),
-                 L"デフォルトに戻す", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    drawBox(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(242, 248, 247), RGB(160, 205, 198));
+    drawTextLine(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(25, 95, 88),
+                 L"設定を開く ＞", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   } else if (r == 4) {
     SelectObject(hdc, sUiFontBold);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 5, 360, 20, RGB(30, 40, 50), L"■ Lilium 総合マニュアル (3D/言語ガイド)");
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 4, 340, 18, RGB(30, 40, 50), L"■ キー設定のリセット");
     SelectObject(hdc, sUiFontTiny);
-    drawTextLine(hdc, kSettingsDialogX + 32, ry + 28, 420, 15, RGB(90, 100, 110),
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 23, 412, 15, RGB(90, 100, 110),
+                 L"キー配置の割り当てをすべて初期設定（デフォルト）に戻します");
+    SelectObject(hdc, sUiFontBold);
+    drawBox(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(255, 245, 244), RGB(220, 180, 175));
+    drawTextLine(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(180, 60, 50),
+                 L"デフォルトに戻す", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  } else if (r == 5) {
+    SelectObject(hdc, sUiFontBold);
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 4, 380, 18, RGB(30, 40, 50), L"■ Lilium 総合マニュアル (3D/言語ガイド)");
+    SelectObject(hdc, sUiFontTiny);
+    drawTextLine(hdc, kSettingsDialogX + 32, ry + 23, 412, 15, RGB(90, 100, 110),
                  L"3Dグラフ、Python、BASIC、Logoの構文・関数・例文を表示します");
     SelectObject(hdc, sUiFontBold);
-    drawBox(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(232, 246, 244), RGB(79, 191, 175));
-    drawTextLine(hdc, kSettingsDialogX + 460, ry + 7, 145, 34, RGB(20, 108, 96),
+    drawBox(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(232, 246, 244), RGB(79, 191, 175));
+    drawTextLine(hdc, kSettingsDialogX + 450, ry + 5, 155, 34, RGB(20, 108, 96),
                  L"ガイドを開く ＞", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   }
 }
@@ -1019,7 +1042,7 @@ static void renderSettingsMainBase(HDC hdc) {
 
   // 6. ガイド
   SelectObject(hdc, sUiFontTiny);
-  drawTextLine(hdc, kSettingsDialogX, kSettingsDialogY + 394, kSettingsDialogW, 18,
+  drawTextLine(hdc, kSettingsDialogX, kSettingsDialogY + 398, kSettingsDialogW, 18,
                RGB(125, 135, 148), L"[↑/↓]:項目選択   [←/→/Enter]:変更・実行   [Esc/戻る]:閉じる",
                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
@@ -2715,6 +2738,10 @@ bool handleModalKey(WPARAM vkCode) {
             Config::setLogEnabled(!Config::isLogEnabled());
             sBackdropValid = false;
             refreshModal();
+          } else if (sSettingsFocus == 2) {
+            Config::setDirectCalcBootEnabled(!Config::isDirectCalcBootEnabled());
+            sBackdropValid = false;
+            refreshModal();
           } else if (sSettingsFocus == kSettingsRowCount) {
             sSettingsSubFocus = 1 - sSettingsSubFocus;
             if (!hasPendingNavKey()) {
@@ -2732,14 +2759,18 @@ bool handleModalKey(WPARAM vkCode) {
             sBackdropValid = false;
             refreshModal();
           } else if (sSettingsFocus == 2) {
-            openKeyConfigModal();
+            Config::setDirectCalcBootEnabled(!Config::isDirectCalcBootEnabled());
+            sBackdropValid = false;
+            refreshModal();
           } else if (sSettingsFocus == 3) {
+            openKeyConfigModal();
+          } else if (sSettingsFocus == 4) {
             sPreviousModalMode = ModalMode::SettingsMain;
             sModalMode = ModalMode::ResetKeyConfirm;
             sResetConfirmFocus = 0;
             sBackdropValid = false;
             refreshModal();
-          } else if (sSettingsFocus == 4) {
+          } else if (sSettingsFocus == 5) {
             openLLCubicGuideModal();
           } else if (sSettingsFocus == kSettingsRowCount) {
             if (sSettingsSubFocus == 0) {
@@ -3114,14 +3145,18 @@ bool handleModalClick(int x, int y) {
             sBackdropValid = false;
             refreshModal();
           } else if (r == 2) {
-            openKeyConfigModal();
+            Config::setDirectCalcBootEnabled(!Config::isDirectCalcBootEnabled());
+            sBackdropValid = false;
+            refreshModal();
           } else if (r == 3) {
+            openKeyConfigModal();
+          } else if (r == 4) {
             sPreviousModalMode = ModalMode::SettingsMain;
             sModalMode = ModalMode::ResetKeyConfirm;
             sResetConfirmFocus = 0;
             sBackdropValid = false;
             refreshModal();
-          } else if (r == 4) {
+          } else if (r == 5) {
             openLLCubicGuideModal();
           }
           return true;

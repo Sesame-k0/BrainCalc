@@ -122,6 +122,10 @@ void setHelpEnabled(bool enabled);
 bool isLogEnabled();
 void setLogEnabled(bool enabled);
 
+// 起動時すぐ電卓を開く (ランチャー省略・終了時辞書直戻)
+bool isDirectCalcBootEnabled();
+void setDirectCalcBootEnabled(bool enabled);
+
 // キー割り当て関連
 int getActionCount();
 const ActionInfo & getActionInfo(int index);

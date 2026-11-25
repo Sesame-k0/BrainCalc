@@ -541,6 +541,7 @@ void getSuiteLogPath(wchar_t * outPath, size_t maxLen) {
 void setDefaults(Config & cfg) {
   cfg.logEnabled = false;
   cfg.restoreHwOnExit = true;
+  cfg.directCalcBoot = false;
   cfg.brightnessLevel = 0;
   cfg.backlightDimOff = false;
   cfg.powerOffSec = -1;
@@ -662,6 +663,8 @@ bool load(Config & cfg) {
       cfg.logEnabled = (iv != 0);
     } else if (strcmp(p, "restore_hw_on_exit") == 0) {
       cfg.restoreHwOnExit = (iv != 0);
+    } else if (strcmp(p, "direct_calc_boot") == 0) {
+      cfg.directCalcBoot = (iv != 0);
     } else if (strcmp(p, "brightness_level") == 0) {
       cfg.brightnessLevel = clampInt(iv, 0, 5);
     } else if (strcmp(p, "backlight_dim_off") == 0) {
@@ -698,7 +701,8 @@ bool save(const Config & cfg) {
 
   fprintf(fp, "[general]\n");
   fprintf(fp, "log_enabled=%d\n", cfg.logEnabled ? 1 : 0);
-  fprintf(fp, "restore_hw_on_exit=%d\n\n", cfg.restoreHwOnExit ? 1 : 0);
+  fprintf(fp, "restore_hw_on_exit=%d\n", cfg.restoreHwOnExit ? 1 : 0);
+  fprintf(fp, "direct_calc_boot=%d\n\n", cfg.directCalcBoot ? 1 : 0);
 
   fprintf(fp, "[hardware]\n");
   fprintf(fp, "brightness_level=%d\n", clampInt(cfg.brightnessLevel, 0, 5));

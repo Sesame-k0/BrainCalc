@@ -10,7 +10,7 @@
 namespace {
 
 static constexpr int kTabCount = 5;
-static constexpr int kHwItemCount = 5;
+static constexpr int kHwItemCount = 6;
 static constexpr int kAppsItemCount = 8;
 static constexpr int kLogItemCount = 3;
 static constexpr int kLauncherVisRows = 8;
@@ -273,6 +273,10 @@ static void cycleHwOption(SettingState * st, int row, int dir) {
     st->cfg.lidMode = (st->cfg.lidMode + 3 + dir) % 3;
   } else if (row == 4) {
     st->cfg.restoreHwOnExit = !st->cfg.restoreHwOnExit;
+  } else if (row == 5) {
+    st->cfg.directCalcBoot = !st->cfg.directCalcBoot;
+    persistAndApply(st, false, L"起動設定を保存");
+    return;
   }
   persistAndApply(st, true, L"本体設定を保存");
 }
@@ -363,8 +367,11 @@ static void getSidebarHelp(const SettingState * st, const wchar_t * & title,
       case 3:
         body = L"開閉センサー設定:\n・維持/消灯は閉じたままClock等を稼働できます。";
         break;
-      default:
+      case 4:
         body = L"ONにするとLauncher終了時に輝度・電源OFF・開閉動作を元へ戻します。";
+        break;
+      default:
+        body = L"ONにすると起動時すぐ電卓へ飛び、電卓終了で辞書へ戻ります。解除はCalc内「設定」でも可能です。";
         break;
     }
   } else if (st->tab == 1) {
@@ -435,7 +442,7 @@ static void renderOptionRow(LiliumUI::Canvas & c, int y, int h,
 }
 
 static void renderTabHardware(LiliumUI::Canvas & c, SettingState * st) {
-  wchar_t v0[48], v1[48], v2[48], v3[48], v4[48];
+  wchar_t v0[48], v1[48], v2[48], v3[48], v4[48], v5[48];
   formatBrightnessValue(st->cfg.brightnessLevel, v0, 48);
   wcsncpy(v1, st->cfg.backlightDimOff ? L"ON (15秒毎維持)" : L"OFF (Brain標準)", 47);
   v1[47] = L'\0';
@@ -443,42 +450,46 @@ static void renderTabHardware(LiliumUI::Canvas & c, SettingState * st) {
   formatLidModeValue(st->cfg.lidMode, v3, 48);
   wcsncpy(v4, st->cfg.restoreHwOnExit ? L"ON (安全復帰・推奨)" : L"OFF (変更を維持)", 47);
   v4[47] = L'\0';
+  wcsncpy(v5, st->cfg.directCalcBoot ? L"ON (電卓直起動)" : L"OFF (ランチャー表示)", 47);
+  v5[47] = L'\0';
 
   const wchar_t * labels[kHwItemCount] = {
     L"画面の明るさ",
     L"自動減光の抑止",
     L"自動電源OFF時間",
     L"画面を閉じた時の動作",
-    L"Launcher終了時に戻す"
+    L"Launcher終了時に戻す",
+    L"起動時すぐ電卓を開く"
   };
-  const wchar_t * vals[kHwItemCount] = { v0, v1, v2, v3, v4 };
+  const wchar_t * vals[kHwItemCount] = { v0, v1, v2, v3, v4, v5 };
   bool highlights[kHwItemCount] = {
     st->cfg.brightnessLevel != 0,
     st->cfg.backlightDimOff,
     st->cfg.powerOffSec != -1,
     st->cfg.lidMode != 0,
-    st->cfg.restoreHwOnExit
+    st->cfg.restoreHwOnExit,
+    st->cfg.directCalcBoot
   };
 
   for (int i = 0; i < kHwItemCount; ++i) {
-    renderOptionRow(c, 86 + i * 46, 42, labels[i], vals[i], st->sel[0] == i, highlights[i], false);
+    renderOptionRow(c, 84 + i * 40, 36, labels[i], vals[i], st->sel[0] == i, highlights[i], false);
   }
 
   // Bottom live hardware readout card
-  c.drawBox(14, 322, LiliumUI::kMainW - 28, 146, LiliumUI::kColWhite, LiliumUI::kColBorder);
-  c.drawBox(14, 322, LiliumUI::kMainW - 28, 28, LiliumUI::kColTealHeader, LiliumUI::kColBorder);
-  c.drawText(24, 322, LiliumUI::kMainW - 48, 28, LiliumUI::kColTealDeep,
+  c.drawBox(14, 328, LiliumUI::kMainW - 28, 140, LiliumUI::kColWhite, LiliumUI::kColBorder);
+  c.drawBox(14, 328, LiliumUI::kMainW - 28, 28, LiliumUI::kColTealHeader, LiliumUI::kColBorder);
+  c.drawText(24, 328, LiliumUI::kMainW - 48, 28, LiliumUI::kColTealDeep,
              L"本体ハードウェア状態 (SharpLib / PowerManager)", 2, LiliumUI::Align::Left, true);
 
   const LiliumSettings::HwStatus & hw = st->diag.hw;
   if (!hw.isWinCE) {
-    c.drawText(26, 360, LiliumUI::kMainW - 52, 24, LiliumUI::kColText,
+    c.drawText(26, 364, LiliumUI::kMainW - 52, 24, LiliumUI::kColText,
                L"モード: Windows ホスト検証環境 (ハードウェア制御はWinCE実機で有効)",
                2, LiliumUI::Align::Left, true);
-    c.drawText(26, 390, LiliumUI::kMainW - 52, 24, LiliumUI::kColMuted,
+    c.drawText(26, 394, LiliumUI::kMainW - 52, 24, LiliumUI::kColMuted,
                L"設定値自体は lilium_settings.cfg に保存・読込されます。",
                2, LiliumUI::Align::Left, true);
-    c.drawText(26, 420, LiliumUI::kMainW - 52, 24, LiliumUI::kColMuted,
+    c.drawText(26, 424, LiliumUI::kMainW - 52, 24, LiliumUI::kColMuted,
                L"実機 (PW-SB4 等) では SharpLib.dll / BattPowerOff に即時反映されます。",
                2, LiliumUI::Align::Left, true);
   } else {
@@ -493,8 +504,8 @@ static void renderTabHardware(LiliumUI::Canvas & c, SettingState * st) {
                (hw.mrSensorState == 1) ? L"閉(1)" : ((hw.mrSensorState == 0) ? L"開(0)" : L"?"),
                (hw.bklPowerState >= 0) ? hw.bklPowerState : 0);
     l3[95] = L'\0';
-    c.drawText(26, 360, LiliumUI::kMainW - 52, 24, LiliumUI::kColText, l1, 2, LiliumUI::Align::Left, true);
-    c.drawText(26, 392, LiliumUI::kMainW - 52, 24, LiliumUI::kColTextSub, l2, 2, LiliumUI::Align::Left, true);
+    c.drawText(26, 364, LiliumUI::kMainW - 52, 24, LiliumUI::kColText, l1, 2, LiliumUI::Align::Left, true);
+    c.drawText(26, 394, LiliumUI::kMainW - 52, 24, LiliumUI::kColTextSub, l2, 2, LiliumUI::Align::Left, true);
     c.drawText(26, 424, LiliumUI::kMainW - 52, 24, LiliumUI::kColTealDeep, l3, 2, LiliumUI::Align::Left, true);
   }
 }
@@ -936,8 +947,8 @@ static void onClick(int x, int y, void * userData) {
 
   if (st->tab == 0) {
     for (int i = 0; i < kHwItemCount; ++i) {
-      int ry = 86 + i * 46;
-      if (x >= 14 && x < LiliumUI::kMainW - 14 && y >= ry && y < ry + 42) {
+      int ry = 84 + i * 40;
+      if (x >= 14 && x < LiliumUI::kMainW - 14 && y >= ry && y < ry + 36) {
         bool already = (st->sel[0] == i);
         st->sel[0] = i;
         if (already || x >= 304) {

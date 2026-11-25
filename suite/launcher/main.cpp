@@ -1360,6 +1360,63 @@ static void stopResidentImeDaemon(LauncherState * st) {
   st->imeDaemonRunning = false;
 }
 
+static bool runDirectCalcBootSession(LauncherState * st, bool & outNeedDictRestartFailedModal) {
+  outNeedDictRestartFailedModal = false;
+  if (!st) return false;
+
+  wchar_t rootDir[MAX_PATH] = L"";
+  LiliumUI::getLiliumRootDir(rootDir, MAX_PATH);
+  wchar_t appsDir[MAX_PATH] = L"";
+  LiliumUI::joinPath(rootDir, L"apps", appsDir, MAX_PATH);
+  wchar_t calcExe[MAX_PATH] = L"";
+  LiliumUI::joinPath(appsDir, L"LiliumCalc.exe", calcExe, MAX_PATH);
+  if (!fileExists(calcExe)) return false;
+
+  LiliumSettings::suiteLog(L"Launcher", L"DirectCalcBoot launch");
+  LiliumUI::hideBrainTaskBar();
+
+#ifdef _WIN32_WCE
+  wchar_t cmdLineBuf[64] = L"--from-launcher --direct-calc";
+  PROCESS_INFORMATION pi = {};
+  BOOL ok = CreateProcessW(calcExe, cmdLineBuf, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi);
+#else
+  wchar_t cmdLineBuf[MAX_PATH + 64] = L"";
+  _snwprintf(cmdLineBuf, MAX_PATH + 63, L"\"%ls\" --from-launcher --direct-calc", calcExe);
+  cmdLineBuf[MAX_PATH + 63] = L'\0';
+  STARTUPINFOW si = {};
+  si.cb = sizeof(si);
+  PROCESS_INFORMATION pi = {};
+  BOOL ok = CreateProcessW(calcExe, cmdLineBuf, NULL, NULL, FALSE, 0, NULL, appsDir, &si, &pi);
+#endif
+  if (!ok) return false;
+
+  pumpWaitProcess(st, pi.hProcess, true);
+  CloseHandle(pi.hThread);
+  CloseHandle(pi.hProcess);
+
+  LiliumSettings::load(st->settings);
+  LiliumSettings::syncSuiteLogFlag(st->settings.logEnabled);
+  if (!st->settings.directCalcBoot) {
+    LiliumSettings::suiteLog(L"Launcher", L"DirectCalcBoot disabled -> enter Launcher");
+    return false;
+  }
+
+  st->dict = LiliumUI::queryDictStatus();
+  if (st->dict.running && st->dict.windowReady) {
+    LiliumUI::notifyDictForegroundWake(st->dict.hwnd);
+    return true;
+  }
+
+  HWND hSim = NULL;
+  if (LiliumUI::launchDictApp(true, 12000, &hSim)) {
+    LiliumUI::notifyDictForegroundWake(hSim);
+    return true;
+  }
+
+  outNeedDictRestartFailedModal = true;
+  return false;
+}
+
 } // namespace
 
 int main(int /*argc*/, char * /*argv*/[]) {
@@ -1373,6 +1430,24 @@ int main(int /*argc*/, char * /*argv*/[]) {
   LiliumSettings::syncSuiteLogFlag(state->settings.logEnabled);
   LiliumSettings::applyHardwareSettings(state->settings);
   LiliumSettings::suiteLog(L"Launcher", L"Start %ls", LiliumSettings::kLiliumVersion);
+
+  if (state->settings.directCalcBoot) {
+    bool dictRestartFailed = false;
+    if (runDirectCalcBootSession(state, dictRestartFailed)) {
+      LiliumSettings::restoreHardwareDefaultsOnExit(state->settings);
+      LiliumUI::restoreBrainTaskBar();
+      LiliumSettings::suiteLog(L"Launcher", L"DirectCalcExit");
+      freeAppEntries(state);
+      state->~LauncherState();
+      free(rawMem);
+      return 0;
+    }
+    if (dictRestartFailed) {
+      state->dict = LiliumUI::queryDictStatus();
+      state->modal = ModalState::DictRestartFailed;
+      state->modalFocus = 0;
+    }
+  }
 
   scanApps(state, false);
   syncImeDaemonWithSettings(state);
