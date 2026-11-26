@@ -87,7 +87,8 @@ public:
   bool didContextAutoReset() const { return m_contextAutoReset; }
 
   // Begins async-friendly token-by-token generation for one turn.
-  bool beginPrompt(const wchar_t * userTextW, float temperature, int maxNewTokens);
+  bool beginPrompt(const wchar_t * userTextW, float temperature, int maxNewTokens,
+                   int minNewTokens = 0, float repPenalty = 0.0f);
 
   // Advances 1 prefill or generation token per call.
   // Returns true if an output delta or state change occurred.
@@ -199,7 +200,9 @@ private:
   int m_curTok;
   int m_genCount;
   int m_maxNewTokens;
+  int m_minNewTokens;
   float m_temperature;
+  float m_repPenalty;
   bool m_active;
   bool m_hasSystemPrefilled;
   bool m_needCloseTurn;

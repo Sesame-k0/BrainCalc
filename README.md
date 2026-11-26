@@ -26,7 +26,7 @@ NumWorks / [Upsilon](https://github.com/UpsilonNumworks/Upsilon)（[Epsilon](htt
 | **Lilium Life** | `apps/LiliumLife.exe` | Conway's Life / Brian's Brain / Langton's Ant 等を内蔵したセルオートマトン＆スクリーンセーバー |
 | **Lilium Setting** | `apps/LiliumSetting.exe` | Brain 本体の画面輝度・自動電源OFF・開閉センサー・電卓直起動（ランチャー省略＆終了時辞書直戻）・ランチャー並び順＆表示切替・各アプリ初期値・ログ一括管理（`lilium_settings.cfg`）・バージョン情報 |
 | **Lilium Recorder** | `apps/LiliumRecorder.exe` | Brain 内蔵マイク（`WAV1:`）を用いた PCM WAV ボイスレコーダー。リアルタイム波形＆VUメーター表示、8/16/22kHz 選択、倍速再生（0.75x〜1.5x）、A-B リピート、Lilium IME による名前変更 |
-| **Lilium Chat** | `apps/LiliumChat.exe` + `apps/models/` | FPU なし ARM 環境向けに純整数 Q15 グループスケール演算・INT8 KV キャッシュ・高速 LUT 推論（TTQ8 v1/v2）を実装したローカル日本語 LLM チャット（約 1.74M Zundamon 1 往復モデル + 約 10.0M Akebono-10M 連続記憶会話モデル、`[F6]` 切替・直接 Lilium IME 入力・枝豆＆感情アイコン付） |
+| **Lilium Chat** | `apps/LiliumChat.exe` + `apps/models/` | FPU なし ARM 環境向けに純整数 Q15 グループスケール演算・INT8 KV キャッシュ・高速 LUT 推論（TTQ8 v1/v2）を実装したローカル日本語 LLM チャット（約 1.74M Zundamon 1 往復モデル［枝豆アイコン］＋約 10.0M Akebono-10M 連続記憶会話モデル［Brain 電子辞書アイコン］、`[F9]` モデル切替、`[F8]` 出力長切替 `短32/標準64/長96/超160`、`[F12]` 履歴消去、直接 Lilium IME 入力付） |
 | **Lilium DOOM** | `apps/doom.exe` + `apps/freedoom1.zwad` | doomgeneric + 音声省略・Episode 1 軽量化 ZWAD によるサイレント DOOM |
 | **Lilium IME** | `apps/LiliumIME.exe` + `apps/lilium_ime.dic` | 常駐型ローマ字漢字変換デーモン。非圧縮インメモリバイナリ辞書（LIME v2、約 920 KB / 51,000 ペア）により即時変換を実現し、共有メモリ IPC および外部アプリ用フローティングオーバーレイを提供 |
 

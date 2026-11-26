@@ -987,8 +987,8 @@ static void renderDeck(LiliumUI::Canvas & c, RecorderState * st) {
     rateBtn,
     spdBtn,
     abBtn,
-    L"[F5] 改名",
-    L"[F6] 削除"
+    L"[F8] 改名",
+    L"[F9] 削除"
   };
   for (int b = 0; b < 7; ++b) {
     int bx = dx + 12 + b * 84;
@@ -1080,7 +1080,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
     renderDeck(c, st);
     renderFileList(c, st);
     c.drawText(14, 448, LiliumUI::kMainW - 28, 24, LiliumUI::kColMuted,
-               L"[F1]録音/停止 [Spc]再生/休止 [←→]シーク [↑↓]選択 [F5]改名 [F6]削除",
+               L"[F1]録音/停止 [Spc]再生/休止 [←→]シーク [↑↓]選択 [F8]改名 [F9]削除",
                1, LiliumUI::Align::Center, true);
 
     const wchar_t * cardBody =
@@ -1271,7 +1271,7 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     return;
   }
 
-  if (vkCode == VK_F5 && st->mode == AudioMode::Idle && st->fileCount > 0) {
+  if ((vkCode == VK_F8 || vkCode == VK_F5) && st->mode == AudioMode::Idle && st->fileCount > 0) {
     wchar_t stem[96] = L"";
     wcsncpy(stem, st->files[st->sel].name, 95);
     stem[95] = L'\0';
@@ -1283,7 +1283,7 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     return;
   }
 
-  if (vkCode == VK_F6 && st->mode == AudioMode::Idle && st->fileCount > 0) {
+  if ((vkCode == VK_F9 || vkCode == VK_F6) && st->mode == AudioMode::Idle && st->fileCount > 0) {
     st->modal = ModalKind::DeleteConfirm;
     st->deleteFocus = 1;
     st->window.requestRepaint(true);
@@ -1369,7 +1369,7 @@ static void onClick(int x, int y, void * userData) {
   if (y >= 174 && y <= 206 && x >= 26 && x < 614) {
     int b = (x - 26) / 84;
     static constexpr WPARAM kBtnVks[7] = {
-      VK_F1, VK_SPACE, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6
+      VK_F1, VK_SPACE, VK_F2, VK_F3, VK_F4, VK_F8, VK_F9
     };
     if (b >= 0 && b < 7) onKeyDown(kBtnVks[b], false, userData);
     return;

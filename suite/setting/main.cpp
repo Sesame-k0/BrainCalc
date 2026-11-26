@@ -376,7 +376,7 @@ static void getSidebarHelp(const SettingState * st, const wchar_t * & title,
     }
   } else if (st->tab == 1) {
     h1 = L"[Ent]表示切替";
-    h2 = L"[←→]順 [F6]初期化";
+    h2 = L"[←→]順 [F8]初期化";
     body = L"ランチャーの並び順と表示/非表示を変更します。\nLilium Settingは非表示にできません。";
   } else if (st->tab == 2) {
     h2 = L"[←→/Ent]変更";
@@ -591,7 +591,7 @@ static void renderTabLauncher(LiliumUI::Canvas & c, SettingState * st) {
 
   c.drawBox(396, 428, 230, 36, LiliumUI::kColWarnBg, LiliumUI::kColWarnBorder);
   c.drawText(396, 428, 230, 36, LiliumUI::kColWarnText,
-             L"[F6] 初期順・全表示へ", 2, LiliumUI::Align::Center, true);
+             L"[F8] 初期順・全表示へ", 2, LiliumUI::Align::Center, true);
 }
 
 static void renderTabApps(LiliumUI::Canvas & c, SettingState * st) {
@@ -880,7 +880,7 @@ static void onKeyDown(WPARAM vkCode, bool /*isShift*/, void * userData) {
       moveLauncherApp(st, -1);
     } else if (vkCode == VK_RIGHT || vkCode == VK_NEXT || vkCode == VK_F4) {
       moveLauncherApp(st, 1);
-    } else if (vkCode == VK_F6) {
+    } else if (vkCode == VK_F8 || vkCode == VK_F9 || vkCode == VK_F6) {
       resetLauncherDefaults(st);
     } else {
       return;

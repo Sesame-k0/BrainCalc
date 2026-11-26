@@ -1111,7 +1111,7 @@ static void onRender(LiliumUI::Canvas & c, void * userData) {
                  ? L"[↑↓/PgUpDn]スクロール [F2]テキスト/HEX [Esc]一覧へ戻る"
                  : (st->toolbarFocused
                       ? L"[←→/1-8]機能選択 [Ent]実行 [戻る/↓]一覧へ戻る [HOME]終了"
-                      : L"[↑↓]選択 [Ent]開く [BS]上 [1-8]機能 [F6]名前変更 [戻る]終了"),
+                      : L"[↑↓]選択 [Ent]開く [BS]上 [1-8]機能 [F12]名前変更 [戻る]終了"),
                2, LiliumUI::Align::Left, true);
   } else {
     if (st->prevScroll != st->scroll) {
@@ -1540,9 +1540,11 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
       executeToolAction(st, ToolPaste);
       break;
     case VK_F5:
+    case VK_F7:
     case VK_DELETE:
       executeToolAction(st, ToolDelete);
       break;
+    case VK_F12:
     case VK_F6:
       executeToolAction(st, ToolRename);
       break;

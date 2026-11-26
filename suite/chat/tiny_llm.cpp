@@ -403,7 +403,9 @@ TinyLlmEngine::TinyLlmEngine()
     m_curTok(1),
     m_genCount(0),
     m_maxNewTokens(64),
+    m_minNewTokens(0),
     m_temperature(0.7f),
+    m_repPenalty(0.0f),
     m_active(false),
     m_hasSystemPrefilled(false),
     m_needCloseTurn(false),
@@ -1247,6 +1249,18 @@ void TinyLlmEngine::forwardToken(int token, int pos, bool needLogits) {
 
 int TinyLlmEngine::sampleLogit(float temperature) {
   const int V = m_info.vocabSize;
+  const float rp = (m_repPenalty > 1.0f)
+                       ? m_repPenalty
+                       : ((m_info.flags & kFlagSuppressCtrlTokens) ? 1.15f : 1.12f);
+
+  if (m_genCount < m_minNewTokens) {
+    if (m_info.promptStyle == 0) {
+      for (int s = 2; s <= 12 && s < V; ++s) m_logits[s] = -1e9f;
+    } else {
+      if (m_eosId >= 0 && m_eosId < V) m_logits[m_eosId] = -1e9f;
+      if (m_endId >= 0 && m_endId < V) m_logits[m_endId] = -1e9f;
+    }
+  }
 
   if (m_info.flags & kFlagSuppressCtrlTokens) {
     if (V > 7) {
@@ -1261,7 +1275,7 @@ int TinyLlmEngine::sampleLogit(float temperature) {
     for (int r = 0; r < m_recentCount; ++r) {
       int rt = m_recentToks[r];
       if (rt >= m_minNormalTokId && rt < V) {
-        m_logits[rt] = (m_logits[rt] < 0.0f) ? (m_logits[rt] * 1.15f) : (m_logits[rt] / 1.15f);
+        m_logits[rt] = (m_logits[rt] < 0.0f) ? (m_logits[rt] * rp) : (m_logits[rt] / rp);
       }
     }
   } else {
@@ -1282,7 +1296,7 @@ int TinyLlmEngine::sampleLogit(float temperature) {
     for (int r = 0; r < m_recentCount; ++r) {
       int rt = m_recentToks[r];
       if (rt >= m_minNormalTokId && rt < V) {
-        m_logits[rt] = (m_logits[rt] < 0.0f) ? (m_logits[rt] * 1.12f) : (m_logits[rt] / 1.12f);
+        m_logits[rt] = (m_logits[rt] < 0.0f) ? (m_logits[rt] * rp) : (m_logits[rt] / rp);
       }
     }
   }
@@ -1337,7 +1351,8 @@ int TinyLlmEngine::sampleLogit(float temperature) {
   return m_probBuf[lastIdx].idx;
 }
 
-bool TinyLlmEngine::beginPrompt(const wchar_t * userTextW, float temperature, int maxNewTokens) {
+bool TinyLlmEngine::beginPrompt(const wchar_t * userTextW, float temperature, int maxNewTokens,
+                                int minNewTokens, float repPenalty) {
   if (!m_info.loaded || !userTextW || !userTextW[0]) return false;
 
   char utf8[512] = {};
@@ -1423,7 +1438,11 @@ bool TinyLlmEngine::beginPrompt(const wchar_t * userTextW, float temperature, in
   int room = m_info.seqLen - m_kvPos - m_promptLen - 2;
   m_maxNewTokens = (maxNewTokens > 1 && maxNewTokens < room) ? maxNewTokens : room;
   if (m_maxNewTokens < 1) m_maxNewTokens = 1;
+  m_minNewTokens = (m_maxNewTokens > 1 && minNewTokens > 0)
+                       ? ((minNewTokens < m_maxNewTokens) ? minNewTokens : (m_maxNewTokens - 1))
+                       : 0;
   m_temperature = temperature;
+  m_repPenalty = repPenalty;
   m_recentCount = 0;
   m_utf8PendLen = 0;
   m_utf8Need = 0;
