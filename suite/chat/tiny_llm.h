@@ -29,7 +29,15 @@ enum EmotionId {
   EmoSleepy = 7      // 〈ねむい〉 (tok 12)
 };
 
+enum ModelFlags : uint32_t {
+  kFlagEscapeSpaces       = 1u << 0,
+  kFlagMultiTurn          = 1u << 1,
+  kFlagHasEmotionTags     = 1u << 2,
+  kFlagSuppressCtrlTokens = 1u << 3
+};
+
 const wchar_t * emotionLabel(int emoIdx);
+int inferFallbackEmotion(const wchar_t * replyW);
 
 struct ModelInfo {
   int dim;
@@ -42,11 +50,17 @@ struct ModelInfo {
   int groupSize;
   size_t fileBytes;
   bool loaded;
+  int formatVersion;
+  uint32_t promptStyle;
+  uint32_t flags;
+  uint64_t paramCount;
+  wchar_t displayName[32];
 };
 
 struct Q8TensorView {
   const int8_t * q;
-  const float * s;
+  const uint16_t * sQ15;
+  const float * rowScale;
 };
 
 class TinyLlmEngine {
@@ -60,11 +74,19 @@ public:
   bool load(const wchar_t * modelPath, const wchar_t * tokPath,
             wchar_t * outErr, size_t maxErrLen);
   void unload();
+  void resetConversation();
 
   bool isLoaded() const { return m_info.loaded; }
   const ModelInfo & info() const { return m_info; }
 
-  // Begins async-friendly token-by-token generation for one turn (`<s> A: <prompt> B:`).
+  int contextUsed() const { return m_kvPos; }
+  int prefillProgress() const { return m_prefillIdx; }
+  int prefillTotal() const { return m_promptLen; }
+  bool isMultiTurn() const { return (m_info.flags & kFlagMultiTurn) != 0; }
+  bool hasEmotionTags() const { return (m_info.flags & kFlagHasEmotionTags) != 0; }
+  bool didContextAutoReset() const { return m_contextAutoReset; }
+
+  // Begins async-friendly token-by-token generation for one turn.
   bool beginPrompt(const wchar_t * userTextW, float temperature, int maxNewTokens);
 
   // Advances 1 prefill or generation token per call.
@@ -85,7 +107,8 @@ private:
   };
 
   int findTokenId(const char * utf8Str) const;
-  int encodePromptUtf8(const char * textUtf8, int * outTokens, int maxTokens) const;
+  int encodeLineUtf8(const char * lineUtf8, int * outTokens, int maxTokens) const;
+  int encodeTextUtf8(const char * textUtf8, int * outTokens, int maxTokens) const;
   void decodeTokenBytes(int tok, wchar_t * outW, size_t maxW);
 
   void forwardToken(int token, int pos, bool needLogits);
@@ -93,6 +116,7 @@ private:
 
   ModelInfo m_info;
   uint8_t * m_modelBuf;
+  uint8_t * m_v1ScalePool;
   const float * m_rmsAtt;
   const float * m_rmsFfn;
   const float * m_rmsFinal;
@@ -116,12 +140,23 @@ private:
   int m_byteTokenIds[256];
   int m_tokPromptA;
   int m_tokPromptB;
+  int m_bosId;
+  int m_eosId;
+  int m_endId;
+  int m_systemId;
+  int m_userId;
+  int m_assistantId;
+  int m_newlineId;
+  int m_minNormalTokId;
+  float m_rmsEps;
+  float m_ropeTheta;
+  char m_sysPrompt[256];
 
   // Precomputed RoPE cos/sin table [seqLen * (headDim / 2)]
   float * m_ropeCos;
   float * m_ropeSin;
 
-  // RunState activations & KV cache
+  // RunState activations & KV cache (float32 for tiny <= 1MB KV; INT8 per-head for larger models)
   float * m_x;
   float * m_xb;
   float * m_xb2;
@@ -132,12 +167,20 @@ private:
   float * m_v;
   float * m_att;
   float * m_logits;
-  float * m_kCache;
-  float * m_vCache;
+  bool m_useInt8Kv;
+  float * m_kCacheF;
+  float * m_vCacheF;
+  int8_t * m_kCacheQ;
+  int8_t * m_vCacheQ;
+  float * m_kCacheS;
+  float * m_vCacheS;
   int8_t * m_xq;
-  float * m_xs;
+  uint16_t * m_xsQ15;
   int8_t * m_hq;
-  float * m_hs;
+  uint16_t * m_hsQ15;
+  int8_t * m_qHeadQ;
+  int16_t * m_attQ;
+  int32_t * m_oAcc;
 
   struct ProbItem {
     float p;
@@ -146,16 +189,26 @@ private:
   ProbItem * m_probBuf;
 
   // Streaming conversation state
-  static constexpr int kMaxPromptTokens = 160;
+  static constexpr int kMaxPromptTokens = 256;
   static constexpr int kRepeatWin = 32;
   int m_promptTokens[kMaxPromptTokens];
   int m_promptLen;
+  int m_prefillIdx;
   int m_pos;
+  int m_kvPos;
   int m_curTok;
   int m_genCount;
   int m_maxNewTokens;
   float m_temperature;
   bool m_active;
+  bool m_hasSystemPrefilled;
+  bool m_needCloseTurn;
+  int m_pendingLastTok;
+  int m_turnCount;
+  bool m_contextAutoReset;
+  int m_turnStartKvPos;
+  bool m_turnStartNeedClose;
+  int m_turnStartPendingTok;
   uint64_t m_rng;
   int m_recentToks[kRepeatWin];
   int m_recentCount;

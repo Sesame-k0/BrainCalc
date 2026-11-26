@@ -16,7 +16,7 @@
 
 namespace LiliumSettings {
 
-static constexpr const wchar_t * kLiliumVersion = L"v2.6.0";
+static constexpr const wchar_t * kLiliumVersion = L"v2.7.0";
 static constexpr int kMaxApps = 64;
 
 struct Config {

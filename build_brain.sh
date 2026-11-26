@@ -159,6 +159,17 @@ for mf in "zundamon-v4-base_q8.bin" "tok.bin"; do
     curl -L -f -o "${CHAT_MODELS_SRC}/${mf}.tmp" "${BASE_HF_URL}/${mf}"
     mv -f "${CHAT_MODELS_SRC}/${mf}.tmp" "${CHAT_MODELS_SRC}/${mf}"
   fi
+done
+
+if [[ ! -f "${CHAT_MODELS_SRC}/akebono-10m-chat_q8.bin" ]] || [[ ! -f "${CHAT_MODELS_SRC}/akebono-10m-chat_q8.tok" ]] || [[ "suite/chat/convert_akebono.py" -nt "${CHAT_MODELS_SRC}/akebono-10m-chat_q8.bin" ]]; then
+  if command -v python >/dev/null 2>&1; then
+    python suite/chat/convert_akebono.py "${CHAT_MODELS_SRC}"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 suite/chat/convert_akebono.py "${CHAT_MODELS_SRC}"
+  fi
+fi
+
+for mf in "zundamon-v4-base_q8.bin" "tok.bin" "akebono-10m-chat_q8.bin" "akebono-10m-chat_q8.tok"; do
   if [[ -f "${CHAT_MODELS_SRC}/${mf}" ]]; then
     if [[ ! -f "${CHAT_MODELS_DST}/${mf}" ]] || [[ "${CHAT_MODELS_SRC}/${mf}" -nt "${CHAT_MODELS_DST}/${mf}" ]]; then
       cp -f "${CHAT_MODELS_SRC}/${mf}" "${CHAT_MODELS_DST}/${mf}"

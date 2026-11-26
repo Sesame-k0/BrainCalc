@@ -778,7 +778,7 @@ static void renderTabAbout(LiliumUI::Canvas & c, SettingState * st) {
   c.drawText(34, 420, LiliumUI::kMainW - 60, 20, LiliumUI::kColMuted,
              L"・Freedoom / Google Mozc 辞書: 3-Clause BSD   美咲フォント: フリー", 2, LiliumUI::Align::Left, true);
   c.drawText(34, 442, LiliumUI::kMainW - 60, 20, LiliumUI::kColMuted,
-             L"・Lilium Chat モデル (zundamon-tiny-llm): MIT / 非商用規定準拠", 2, LiliumUI::Align::Left, true);
+             L"・Chatモデル: zundamon(MIT) / Akebono-10M(Apache-2.0)", 2, LiliumUI::Align::Left, true);
 }
 
 static void onRender(LiliumUI::Canvas & c, void * userData) {

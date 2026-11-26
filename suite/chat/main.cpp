@@ -138,7 +138,7 @@ struct ChatState {
 static constexpr float kTemps[4] = { 0.0f, 0.4f, 0.7f, 1.0f };
 static constexpr const wchar_t * kTempLabels[4] = { L"0.0", L"0.4", L"0.7", L"1.0" };
 
-static constexpr const wchar_t * kPresetPrompts[6] = {
+static constexpr const wchar_t * kZundamonPresets[6] = {
   L"おはよう、ずんだもん！",
   L"今日はどんな天気かな？",
   L"好きな食べ物は何？",
@@ -146,6 +146,23 @@ static constexpr const wchar_t * kPresetPrompts[6] = {
   L"勉強がつかれたのだ...",
   L"おやすみ！"
 };
+
+static constexpr const wchar_t * kAkebonoPresets[6] = {
+  L"こんにちは。",
+  L"猫が好き。",
+  L"何が好き？",
+  L"今日はどんな天気かな？",
+  L"勉強がつかれた...",
+  L"おやすみ！"
+};
+
+static const wchar_t * nextPresetPrompt(ChatState * st) {
+  const bool multi = st->engine.isLoaded() && st->engine.isMultiTurn();
+  const wchar_t * p = multi ? kAkebonoPresets[st->presetIdx % 6]
+                            : kZundamonPresets[st->presetIdx % 6];
+  st->presetIdx = (st->presetIdx + 1) % 6;
+  return p;
+}
 
 static void markDirty(ChatState * st, uint32_t mask, bool fullWindow = false) {
   if (!st) return;
@@ -182,6 +199,39 @@ static bool containsNoCaseW(const wchar_t * hay, const wchar_t * needle) {
   return false;
 }
 
+static int modelSortPriority(const wchar_t * name) {
+  if (containsNoCaseW(name, L"zundamon")) return 0;
+  if (containsNoCaseW(name, L"akebono")) return 1;
+  return 2;
+}
+
+static bool resolveCompanionTokenizer(const wchar_t * dir, const wchar_t * binName,
+                                      wchar_t * outTokPath, size_t maxLen) {
+  const wchar_t * dot = wcsrchr(binName, L'.');
+  size_t stemLen = dot ? static_cast<size_t>(dot - binName) : wcslen(binName);
+  if (stemLen >= 60) stemLen = 59;
+
+  wchar_t stem[64] = L"";
+  wcsncpy(stem, binName, stemLen);
+  stem[stemLen] = L'\0';
+
+  wchar_t candName[80] = L"";
+  _snwprintf(candName, 80, L"%ls.tok", stem);
+  candName[79] = L'\0';
+  LiliumUI::joinPath(dir, candName, outTokPath, maxLen);
+  if (GetFileAttributesW(outTokPath) != INVALID_FILE_ATTRIBUTES) return true;
+
+  _snwprintf(candName, 80, L"%ls_tok.bin", stem);
+  candName[79] = L'\0';
+  LiliumUI::joinPath(dir, candName, outTokPath, maxLen);
+  if (GetFileAttributesW(outTokPath) != INVALID_FILE_ATTRIBUTES) return true;
+
+  LiliumUI::joinPath(dir, L"tok.bin", outTokPath, maxLen);
+  if (GetFileAttributesW(outTokPath) != INVALID_FILE_ATTRIBUTES) return true;
+
+  return false;
+}
+
 static void scanModels(ChatState * st) {
   if (!st) return;
   st->modelCount = 0;
@@ -204,8 +254,7 @@ static void scanModels(ChatState * st) {
       if (containsNoCaseW(fd.cFileName, L"tok")) continue;
 
       wchar_t tokPath[MAX_PATH] = L"";
-      LiliumUI::joinPath(searchDirs[d], L"tok.bin", tokPath, MAX_PATH);
-      if (GetFileAttributesW(tokPath) == INVALID_FILE_ATTRIBUTES) continue;
+      if (!resolveCompanionTokenizer(searchDirs[d], fd.cFileName, tokPath, MAX_PATH)) continue;
 
       ModelFileEntry & e = st->models[st->modelCount++];
       memset(&e, 0, sizeof(e));
@@ -219,27 +268,38 @@ static void scanModels(ChatState * st) {
     FindClose(hFind);
   }
 
-  for (int i = 1; i < st->modelCount; ++i) {
-    if (containsNoCaseW(st->models[i].name, L"base_q8") &&
-        !containsNoCaseW(st->models[0].name, L"base_q8")) {
-      ModelFileEntry tmp = st->models[0];
-      st->models[0] = st->models[i];
-      st->models[i] = tmp;
-      break;
+  // Deterministic order: Zundamon 1.7M -> Akebono 10M -> other user models
+  for (int i = 0; i + 1 < st->modelCount; ++i) {
+    for (int j = i + 1; j < st->modelCount; ++j) {
+      int pi = modelSortPriority(st->models[i].name);
+      int pj = modelSortPriority(st->models[j].name);
+      if (pj < pi || (pj == pi && _wcsicmp(st->models[j].name, st->models[i].name) < 0)) {
+        ModelFileEntry tmp = st->models[i];
+        st->models[i] = st->models[j];
+        st->models[j] = tmp;
+      }
     }
   }
 }
 
 static bool loadActiveModel(ChatState * st) {
   st->loadErr[0] = L'\0';
+  st->presetIdx = 0;
+  st->lastPromptText[0] = L'\0';
+  st->lastTokPerSec = 0.0;
+  st->lastGenTokens = 0;
   if (st->modelCount <= 0) {
-    wcsncpy(st->loadErr, L"apps\\models\\ に Q8 .bin と tok.bin を配置してください", 63);
+    wcsncpy(st->loadErr, L"apps\\models\\ に Q8 .bin と .tok を配置してください", 63);
     st->loadErr[63] = L'\0';
     return false;
   }
   if (st->modelIdx < 0 || st->modelIdx >= st->modelCount) st->modelIdx = 0;
   const ModelFileEntry & m = st->models[st->modelIdx];
-  return st->engine.load(m.modelPath, m.tokPath, st->loadErr, 64);
+  if (!st->engine.load(m.modelPath, m.tokPath, st->loadErr, 64)) {
+    return false;
+  }
+  st->tempIdx = st->engine.isMultiTurn() ? 0 : 2;
+  return true;
 }
 
 static void pushWelcomeMessage(ChatState * st) {
@@ -251,14 +311,18 @@ static void pushWelcomeMessage(ChatState * st) {
   m.emotionIdx = LiliumLLM::EmoHappy;
   st->activeEmotion = st->engine.isLoaded() ? LiliumLLM::EmoHappy : LiliumLLM::EmoTroubled;
   if (st->engine.isLoaded()) {
+    const LiliumLLM::ModelInfo & mi = st->engine.info();
+    double mParams = static_cast<double>(mi.paramCount) / 1000000.0;
+    const wchar_t * modeDesc = mi.promptStyle == 1 ? L"連続会話・記憶対応" : L"1往復高速・感情タグ付";
+    const wchar_t * switchHint = (st->modelCount > 1) ? L" / [F6]モデル切替" : L"";
     _snwprintf(m.text, 384,
-               L"ローカル超軽量LLM (%ls) 準備完了！\n"
-               L"そのまま日本語を入力し [Enter] で送信、または [F3] で例文を試せます。",
-               st->models[st->modelIdx].name);
+               L"[%ls] (約%.1fM / %ls) 準備完了！\n"
+               L"そのまま入力し[Enter]送信、[F3]例文試用%ls。",
+               mi.displayName, mParams, modeDesc, switchHint);
   } else {
     _snwprintf(m.text, 384,
                L"モデル未検出: %ls\n"
-               L"apps\\models\\zundamon-v4-base_q8.bin と tok.bin を配置してください。",
+               L"apps\\models\\ にモデルとトークナイザを配置してください。",
                st->loadErr[0] ? st->loadErr : L"(missing)");
   }
   m.text[383] = L'\0';
@@ -313,13 +377,19 @@ static void startChatPrompt(ChatState * st, const wchar_t * promptW) {
     return;
   }
 
+  if (st->engine.didContextAutoReset()) {
+    setToast(st, L"文脈リセット");
+  }
+
   st->generating = true;
   st->genStartTick = GetTickCount();
   st->firstTokTick = 0;
   st->lastGenTokens = 0;
   st->window.setTimerInterval(15);
-  LiliumSettings::suiteLog(L"Chat", L"Begin prompt len=%d temp=%.1f",
+  LiliumSettings::suiteLog(L"Chat", L"Begin prompt model=%ls len=%d kv=%d temp=%.1f",
+                           st->engine.info().displayName,
                            st->engine.promptTokenCount(),
+                           st->engine.contextUsed(),
                            static_cast<double>(kTemps[st->tempIdx]));
 }
 
@@ -508,11 +578,9 @@ static void renderEdamameEmotion(LiliumUI::Canvas & c, int x, int y, int emoIdx,
   static constexpr uint32_t kBeanCol = 0x7AE38A;
   static constexpr uint32_t kShine   = 0xD8FCE0;
 
-  // Top-left stem
   c.fillRect(x + 7,  y + 20, 6, 3, kOutline);
   c.fillRect(x + 9,  y + 22, 5, 3, kPodBody);
 
-  // Diagonal 3-bean silhouette from left-center to bottom-right
   c.fillRect(x + 11, y + 21, 14, 15, kOutline);
   c.fillRect(x + 21, y + 26, 15, 16, kOutline);
   c.fillRect(x + 31, y + 31, 15, 16, kOutline);
@@ -531,7 +599,6 @@ static void renderEdamameEmotion(LiliumUI::Canvas & c, int x, int y, int emoIdx,
   c.fillRect(x + 23, y + 27, 2,  3,  kOutline);
   c.fillRect(x + 33, y + 32, 2,  3,  kOutline);
 
-  // Floating emotion mark in upper-right corner
   if (thinking) {
     int activeDot = tick % 3;
     for (int d = 0; d < 3; ++d) {
@@ -615,6 +682,7 @@ static void renderChatArea(LiliumUI::Canvas & c, ChatState * st) {
 
   const int bubbleMaxTextW = 484;
   int totalH = 10;
+  wchar_t waitBuf[32] = L"";
   for (int i = 0; i < st->msgCount; ++i) {
     const ChatMsg & m = st->msgs[i];
     RenderedBubble & b = st->bubbles[i];
@@ -622,7 +690,20 @@ static void renderChatArea(LiliumUI::Canvas & c, ChatState * st) {
     b.emotionIdx = m.emotionIdx;
     b.tokCount = m.tokCount;
     b.generating = m.generating;
-    const wchar_t * txt = (m.text[0]) ? m.text : (m.generating ? L"考え中..." : L" ");
+
+    const wchar_t * txt = m.text;
+    if (!txt[0]) {
+      if (i == st->activeAiMsgIdx && st->generating &&
+          st->engine.prefillTotal() > 0 &&
+          st->engine.prefillProgress() + 1 < st->engine.prefillTotal()) {
+        _snwprintf(waitBuf, 32, L"読込中 %d/%d...",
+                   st->engine.prefillProgress() + 1, st->engine.prefillTotal());
+        waitBuf[31] = L'\0';
+        txt = waitBuf;
+      } else {
+        txt = m.generating ? L"考え中..." : L" ";
+      }
+    }
     b.lineCount = wrapBubbleText(c, txt, bubbleMaxTextW, b.lines);
 
     int maxLineW = 0;
@@ -793,16 +874,17 @@ static void renderInputBar(LiliumUI::Canvas & c, ChatState * st) {
 }
 
 static void renderBottomButtons(LiliumUI::Canvas & c, ChatState * st) {
-  const wchar_t * btns[5] = {
+  const wchar_t * btns[6] = {
     st->generating ? L"F1:停止" : L"F1:再送",
     L"F2:あ/A",
     L"F3:例文",
     L"F4:温度",
-    L"F5:消去"
+    L"F5:消去",
+    L"F6:切替"
   };
-  for (int b = 0; b < 5; ++b) {
-    int bx = 14 + b * 123;
-    int bw = (b == 4) ? (kChatAreaW - 4 * 123) : 119;
+  for (int b = 0; b < 6; ++b) {
+    int bx = 14 + b * 102;
+    int bw = (b == 5) ? (kChatAreaW - 5 * 102) : 99;
     int by = 438;
     int bh = 34;
     uint32_t bg = LiliumUI::kColWhite;
@@ -816,6 +898,14 @@ static void renderBottomButtons(LiliumUI::Canvas & c, ChatState * st) {
       bg = LiliumUI::kColTealSoft;
       bd = LiliumUI::kColTealDark;
       fg = LiliumUI::kColTealDeep;
+    } else if (b == 5) {
+      if (st->modelCount > 1) {
+        bg = LiliumUI::kColTealHeader;
+        bd = LiliumUI::kColTealBorder;
+        fg = LiliumUI::kColTealDeep;
+      } else {
+        fg = LiliumUI::kColLightMuted;
+      }
     }
     c.drawBox(bx, by, bw, bh, bg, bd);
     c.drawText(bx + 2, by, bw - 4, bh, fg, btns[b], 2, LiliumUI::Align::Center, true);
@@ -841,7 +931,11 @@ static void renderSidebarStatsBlock(LiliumUI::Canvas & c, ChatState * st) {
 
   wchar_t l1[28], l2[28], l3[28], l4[28], l5[28];
   _snwprintf(l1, 28, L"%.1ftok/s", st->lastTokPerSec);
-  _snwprintf(l2, 28, L"生成 %dtok", st->lastGenTokens);
+  if (st->engine.isLoaded()) {
+    _snwprintf(l2, 28, L"文脈 %d/%d", st->engine.contextUsed(), st->engine.info().seqLen);
+  } else {
+    _snwprintf(l2, 28, L"生成 %dtok", st->lastGenTokens);
+  }
   _snwprintf(l3, 28, L"温度 %ls", kTempLabels[st->tempIdx]);
   _snwprintf(l4, 28, L"RAM %dMB", availMB);
   if (st->engine.isLoaded()) {
@@ -868,14 +962,17 @@ static void renderChatSidebarFull(LiliumUI::Canvas & c, ChatState * st) {
   const int sw = LiliumUI::kSidebarW - 12;
   c.drawBox(sx, 70, sw, 356, LiliumUI::kColWhite, LiliumUI::kColTealBorder);
   c.drawBox(sx, 70, sw, 26, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
-  c.drawText(sx, 70, sw, 26, LiliumUI::kColTealDeep, L"ローカルLLM", 2, LiliumUI::Align::Center, true);
+
+  const wchar_t * hdrTitle = st->engine.isLoaded() ? st->engine.info().displayName : L"ローカルLLM";
+  c.drawText(sx + 2, 70, sw - 4, 26, LiliumUI::kColTealDeep, hdrTitle, 2, LiliumUI::Align::Center, true);
 
   renderSidebarStatsBlock(c, st);
 
   c.fillRect(sx + 8, 320, sw - 16, 1, LiliumUI::kColBorder);
-  c.drawWrappedText(sx + 6, 328, sw - 12, 422, LiliumUI::kColMuted,
-                    L"1.7M実験AI\n直接IME入力\n[Spc]変換\n[Ent]送信",
-                    2, 4);
+  const wchar_t * helpTxt = (st->engine.isLoaded() && st->engine.isMultiTurn())
+                                ? L"10M 記憶会話\n[F6]モデル切替\n[F5]記憶消去\n[Ent]送信"
+                                : L"1.7M 高速AI\n[F6]10M切替\n[Spc]変換\n[Ent]送信";
+  c.drawWrappedText(sx + 6, 328, sw - 12, 422, LiliumUI::kColMuted, helpTxt, 2, 4);
 
   c.drawBox(LiliumUI::kExitBtnX, LiliumUI::kExitBtnY, LiliumUI::kExitBtnW, LiliumUI::kExitBtnH,
             LiliumUI::kColBtnBg, LiliumUI::kColBtnBorder);
@@ -933,9 +1030,7 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     } else if (st->lastPromptText[0]) {
       startChatPrompt(st, st->lastPromptText);
     } else {
-      const wchar_t * p = kPresetPrompts[st->presetIdx];
-      st->presetIdx = (st->presetIdx + 1) % 6;
-      startChatPrompt(st, p);
+      startChatPrompt(st, nextPresetPrompt(st));
     }
     markDirty(st, kDirtyHeader | kDirtyArea | kDirtyButtons | kDirtySidebarStats);
     return;
@@ -955,9 +1050,7 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
   }
 
   if (vkCode == VK_F3) {
-    const wchar_t * p = kPresetPrompts[st->presetIdx];
-    st->presetIdx = (st->presetIdx + 1) % 6;
-    startChatPrompt(st, p);
+    startChatPrompt(st, nextPresetPrompt(st));
     markDirty(st, kDirtyHeader | kDirtyArea | kDirtyButtons | kDirtySidebarStats);
     return;
   }
@@ -970,6 +1063,8 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
 
   if (vkCode == VK_F5) {
     stopGeneration(st);
+    st->engine.resetConversation();
+    st->presetIdx = 0;
     pushWelcomeMessage(st);
     setToast(st, L"履歴消去");
     markDirty(st, kDirtyHeader | kDirtyArea | kDirtyButtons | kDirtySidebarStats);
@@ -977,13 +1072,14 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
   }
 
   if (vkCode == VK_F6) {
-    if (!st->generating && st->modelCount > 1) {
+    if (st->modelCount > 1) {
+      stopGeneration(st);
       st->modelIdx = (st->modelIdx + 1) % st->modelCount;
       loadActiveModel(st);
       pushWelcomeMessage(st);
-      setToast(st, L"モデル替");
-      markDirty(st, kDirtyHeader | kDirtyArea | kDirtySidebarStats);
-    } else if (st->modelCount <= 1) {
+      setToast(st, st->engine.isLoaded() ? st->engine.info().displayName : L"読込失敗");
+      markDirty(st, kDirtyAll, true);
+    } else {
       setToast(st, L"他モデル無");
       markDirty(st, kDirtyHeader);
     }
@@ -1212,6 +1308,13 @@ static void onClick(int x, int y, void * userData) {
     return;
   }
 
+  // Click sidebar model header to switch models
+  if (x >= LiliumUI::kSidebarX + 6 && x < LiliumUI::kSidebarX + LiliumUI::kSidebarW - 6 &&
+      y >= 70 && y < 96) {
+    onKeyDown(VK_F6, false, userData);
+    return;
+  }
+
   // Click candidate pills while converting
   if (st->converting && st->candCount > 0 && y >= kCandBarTop && y < kCandBarTop + kCandBarH &&
       x >= 14 && x < 14 + kChatAreaW) {
@@ -1247,11 +1350,12 @@ static void onClick(int x, int y, void * userData) {
     return;
   }
 
-  // Bottom 5 action buttons (y = 438..472)
+  // Bottom 6 action buttons (y = 438..472)
   if (y >= 438 && y <= 472 && x >= 14 && x < 14 + kChatAreaW) {
-    int b = (x - 14) / 123;
-    static constexpr WPARAM kBtnVks[5] = { VK_F1, VK_F2, VK_F3, VK_F4, VK_F5 };
-    if (b >= 0 && b < 5) onKeyDown(kBtnVks[b], false, userData);
+    int b = (x - 14) / 102;
+    if (b > 5) b = 5;
+    static constexpr WPARAM kBtnVks[6] = { VK_F1, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6 };
+    if (b >= 0 && b < 6) onKeyDown(kBtnVks[b], false, userData);
   }
 }
 
@@ -1331,6 +1435,11 @@ static void onTimer(LiliumUI::Canvas & c, void * userData) {
         wcsncpy(ai.text, L"...", 383);
         ai.text[383] = L'\0';
       }
+      if (!st->engine.hasEmotionTags()) {
+        int fbEmo = LiliumLLM::inferFallbackEmotion(ai.text);
+        ai.emotionIdx = fbEmo;
+        st->activeEmotion = fbEmo;
+      }
     }
     st->dirtyFlags |= kDirtyHeader | kDirtyArea | kDirtyButtons | kDirtySidebarStats;
     if (st->converting) st->dirtyFlags |= kDirtyCandBar;
@@ -1345,8 +1454,9 @@ static void onTimer(LiliumUI::Canvas & c, void * userData) {
     st->dirtyFlags |= kDirtyArea | kDirtySidebarStats;
     if (st->converting) st->dirtyFlags |= kDirtyCandBar;
     onRender(c, st);
-  } else if ((st->animTick % 3) == 0) {
-    st->dirtyFlags |= kDirtySidebarStats;
+  } else if ((st->animTick % 2) == 0) {
+    st->dirtyFlags |= kDirtyArea | kDirtySidebarStats;
+    if (st->converting) st->dirtyFlags |= kDirtyCandBar;
     onRender(c, st);
   }
 }
@@ -1357,48 +1467,116 @@ static bool onCloseRequest(void * userData) {
   return true;
 }
 
-static int runSelfTest() {
-  ChatState * st = static_cast<ChatState *>(calloc(1, sizeof(ChatState)));
-  if (!st) return 2;
-  new (st) ChatState();
-  scanModels(st);
-  if (!loadActiveModel(st)) {
-    fprintf(stderr, "Load failed: modelCount=%d\n", st->modelCount);
-    st->~ChatState();
-    free(st);
-    return 1;
-  }
-
-  const wchar_t * prompt = L"\x304a\x306f\x3088\x3046\x3001\x305a\x3093\x3060\x3082\x3093\xff01";
-  if (!st->engine.beginPrompt(prompt, 0.0f, 48)) {
-    st->~ChatState();
-    free(st);
-    return 1;
-  }
-
-  wchar_t reply[512] = L"";
-  int emo = LiliumLLM::EmoNormal;
+static void runPromptSync(LiliumLLM::TinyLlmEngine & eng, const wchar_t * promptW,
+                          float temp, int maxToks, wchar_t * outReply, size_t maxReply,
+                          int & outEmo) {
+  outReply[0] = L'\0';
+  outEmo = LiliumLLM::EmoNormal;
+  if (!eng.beginPrompt(promptW, temp, maxToks)) return;
   bool done = false;
-  DWORD t0 = GetTickCount();
   while (!done) {
     wchar_t delta[32] = L"";
     bool isGen = false;
     int e = -1;
-    st->engine.stepToken(delta, 32, isGen, e, done);
-    if (delta[0] && wcslen(reply) + wcslen(delta) < 511) wcscat(reply, delta);
-    if (e >= 0) emo = e;
+    eng.stepToken(delta, 32, isGen, e, done);
+    if (delta[0] && wcslen(outReply) + wcslen(delta) + 1 < maxReply) {
+      wcscat(outReply, delta);
+    }
+    if (e >= 0) outEmo = e;
   }
-  DWORD dt = GetTickCount() - t0;
+  if (!eng.hasEmotionTags()) {
+    outEmo = LiliumLLM::inferFallbackEmotion(outReply);
+  }
+}
 
-  char utf8[1024] = {};
-  WideCharToMultiByte(CP_UTF8, 0, reply, -1, utf8, sizeof(utf8) - 1, NULL, NULL);
-  char emoUtf8[64] = {};
-  WideCharToMultiByte(CP_UTF8, 0, LiliumLLM::emotionLabel(emo), -1, emoUtf8, sizeof(emoUtf8) - 1, NULL, NULL);
-  printf("REPLY=%s EMO=%s TOKS=%d MS=%lu\n",
-         utf8, emoUtf8, st->engine.generatedTokenCount(), static_cast<unsigned long>(dt));
-  fflush(stdout);
+static int runSelfTest(bool testAll) {
+  ChatState * st = static_cast<ChatState *>(calloc(1, sizeof(ChatState)));
+  if (!st) return 2;
+  new (st) ChatState();
+  scanModels(st);
+  if (st->modelCount <= 0) {
+    fprintf(stderr, "No models found\n");
+    st->~ChatState();
+    free(st);
+    return 1;
+  }
 
-  int rc = (reply[0] != L'\0') ? 0 : 1;
+  if (!testAll) {
+    st->modelIdx = 0;
+    if (!loadActiveModel(st)) {
+      fprintf(stderr, "Load failed: modelCount=%d\n", st->modelCount);
+      st->~ChatState();
+      free(st);
+      return 1;
+    }
+    const wchar_t * prompt = L"おはよう、ずんだもん！";
+    wchar_t reply[512] = L"";
+    int emo = LiliumLLM::EmoNormal;
+    DWORD t0 = GetTickCount();
+    runPromptSync(st->engine, prompt, 0.0f, 48, reply, 512, emo);
+    DWORD dt = GetTickCount() - t0;
+
+    char utf8[1024] = {};
+    WideCharToMultiByte(CP_UTF8, 0, reply, -1, utf8, sizeof(utf8) - 1, NULL, NULL);
+    char emoUtf8[64] = {};
+    WideCharToMultiByte(CP_UTF8, 0, LiliumLLM::emotionLabel(emo), -1, emoUtf8, sizeof(emoUtf8) - 1, NULL, NULL);
+    printf("REPLY=%s EMO=%s TOKS=%d MS=%lu\n",
+           utf8, emoUtf8, st->engine.generatedTokenCount(), static_cast<unsigned long>(dt));
+    fflush(stdout);
+
+    int rc = (reply[0] != L'\0') ? 0 : 1;
+    st->~ChatState();
+    free(st);
+    return rc;
+  }
+
+  int rc = 0;
+  for (int m = 0; m < st->modelCount; ++m) {
+    st->modelIdx = m;
+    if (!loadActiveModel(st)) {
+      fprintf(stderr, "Load failed for model %d\n", m);
+      rc = 1;
+      break;
+    }
+    char mNameUtf8[64] = {};
+    WideCharToMultiByte(CP_UTF8, 0, st->engine.info().displayName, -1, mNameUtf8, 63, NULL, NULL);
+
+    if (!st->engine.isMultiTurn()) {
+      wchar_t reply[512] = L"";
+      int emo = LiliumLLM::EmoNormal;
+      DWORD t0 = GetTickCount();
+      runPromptSync(st->engine, L"おはよう、ずんだもん！", 0.0f, 48, reply, 512, emo);
+      DWORD dt = GetTickCount() - t0;
+      char utf8[1024] = {};
+      WideCharToMultiByte(CP_UTF8, 0, reply, -1, utf8, sizeof(utf8) - 1, NULL, NULL);
+      char emoUtf8[64] = {};
+      WideCharToMultiByte(CP_UTF8, 0, LiliumLLM::emotionLabel(emo), -1, emoUtf8, sizeof(emoUtf8) - 1, NULL, NULL);
+      printf("MODEL=%s REPLY=%s EMO=%s TOKS=%d MS=%lu\n",
+             mNameUtf8, utf8, emoUtf8, st->engine.generatedTokenCount(), static_cast<unsigned long>(dt));
+      if (!reply[0]) rc = 1;
+    } else {
+      st->engine.resetConversation();
+      wchar_t r1[512] = L"", r2[512] = L"", r3[512] = L"";
+      int e1 = 0, e2 = 0, e3 = 0;
+      DWORD t0 = GetTickCount();
+      runPromptSync(st->engine, L"こんにちは。", 0.0f, 48, r1, 512, e1);
+      runPromptSync(st->engine, L"猫が好き。",   0.0f, 48, r2, 512, e2);
+      runPromptSync(st->engine, L"何が好き？",   0.0f, 48, r3, 512, e3);
+      DWORD dt = GetTickCount() - t0;
+
+      char u1[512] = {}, u2[512] = {}, u3[512] = {};
+      WideCharToMultiByte(CP_UTF8, 0, r1, -1, u1, sizeof(u1) - 1, NULL, NULL);
+      WideCharToMultiByte(CP_UTF8, 0, r2, -1, u2, sizeof(u2) - 1, NULL, NULL);
+      WideCharToMultiByte(CP_UTF8, 0, r3, -1, u3, sizeof(u3) - 1, NULL, NULL);
+      printf("MODEL=%s TURN1=%s TURN2=%s TURN3=%s CTX=%d/%d MS=%lu\n",
+             mNameUtf8, u1, u2, u3,
+             st->engine.contextUsed(), st->engine.info().seqLen,
+             static_cast<unsigned long>(dt));
+      if (!r1[0] || !r2[0] || !wcsstr(r3, L"猫")) rc = 1;
+    }
+    fflush(stdout);
+  }
+
   st->~ChatState();
   free(st);
   return rc;
@@ -1408,7 +1586,10 @@ static int runSelfTest() {
 
 int main(int argc, char * argv[]) {
   if (argc > 1 && strcmp(argv[1], "--selftest") == 0) {
-    return runSelfTest();
+    return runSelfTest(false);
+  }
+  if (argc > 1 && strcmp(argv[1], "--selftest-all") == 0) {
+    return runSelfTest(true);
   }
 
   void * raw = calloc(1, sizeof(ChatState));
@@ -1432,7 +1613,7 @@ int main(int argc, char * argv[]) {
 
   int rc = 1;
   if (st->window.create(L"LiliumChatWinClass",
-                        L"Lilium Chat (Local INT8 LLM)",
+                        L"Lilium Chat (Local LLM)",
                         cb, st, st->manageTaskBar)) {
     rc = st->window.runLoop();
   }
