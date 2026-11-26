@@ -92,7 +92,7 @@ static bool isKnownNonAppDir(const wchar_t * name) {
 }
 
 static bool isBuiltInRelName(const wchar_t * fileName) {
-  static constexpr const wchar_t * kBuiltInFiles[10] = {
+  static constexpr const wchar_t * kBuiltInFiles[12] = {
     L"LiliumCalc.exe",
     L"LiliumTaskMgr.exe",
     L"LiliumClock.exe",
@@ -102,9 +102,11 @@ static bool isBuiltInRelName(const wchar_t * fileName) {
     L"LiliumTimeTable.exe",
     L"LiliumEditor.exe",
     L"LiliumSetting.exe",
+    L"LiliumRecorder.exe",
+    L"LiliumChat.exe",
     L"LiliumIME.exe" // Resident background IME daemon (hidden from Launchpad grid)
   };
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < 12; ++i) {
     if (_wcsicmp(fileName, kBuiltInFiles[i]) == 0) return true;
   }
   return false;
@@ -786,7 +788,7 @@ int scanAllLauncherApps(DiscoveredApp * outArr, int maxCount,
   wchar_t appsDir[MAX_PATH] = L"";
   LiliumUI::joinPath(rootDir, L"apps", appsDir, MAX_PATH);
 
-  // 1. Canonical built-in Lilium Suite apps (0..8)
+  // 1. Canonical built-in Lilium Suite apps (0..10)
   addBuiltInDiscovered(temp, count, kMaxApps, appsDir, L"Lilium Calc",      L"LiliumCalc.exe",      0);
   addBuiltInDiscovered(temp, count, kMaxApps, appsDir, L"Lilium TaskMgr",   L"LiliumTaskMgr.exe",   1);
   addBuiltInDiscovered(temp, count, kMaxApps, appsDir, L"Lilium Clock",     L"LiliumClock.exe",     2);
@@ -796,6 +798,8 @@ int scanAllLauncherApps(DiscoveredApp * outArr, int maxCount,
   addBuiltInDiscovered(temp, count, kMaxApps, appsDir, L"Lilium TimeTable", L"LiliumTimeTable.exe", 6);
   addBuiltInDiscovered(temp, count, kMaxApps, appsDir, L"Lilium Editor",    L"LiliumEditor.exe",    7);
   addBuiltInDiscovered(temp, count, kMaxApps, appsDir, L"Lilium Setting",   L"LiliumSetting.exe",   8);
+  addBuiltInDiscovered(temp, count, kMaxApps, appsDir, L"Lilium Recorder",  L"LiliumRecorder.exe",  9);
+  addBuiltInDiscovered(temp, count, kMaxApps, appsDir, L"Lilium Chat",      L"LiliumChat.exe",      10);
   const int extStart = count;
 
   // 2. Dynamic scan of apps\* for external EXEs and Brain app subfolders

@@ -137,6 +137,35 @@ echo "[INFO] Building Lilium Setting -> ${SETTING_OUT}..."
 ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/setting/main.cpp ${SUITE_COMMON_SRCS} -o "${SETTING_OUT}" ${SUITE_LDFLAGS}
 rm -f "${APPS_DIR}/LiliumInspect.exe" 2>/dev/null || true
 
+RECORDER_OUT="${APPS_DIR}/LiliumRecorder.exe"
+echo "[INFO] Building Lilium Recorder -> ${RECORDER_OUT}..."
+RECORDER_EXTRA_LIBS=""
+if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
+  RECORDER_EXTRA_LIBS="-lwinmm"
+fi
+${SUITE_CXX} ${SUITE_CXXFLAGS} suite/recorder/main.cpp ${SUITE_COMMON_SRCS} -o "${RECORDER_OUT}" ${SUITE_LDFLAGS} ${RECORDER_EXTRA_LIBS}
+
+CHAT_OUT="${APPS_DIR}/LiliumChat.exe"
+echo "[INFO] Building Lilium Chat -> ${CHAT_OUT}..."
+${SUITE_CXX} ${SUITE_CXXFLAGS} suite/chat/main.cpp suite/chat/tiny_llm.cpp ${SUITE_COMMON_SRCS} -o "${CHAT_OUT}" ${SUITE_LDFLAGS} -lm
+
+CHAT_MODELS_SRC="suite/chat/models"
+CHAT_MODELS_DST="${APPS_DIR}/models"
+mkdir -p "${CHAT_MODELS_SRC}" "${CHAT_MODELS_DST}"
+BASE_HF_URL="https://huggingface.co/k4rasu/zundamon-tiny-llm/resolve/main/llama2c"
+for mf in "zundamon-v4-base_q8.bin" "tok.bin"; do
+  if [[ ! -f "${CHAT_MODELS_SRC}/${mf}" ]] && command -v curl >/dev/null 2>&1; then
+    echo "[INFO] Downloading Tiny LLM asset (${mf})..."
+    curl -L -f -o "${CHAT_MODELS_SRC}/${mf}.tmp" "${BASE_HF_URL}/${mf}"
+    mv -f "${CHAT_MODELS_SRC}/${mf}.tmp" "${CHAT_MODELS_SRC}/${mf}"
+  fi
+  if [[ -f "${CHAT_MODELS_SRC}/${mf}" ]]; then
+    if [[ ! -f "${CHAT_MODELS_DST}/${mf}" ]] || [[ "${CHAT_MODELS_SRC}/${mf}" -nt "${CHAT_MODELS_DST}/${mf}" ]]; then
+      cp -f "${CHAT_MODELS_SRC}/${mf}" "${CHAT_MODELS_DST}/${mf}"
+    fi
+  fi
+done
+
 IME_OUT="${APPS_DIR}/LiliumIME.exe"
 echo "[INFO] Building Lilium IME -> ${IME_OUT}..."
 ${SUITE_CXX} ${SUITE_CXXFLAGS} suite/ime/main.cpp ${SUITE_COMMON_SRCS} -o "${IME_OUT}" ${SUITE_LDFLAGS}
@@ -275,10 +304,10 @@ echo "==========================================================================
 echo "[SUCCESS] Build completed!"
 if [[ "${TOOLCHAIN_OPT}" == "windows" ]]; then
   echo "  Launcher   : ${DIST_DIR}/AppMain.exe (LiliumLauncher.exe)"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumSetting.exe, LiliumIME.exe, doom.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumSetting.exe, LiliumRecorder.exe, LiliumChat.exe, LiliumIME.exe, doom.exe"
 else
   echo "  Launcher   : ${DIST_DIR}/AppMain_.exe"
-  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumSetting.exe, LiliumIME.exe, doom.exe"
+  echo "  Apps       : ${APPS_DIR}/LiliumCalc.exe, LiliumTaskMgr.exe, LiliumClock.exe, LiliumFiler.exe, LiliumLife.exe, LiliumTimeTable.exe, LiliumEditor.exe, LiliumSetting.exe, LiliumRecorder.exe, LiliumChat.exe, LiliumIME.exe, doom.exe"
   echo "  SD Bundle  : ${DIST_DIR}/ (AppMain.exe [loader], AppMain.cfg, AppMain_.exe [Launcher], index.din, font.ttf, apps/)"
 fi
 echo "=============================================================================="

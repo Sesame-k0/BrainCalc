@@ -35,7 +35,7 @@ struct AppEntry {
   wchar_t workDir[MAX_PATH];
   wchar_t relDesc[96];
   wchar_t orderKey[96];
-  int builtInKind; // 0=Calc, 1=TaskMgr, 2=Clock, 3=Filer, 4=DOOM, 5=Life, 6=TimeTable, 7=Editor, 8=Setting, -1=External
+  int builtInKind; // 0=Calc, 1=TaskMgr, 2=Clock, 3=Filer, 4=DOOM, 5=Life, 6=TimeTable, 7=Editor, 8=Setting, 9=Recorder, 10=Chat, -1=External
   bool isLiliumSuite;
   bool isFolderApp;
   bool hasCustomIcon;
@@ -554,6 +554,29 @@ static void drawAppEmblem(LiliumUI::Canvas & c, int x, int y, const AppEntry & a
     c.drawBox(cx - 11, cy - 11, 22, 22, LiliumUI::kColTeal, LiliumUI::kColCharcoal);
     c.drawBox(cx - 5, cy - 5, 10, 10, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
     c.fillRect(cx - 2, cy - 2, 4, 4, LiliumUI::kColTealDark);
+  } else if (app.builtInKind == 9) {
+    // Lilium Recorder microphone capsule + stand + crimson REC dot
+    c.drawBox(x + 21, y + 10, 14, 21, LiliumUI::kColTealSoft, LiliumUI::kColCharcoal);
+    c.drawThickFrame(x + 21, y + 10, 14, 21, 2, LiliumUI::kColCharcoal);
+    c.fillRect(x + 24, y + 14, 8, 2, LiliumUI::kColTealDark);
+    c.fillRect(x + 24, y + 18, 8, 2, LiliumUI::kColTealDark);
+    c.fillRect(x + 24, y + 22, 8, 2, LiliumUI::kColTealDark);
+    c.fillRect(x + 17, y + 23, 2, 11, LiliumUI::kColCharcoal);
+    c.fillRect(x + 37, y + 23, 2, 11, LiliumUI::kColCharcoal);
+    c.fillRect(x + 17, y + 33, 22, 2, LiliumUI::kColCharcoal);
+    c.fillRect(x + 27, y + 35, 2, 7, LiliumUI::kColCharcoal);
+    c.fillRect(x + 20, y + 42, 16, 3, LiliumUI::kColCharcoal);
+    c.fillRect(x + 40, y + 10, 6, 6, LiliumUI::kColDangerFill);
+  } else if (app.builtInKind == 10) {
+    // Lilium Chat speech bubble + AI voice dots emblem
+    c.drawBox(x + 10, y + 12, 36, 26, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
+    c.drawThickFrame(x + 10, y + 12, 36, 26, 2, LiliumUI::kColCharcoal);
+    c.fillRect(x + 12, y + 14, 32, 7, LiliumUI::kColTeal);
+    c.fillRect(x + 18, y + 38, 10, 4, LiliumUI::kColCharcoal);
+    c.fillRect(x + 18, y + 42, 5, 4, LiliumUI::kColCharcoal);
+    c.fillRect(x + 17, y + 26, 5, 5, LiliumUI::kColTealDark);
+    c.fillRect(x + 25, y + 24, 6, 7, LiliumUI::kColTeal);
+    c.fillRect(x + 34, y + 26, 5, 5, LiliumUI::kColTealDark);
   } else if (app.hasCustomIcon && app.cachedIcon) {
     // Extracted 48x48 EXE icon inside crisp 56x56 frame
     c.drawBox(x, y, 56, 56, LiliumUI::kColWhite, selected ? LiliumUI::kColTeal : LiliumUI::kColBorder);

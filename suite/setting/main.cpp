@@ -755,26 +755,30 @@ static void renderTabAbout(LiliumUI::Canvas & c, SettingState * st) {
   c.drawText(26, 140, LiliumUI::kMainW - 52, 24, LiliumUI::kColText, line1, 2, LiliumUI::Align::Left, true);
   c.drawText(26, 168, LiliumUI::kMainW - 52, 24, LiliumUI::kColText, line2, 2, LiliumUI::Align::Left, true);
   c.drawText(26, 196, LiliumUI::kMainW - 52, 24, LiliumUI::kColTealDeep, line3, 2, LiliumUI::Align::Left, true);
-  c.fillRect(26, 228, LiliumUI::kMainW - 52, 1, LiliumUI::kColBorder);
+  c.fillRect(26, 224, LiliumUI::kMainW - 52, 1, LiliumUI::kColBorder);
 
-  c.drawText(26, 238, LiliumUI::kMainW - 52, 24, LiliumUI::kColTealDeep,
+  c.drawText(26, 230, LiliumUI::kMainW - 52, 22, LiliumUI::kColTealDeep,
              L"搭載エンジン / コンポーネント:", 2, LiliumUI::Align::Left, true);
-  c.drawText(34, 266, LiliumUI::kMainW - 60, 22, LiliumUI::kColTextSub,
+  c.drawText(34, 254, LiliumUI::kMainW - 60, 20, LiliumUI::kColTextSub,
              L"・電卓コア:    Upsilon 1.1.2 / Epsilon 15.5.0 + KhiCAS + 経理計算", 2, LiliumUI::Align::Left, true);
-  c.drawText(34, 292, LiliumUI::kMainW - 60, 22, LiliumUI::kColTextSub,
+  c.drawText(34, 276, LiliumUI::kMainW - 60, 20, LiliumUI::kColTextSub,
              L"・日本語IME:   Google Mozc OSS 辞書由来 LIME v2 (常駐/共有IPC)", 2, LiliumUI::Align::Left, true);
-  c.drawText(34, 318, LiliumUI::kMainW - 60, 22, LiliumUI::kColTextSub,
+  c.drawText(34, 298, LiliumUI::kMainW - 60, 20, LiliumUI::kColTextSub,
+             L"・音声/会話:   Lilium Recorder (WAV1:) / Lilium Chat (INT8 LLM)", 2, LiliumUI::Align::Left, true);
+  c.drawText(34, 320, LiliumUI::kMainW - 60, 20, LiliumUI::kColTextSub,
              L"・表示/ゲーム: 美咲フォント (8x8) / doomgeneric + Freedoom Phase 1", 2, LiliumUI::Align::Left, true);
-  c.fillRect(26, 350, LiliumUI::kMainW - 52, 1, LiliumUI::kColBorder);
+  c.fillRect(26, 345, LiliumUI::kMainW - 52, 1, LiliumUI::kColBorder);
 
-  c.drawText(26, 360, LiliumUI::kMainW - 52, 24, LiliumUI::kColTealDeep,
+  c.drawText(26, 352, LiliumUI::kMainW - 52, 22, LiliumUI::kColTealDeep,
              L"ライセンス表示 (OSS Attributions):", 2, LiliumUI::Align::Left, true);
-  c.drawText(34, 388, LiliumUI::kMainW - 60, 22, LiliumUI::kColMuted,
+  c.drawText(34, 376, LiliumUI::kMainW - 60, 20, LiliumUI::kColMuted,
              L"・Lilium Calc (Epsilon/Upsilon/KhiCAS派生): CC BY-NC-SA 4.0", 2, LiliumUI::Align::Left, true);
-  c.drawText(34, 414, LiliumUI::kMainW - 60, 22, LiliumUI::kColMuted,
-             L"・Lilium Suite 独自部: クリーンルーム新規実装 (DOOM部: GNU GPL v2)", 2, LiliumUI::Align::Left, true);
-  c.drawText(34, 440, LiliumUI::kMainW - 60, 22, LiliumUI::kColMuted,
-             L"・Freedoom / Google Mozc 辞書データ: 3-Clause BSD   美咲フォント: フリー", 2, LiliumUI::Align::Left, true);
+  c.drawText(34, 398, LiliumUI::kMainW - 60, 20, LiliumUI::kColMuted,
+             L"・Lilium Suite 独自部: クリーンルーム実装 (DOOM: GNU GPL v2)", 2, LiliumUI::Align::Left, true);
+  c.drawText(34, 420, LiliumUI::kMainW - 60, 20, LiliumUI::kColMuted,
+             L"・Freedoom / Google Mozc 辞書: 3-Clause BSD   美咲フォント: フリー", 2, LiliumUI::Align::Left, true);
+  c.drawText(34, 442, LiliumUI::kMainW - 60, 20, LiliumUI::kColMuted,
+             L"・Lilium Chat モデル (zundamon-tiny-llm): MIT / 非商用規定準拠", 2, LiliumUI::Align::Left, true);
 }
 
 static void onRender(LiliumUI::Canvas & c, void * userData) {

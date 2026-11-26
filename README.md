@@ -25,6 +25,8 @@ NumWorks / [Upsilon](https://github.com/UpsilonNumworks/Upsilon)（[Epsilon](htt
 | **Lilium Clock** | `apps/LiliumClock.exe` | デジタル時計、ストップウォッチ、カウントダウンタイマー |
 | **Lilium Life** | `apps/LiliumLife.exe` | Conway's Life / Brian's Brain / Langton's Ant 等を内蔵したセルオートマトン＆スクリーンセーバー |
 | **Lilium Setting** | `apps/LiliumSetting.exe` | Brain 本体の画面輝度・自動電源OFF・開閉センサー・電卓直起動（ランチャー省略＆終了時辞書直戻）・ランチャー並び順＆表示切替・各アプリ初期値・ログ一括管理（`lilium_settings.cfg`）・バージョン情報 |
+| **Lilium Recorder** | `apps/LiliumRecorder.exe` | Brain 内蔵マイク（`WAV1:`）を用いた PCM WAV ボイスレコーダー。リアルタイム波形＆VUメーター表示、8/16/22kHz 選択、倍速再生（0.75x〜1.5x）、A-B リピート、Lilium IME による名前変更 |
+| **Lilium Chat** | `apps/LiliumChat.exe` + `apps/models/` | FPU なし ARM 環境向けに INT8 整数演算推論（TTQ8 / llama2.c 互換形式）を実装した超軽量ローカル日本語 LLM 実験チャット（約 1.74M パラメータ、Lilium IME 入力＋感情タグ連動アイコン付） |
 | **Lilium DOOM** | `apps/doom.exe` + `apps/freedoom1.zwad` | doomgeneric + 音声省略・Episode 1 軽量化 ZWAD によるサイレント DOOM |
 | **Lilium IME** | `apps/LiliumIME.exe` + `apps/lilium_ime.dic` | 常駐型ローマ字漢字変換デーモン。非圧縮インメモリバイナリ辞書（LIME v2、約 920 KB / 51,000 ペア）により即時変換を実現し、共有メモリ IPC および外部アプリ用フローティングオーバーレイを提供 |
 
@@ -73,8 +75,11 @@ Lilium/
     ├── LiliumClock.exe
     ├── LiliumLife.exe
     ├── LiliumSetting.exe
+    ├── LiliumRecorder.exe
+    ├── LiliumChat.exe
     ├── LiliumIME.exe
     ├── lilium_ime.dic     # Mozc OSS 由来 LIME v2 非圧縮辞書 (約 920 KB)
+    ├── models/            # Lilium Chat 用 INT8 量子化モデル (zundamon-v4-base_q8.bin, tok.bin)
     ├── doom.exe
     └── freedoom1.zwad     # Freedoom Episode 1 圧縮 ZWAD
 ```
@@ -132,7 +137,8 @@ python suite/ime/build_mozc_dict.py
 ## 📜 ライセンス・謝辞 (License & Attributions)
 
 - **Lilium Calc / Epsilon / Upsilon 派生部分**: [CC BY-NC-SA 4.0](LICENSE.md)（NumWorks Epsilon / Upsilon / KhiCAS ベース）
-- **Lilium Suite 独自コンポーネント**（Launcher, Filer, TaskMgr, Clock, Life, TimeTable, Editor, IME クライアント/デーモン）: クリーンルーム新規実装
+- **Lilium Suite 独自コンポーネント**（Launcher, Filer, TaskMgr, Clock, Life, TimeTable, Editor, Setting, Recorder, Chat 推論エンジン/UI, IME クライアント/デーモン）: クリーンルーム新規実装
+- **Lilium Chat 実験モデル (`zundamon-v4-base_q8.bin` / `tok.bin`)**: MIT License（[zundamon-tiny-llm](https://huggingface.co/k4rasu/zundamon-tiny-llm) / 非商用実験用。キャラクター権利は東北ずん子・ずんだもんプロジェクト「キャラクター利用の手引き」に準拠）
 - **Lilium DOOM (`doomgeneric` 移植)**: GNU GPL v2（原著: ozkl / doomgeneric・id Software Doom engine）
 - **Freedoom Phase 1 (`freedoom1.zwad` 元データ)**: 3-Clause BSD License ([Freedoom Project](https://freedoom.github.io/))
 - **美咲フォント**: フリーフォント（[Little Limit](https://littlelimit.net/misaki.htm)）

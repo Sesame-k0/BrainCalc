@@ -16,7 +16,7 @@
 
 namespace LiliumSettings {
 
-static constexpr const wchar_t * kLiliumVersion = L"v2.5.0";
+static constexpr const wchar_t * kLiliumVersion = L"v2.6.0";
 static constexpr int kMaxApps = 64;
 
 struct Config {
@@ -45,7 +45,7 @@ struct DiscoveredApp {
   wchar_t relDesc[96];
   wchar_t orderKey[96];
   wchar_t iconFallbackExe[MAX_PATH];
-  int builtInKind; // 0=Calc, 1=TaskMgr, 2=Clock, 3=Filer, 4=DOOM, 5=Life, 6=TimeTable, 7=Editor, 8=Setting, -1=External
+  int builtInKind; // 0=Calc, 1=TaskMgr, 2=Clock, 3=Filer, 4=DOOM, 5=Life, 6=TimeTable, 7=Editor, 8=Setting, 9=Recorder, 10=Chat, -1=External
   bool isLiliumSuite;
   bool isFolderApp;
 };
