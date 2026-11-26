@@ -9,21 +9,72 @@
 #include <string.h>
 #include <wchar.h>
 
+#ifndef VK_OEM_1
+#define VK_OEM_1 0xBA
+#endif
+#ifndef VK_OEM_PLUS
+#define VK_OEM_PLUS 0xBB
+#endif
+#ifndef VK_OEM_COMMA
+#define VK_OEM_COMMA 0xBC
+#endif
+#ifndef VK_OEM_MINUS
+#define VK_OEM_MINUS 0xBD
+#endif
+#ifndef VK_OEM_PERIOD
+#define VK_OEM_PERIOD 0xBE
+#endif
+#ifndef VK_OEM_2
+#define VK_OEM_2 0xBF
+#endif
+#ifndef VK_OEM_4
+#define VK_OEM_4 0xDB
+#endif
+#ifndef VK_OEM_6
+#define VK_OEM_6 0xDD
+#endif
+
 namespace {
 
 static constexpr int kMaxMsgs = 32;
 static constexpr int kMaxModels = 16;
+static constexpr int kMaxInputChars = 128;
 static constexpr int kMaxWrappedPerMsg = 14;
 static constexpr int kChatViewTop = 48;
 static constexpr int kChatViewBottom = 392;
+static constexpr int kCandBarTop = 354;
+static constexpr int kCandBarH = 38;
 static constexpr int kChatAreaW = LiliumUI::kMainW - 28; // 612
+
+enum DirtyMask : uint32_t {
+  kDirtyNone         = 0,
+  kDirtyHeader       = 1u << 0,
+  kDirtyArea         = 1u << 1,
+  kDirtyCandBar      = 1u << 2,
+  kDirtyInputBar     = 1u << 3,
+  kDirtyButtons      = 1u << 4,
+  kDirtySidebar      = 1u << 5,
+  kDirtySidebarStats = 1u << 6,
+  kDirtyAll          = 0x7Fu
+};
 
 struct ChatMsg {
   bool isUser;
   wchar_t text[384];
-  int emotionIdx;   // -1 if none/user, else 0..7
+  int emotionIdx;   // -1 if user, else 0..7
   int tokCount;
   uint32_t genMs;
+  bool generating;
+};
+
+struct RenderedBubble {
+  bool isUser;
+  int lineCount;
+  wchar_t lines[kMaxWrappedPerMsg][64];
+  int boxW;
+  int boxH;
+  int emotionIdx;
+  int tokCount;
   bool generating;
 };
 
@@ -45,6 +96,7 @@ struct ChatState {
   wchar_t loadErr[64] = L"";
 
   ChatMsg msgs[kMaxMsgs] = {};
+  RenderedBubble bubbles[kMaxMsgs] = {};
   int msgCount = 0;
   int scrollLinesFromBottom = 0;
   int maxScrollLines = 0;
@@ -61,18 +113,30 @@ struct ChatState {
   int presetIdx = 0;
   int animTick = 0;
 
-  bool modalOpen = false;
-  LiliumIME::TextInputModal inputModal;
-  wchar_t lastPromptText[128] = L"";
+  // Direct inline Lilium IME composer (zero popup modal lag)
+  LiliumIME::ImeClient ime;
+  LiliumIME::RomajiEngine romaji;
+  wchar_t inputBuf[kMaxInputChars] = L"";
+  int inputCursor = 0;
+  int inputMode = 0; // 0=あ(IME), 1=abc, 2=ABC, 3=12x
+  bool converting = false;
+  wchar_t cands[LiliumIME::kMaxCands][LiliumIME::kMaxCandChars] = {};
+  int candCount = 0;
+  int candSel = 0;
+  int candPageStart = 0;
+  int segLen = 0;
 
-  wchar_t toast[64] = L"";
+  wchar_t lastPromptText[128] = L"";
+  uint32_t dirtyFlags = kDirtyAll;
+
+  wchar_t toast[32] = L"";
   DWORD toastExpireTick = 0;
   int lastMin = -1;
   int lastBat = -1;
 };
 
 static constexpr float kTemps[4] = { 0.0f, 0.4f, 0.7f, 1.0f };
-static constexpr const wchar_t * kTempLabels[4] = { L"0.0(固定)", L"0.4", L"0.7", L"1.0(自由)" };
+static constexpr const wchar_t * kTempLabels[4] = { L"0.0", L"0.4", L"0.7", L"1.0" };
 
 static constexpr const wchar_t * kPresetPrompts[6] = {
   L"おはよう、ずんだもん！",
@@ -83,22 +147,29 @@ static constexpr const wchar_t * kPresetPrompts[6] = {
   L"おやすみ！"
 };
 
+static void markDirty(ChatState * st, uint32_t mask, bool fullWindow = false) {
+  if (!st) return;
+  st->dirtyFlags |= mask;
+  st->window.requestRepaint(fullWindow);
+}
+
 static void setToast(ChatState * st, const wchar_t * msg) {
   if (!st) return;
-  wcsncpy(st->toast, msg ? msg : L"", 63);
-  st->toast[63] = L'\0';
-  st->toastExpireTick = GetTickCount() + 2800;
+  wcsncpy(st->toast, msg ? msg : L"", 31);
+  st->toast[31] = L'\0';
+  st->toastExpireTick = GetTickCount() + 2600;
 }
 
 static const wchar_t * activeStatusText(ChatState * st) {
-  if (!st) return L"待機中";
+  if (!st) return L"会話待機";
   if (st->toast[0]) {
     if (static_cast<int32_t>(GetTickCount() - st->toastExpireTick) < 0) return st->toast;
     st->toast[0] = L'\0';
   }
-  if (st->generating) return L"生成中 (INT8推論)";
-  if (st->engine.isLoaded()) return L"会話待機 (ローカルLLM)";
-  return L"モデル未検出";
+  if (st->generating) return L"生成中...";
+  if (st->converting) return L"漢字変換";
+  if (st->engine.isLoaded()) return L"会話待機";
+  return L"モデル無";
 }
 
 static bool containsNoCaseW(const wchar_t * hay, const wchar_t * needle) {
@@ -148,7 +219,6 @@ static void scanModels(ChatState * st) {
     FindClose(hFind);
   }
 
-  // Prefer base_q8 first if present
   for (int i = 1; i < st->modelCount; ++i) {
     if (containsNoCaseW(st->models[i].name, L"base_q8") &&
         !containsNoCaseW(st->models[0].name, L"base_q8")) {
@@ -182,12 +252,12 @@ static void pushWelcomeMessage(ChatState * st) {
   st->activeEmotion = st->engine.isLoaded() ? LiliumLLM::EmoHappy : LiliumLLM::EmoTroubled;
   if (st->engine.isLoaded()) {
     _snwprintf(m.text, 384,
-               L"ローカル超軽量日本語LLM起動完了 (%ls / 1.74M INT8)！\n"
-               L"[Enter] で文字入力、[F3] で例文を送信して会話ごっこできるのだ。",
+               L"ローカル超軽量LLM (%ls) 準備完了！\n"
+               L"そのまま日本語を入力し [Enter] で送信、または [F3] で例文を試せます。",
                st->models[st->modelIdx].name);
   } else {
     _snwprintf(m.text, 384,
-               L"モデルが見つかりません: %ls\n"
+               L"モデル未検出: %ls\n"
                L"apps\\models\\zundamon-v4-base_q8.bin と tok.bin を配置してください。",
                st->loadErr[0] ? st->loadErr : L"(missing)");
   }
@@ -215,7 +285,7 @@ static ChatMsg * appendMsg(ChatState * st, bool isUser, const wchar_t * text) {
 static void startChatPrompt(ChatState * st, const wchar_t * promptW) {
   if (!st || !promptW || !promptW[0]) return;
   if (!st->engine.isLoaded()) {
-    setToast(st, L"LLMモデルが未ロードです");
+    setToast(st, L"モデル無");
     return;
   }
   if (st->generating) {
@@ -238,7 +308,8 @@ static void startChatPrompt(ChatState * st, const wchar_t * promptW) {
 
   if (!st->engine.beginPrompt(promptW, kTemps[st->tempIdx], 64)) {
     ai->generating = false;
-    wcsncpy(ai->text, L"(プロンプト変換エラー)", 383);
+    wcsncpy(ai->text, L"(変換エラー)", 383);
+    ai->text[383] = L'\0';
     return;
   }
 
@@ -267,8 +338,130 @@ static void stopGeneration(ChatState * st) {
   }
 }
 
+// =============================================================================
+// Direct Inline IME helpers
+// =============================================================================
+
+static void insertInputStr(ChatState * st, const wchar_t * str) {
+  if (!st || !str || !str[0]) return;
+  int len = static_cast<int>(wcslen(st->inputBuf));
+  int add = static_cast<int>(wcslen(str));
+  int room = (kMaxInputChars - 1) - len;
+  if (room <= 0) return;
+  if (add > room) add = room;
+  memmove(st->inputBuf + st->inputCursor + add, st->inputBuf + st->inputCursor,
+          static_cast<size_t>(len - st->inputCursor + 1) * sizeof(wchar_t));
+  memcpy(st->inputBuf + st->inputCursor, str, static_cast<size_t>(add) * sizeof(wchar_t));
+  st->inputCursor += add;
+}
+
+static void deleteInputBeforeCursor(ChatState * st) {
+  if (!st || st->inputCursor <= 0) return;
+  int len = static_cast<int>(wcslen(st->inputBuf));
+  memmove(st->inputBuf + st->inputCursor - 1, st->inputBuf + st->inputCursor,
+          static_cast<size_t>(len - st->inputCursor + 1) * sizeof(wchar_t));
+  --st->inputCursor;
+}
+
+static void commitChatRawPreedit(ChatState * st) {
+  if (!st) return;
+  st->romaji.flushPendingN();
+  wchar_t disp[LiliumIME::kMaxReadingChars] = L"";
+  st->romaji.getPreeditDisplay(disp, LiliumIME::kMaxReadingChars);
+  if (disp[0]) insertInputStr(st, disp);
+  st->romaji.reset();
+  st->converting = false;
+  st->candCount = 0;
+}
+
+static void commitChatKatakana(ChatState * st) {
+  if (!st) return;
+  st->romaji.flushPendingN();
+  if (st->romaji.kanaLen > 0) {
+    wchar_t kata[LiliumIME::kMaxReadingChars] = L"";
+    LiliumIME::RomajiEngine::toKatakana(st->romaji.kana, kata, LiliumIME::kMaxReadingChars);
+    insertInputStr(st, kata);
+  }
+  st->romaji.reset();
+  st->converting = false;
+  st->candCount = 0;
+}
+
+static void startChatConversion(ChatState * st) {
+  if (!st) return;
+  st->romaji.flushPendingN();
+  if (st->romaji.kanaLen <= 0) return;
+  int seg = 0;
+  int n = st->ime.queryCandidates(st->romaji.kana, st->cands, seg);
+  if (n > 0) {
+    st->converting = true;
+    st->candCount = n;
+    st->candSel = 0;
+    st->candPageStart = 0;
+    st->segLen = (seg > 0 && seg <= st->romaji.kanaLen) ? seg : st->romaji.kanaLen;
+  }
+}
+
+static void commitChatCandidate(ChatState * st) {
+  if (!st || !st->converting || st->candCount <= 0) return;
+  const wchar_t * chosen = st->cands[st->candSel];
+  int segLen = (st->segLen > 0 && st->segLen <= st->romaji.kanaLen) ? st->segLen : st->romaji.kanaLen;
+
+  wchar_t segReading[LiliumIME::kMaxReadingChars] = L"";
+  wcsncpy(segReading, st->romaji.kana, static_cast<size_t>(segLen));
+  segReading[segLen] = L'\0';
+  st->ime.learnChoice(segReading, chosen);
+  insertInputStr(st, chosen);
+
+  int rem = st->romaji.kanaLen - segLen;
+  if (rem > 0) {
+    memmove(st->romaji.kana, st->romaji.kana + segLen, static_cast<size_t>(rem + 1) * sizeof(wchar_t));
+    st->romaji.kanaLen = rem;
+    st->converting = false;
+    st->candCount = 0;
+    startChatConversion(st);
+  } else {
+    st->romaji.reset();
+    st->converting = false;
+    st->candCount = 0;
+    st->candSel = 0;
+    st->candPageStart = 0;
+    st->segLen = 0;
+  }
+}
+
+static wchar_t mapChat12xSymbol(WPARAM vkCode) {
+  if (vkCode >= '0' && vkCode <= '9') return static_cast<wchar_t>(vkCode);
+  switch (vkCode) {
+    case 'Q': return L'1'; case 'W': return L'2'; case 'E': return L'3';
+    case 'R': return L'4'; case 'T': return L'5'; case 'Y': return L'6';
+    case 'U': return L'7'; case 'I': return L'8'; case 'O': return L'9';
+    case 'P': return L'0';
+    case 'A': return L'+'; case 'S': return L'-'; case 'D': return L'*';
+    case 'F': return L'/'; case 'G': return L'=';
+    case 'H': return L'('; case 'J': return L')'; case 'K': return L'['; case 'L': return L']';
+    case 'Z': return L'#'; case 'X': return L'_'; case 'C': return L':'; case 'V': return L'!'; case 'B': return L'?';
+    case 'N': return L','; case 'M': return L'.';
+    case VK_OEM_MINUS: return L'-';
+    case VK_OEM_PERIOD: return L'.';
+    case VK_OEM_COMMA: return L',';
+    case VK_OEM_PLUS: return L'+';
+    case VK_OEM_2: return L'/';
+    case VK_OEM_4: return L'[';
+    case VK_OEM_6: return L']';
+    case VK_OEM_1: return L':';
+    case VK_PRIOR: return L'、';
+    case VK_NEXT: return L'。';
+    default: return L'\0';
+  }
+}
+
+// =============================================================================
+// Rendering (100% Scale=2 Normal Font + Pixel-Art Edamame Emotion Icon)
+// =============================================================================
+
 static int wrapBubbleText(LiliumUI::Canvas & c, const wchar_t * src, int maxPx,
-                          wchar_t outLines[kMaxWrappedPerMsg][96]) {
+                          wchar_t outLines[kMaxWrappedPerMsg][64]) {
   int lineCount = 0;
   if (!src || !src[0]) {
     wcscpy(outLines[0], L" ");
@@ -291,7 +484,7 @@ static int wrapBubbleText(LiliumUI::Canvas & c, const wchar_t * src, int maxPx,
     }
     wchar_t tmp[2] = { ch, L'\0' };
     int cw = c.measureWidth(tmp, 2);
-    if (curLen > 0 && (curW + cw > maxPx || curLen >= 90)) {
+    if (curLen > 0 && (curW + cw > maxPx || curLen >= 60)) {
       outLines[lineCount][curLen] = L'\0';
       if (++lineCount >= kMaxWrappedPerMsg) return kMaxWrappedPerMsg;
       curLen = 0;
@@ -305,127 +498,131 @@ static int wrapBubbleText(LiliumUI::Canvas & c, const wchar_t * src, int maxPx,
   return lineCount;
 }
 
-static void renderEmotionFace(LiliumUI::Canvas & c, int x, int y, int emoIdx, bool thinking, int tick) {
-  // Crisp 56x56 pixel-art mascot portrait matching Brain's Misaki/Teal aesthetic
-  c.drawBox(x, y, 56, 56, 0xEFFAF4, LiliumUI::kColTealDark);
+static void renderEdamameEmotion(LiliumUI::Canvas & c, int x, int y, int emoIdx, bool thinking, int tick) {
+  c.drawBox(x, y, 56, 56, 0xF1FAF3, LiliumUI::kColTealDark);
   c.drawThickFrame(x, y, 56, 56, 2, LiliumUI::kColTealDark);
 
-  // Cute twin pod / bean ears on top
-  c.fillRect(x + 17, y + 6, 8, 8, 0x62C978);
-  c.fillRect(x + 31, y + 6, 8, 8, 0x62C978);
-  // Head outline & soft green/cream face
-  c.drawBox(x + 12, y + 13, 32, 33, 0xFFFDF8, LiliumUI::kColCharcoal);
-  c.fillRect(x + 12, y + 13, 32, 7, 0x8DE09D);
+  // Pixel-art Edamame pod (branch + tilted 3-bean green pod + glossy highlights)
+  static constexpr uint32_t kOutline = 0x195E32;
+  static constexpr uint32_t kPodBody = 0x4BC260;
+  static constexpr uint32_t kBeanCol = 0x7AE38A;
+  static constexpr uint32_t kShine   = 0xD8FCE0;
 
+  // Top-left stem
+  c.fillRect(x + 7,  y + 20, 6, 3, kOutline);
+  c.fillRect(x + 9,  y + 22, 5, 3, kPodBody);
+
+  // Diagonal 3-bean silhouette from left-center to bottom-right
+  c.fillRect(x + 11, y + 21, 14, 15, kOutline);
+  c.fillRect(x + 21, y + 26, 15, 16, kOutline);
+  c.fillRect(x + 31, y + 31, 15, 16, kOutline);
+
+  c.fillRect(x + 13, y + 23, 11, 11, kPodBody);
+  c.fillRect(x + 23, y + 28, 12, 12, kPodBody);
+  c.fillRect(x + 33, y + 33, 11, 12, kPodBody);
+
+  c.fillRect(x + 14, y + 25, 8,  8,  kBeanCol);
+  c.fillRect(x + 25, y + 30, 8,  8,  kBeanCol);
+  c.fillRect(x + 35, y + 35, 8,  8,  kBeanCol);
+  c.fillRect(x + 15, y + 26, 3,  2,  kShine);
+  c.fillRect(x + 26, y + 31, 3,  2,  kShine);
+  c.fillRect(x + 36, y + 36, 3,  2,  kShine);
+
+  c.fillRect(x + 23, y + 27, 2,  3,  kOutline);
+  c.fillRect(x + 33, y + 32, 2,  3,  kOutline);
+
+  // Floating emotion mark in upper-right corner
   if (thinking) {
     int activeDot = tick % 3;
     for (int d = 0; d < 3; ++d) {
-      c.fillRect(x + 18 + d * 8, y + 29, 5, 5,
+      c.fillRect(x + 25 + d * 8, y + 12, 5, 5,
                  (d == activeDot) ? LiliumUI::kColTealDark : LiliumUI::kColBorderStrong);
     }
-    c.fillRect(x + 24, y + 39, 8, 2, LiliumUI::kColMuted);
     return;
-  }
-
-  // Cheeks
-  if (emoIdx == LiliumLLM::EmoHappy || emoIdx == LiliumLLM::EmoSurprised) {
-    c.fillRect(x + 15, y + 34, 4, 3, 0xFF9E9E);
-    c.fillRect(x + 37, y + 34, 4, 3, 0xFF9E9E);
   }
 
   switch (emoIdx) {
     case LiliumLLM::EmoHappy:
-      // ^ ^ eyes & smile
-      c.fillRect(x + 18, y + 26, 6, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 17, y + 28, 2, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 23, y + 28, 2, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 32, y + 26, 6, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 31, y + 28, 2, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 37, y + 28, 2, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 23, y + 36, 10, 4, 0xE86A6A);
+      c.fillRect(x + 34, y + 8,  4, 4, 0xE85A70);
+      c.fillRect(x + 41, y + 8,  4, 4, 0xE85A70);
+      c.fillRect(x + 33, y + 10, 13, 4, 0xE85A70);
+      c.fillRect(x + 35, y + 14, 9,  3, 0xE85A70);
+      c.fillRect(x + 38, y + 17, 3,  2, 0xE85A70);
+      c.fillRect(x + 18, y + 8,  2,  6, 0xE6A218);
+      c.fillRect(x + 16, y + 10, 6,  2, 0xE6A218);
       break;
     case LiliumLLM::EmoSmug:
-      // Half-lidded smug eyes + smirk
-      c.fillRect(x + 17, y + 25, 7, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 20, y + 27, 3, 3, LiliumUI::kColCharcoal);
-      c.fillRect(x + 32, y + 25, 7, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 33, y + 27, 3, 3, LiliumUI::kColCharcoal);
-      c.fillRect(x + 24, y + 37, 9, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 32, y + 35, 3, 2, LiliumUI::kColCharcoal);
+      c.fillRect(x + 38, y + 6,  3, 14, 0xE69A12);
+      c.fillRect(x + 32, y + 12, 15, 3, 0xE69A12);
+      c.fillRect(x + 36, y + 10, 7, 7, 0xFFD24A);
+      c.fillRect(x + 22, y + 8,  2, 6, 0xE69A12);
+      c.fillRect(x + 20, y + 10, 6, 2, 0xE69A12);
       break;
     case LiliumLLM::EmoSurprised:
-      // Wide eyes + O mouth
-      c.drawBox(x + 17, y + 24, 6, 6, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
-      c.fillRect(x + 19, y + 26, 2, 2, LiliumUI::kColCharcoal);
-      c.drawBox(x + 33, y + 24, 6, 6, LiliumUI::kColWhite, LiliumUI::kColCharcoal);
-      c.fillRect(x + 35, y + 26, 2, 2, LiliumUI::kColCharcoal);
-      c.drawBox(x + 25, y + 35, 6, 6, 0xE86A6A, LiliumUI::kColCharcoal);
+      c.fillRect(x + 38, y + 6,  5, 11, 0xE04434);
+      c.fillRect(x + 38, y + 19, 5, 4,  0xE04434);
+      c.fillRect(x + 29, y + 9,  4, 2,  0xE68A1E);
+      c.fillRect(x + 47, y + 9,  4, 2,  0xE68A1E);
       break;
     case LiliumLLM::EmoSad:
-    case LiliumLLM::EmoTroubled:
-      // Droopy eyes + wavy/sad mouth
-      c.fillRect(x + 17, y + 24, 5, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 19, y + 27, 3, 4, LiliumUI::kColCharcoal);
-      c.fillRect(x + 34, y + 24, 5, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 34, y + 27, 3, 4, LiliumUI::kColCharcoal);
-      c.fillRect(x + 23, y + 38, 10, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 22, y + 40, 2, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 32, y + 40, 2, 2, LiliumUI::kColCharcoal);
+      c.fillRect(x + 26, y + 7,  2, 7, 0x6AA8E8);
+      c.fillRect(x + 33, y + 9,  2, 7, 0x6AA8E8);
+      c.fillRect(x + 41, y + 7,  2, 7, 0x6AA8E8);
+      c.fillRect(x + 38, y + 16, 4, 3, 0x3578D4);
+      c.fillRect(x + 36, y + 19, 8, 5, 0x3578D4);
+      c.fillRect(x + 38, y + 20, 2, 2, 0xD8EEFF);
       break;
     case LiliumLLM::EmoAngry:
-      // Angled brows + triangle mouth
-      c.fillRect(x + 17, y + 23, 6, 2, LiliumUI::kColDangerText);
-      c.fillRect(x + 21, y + 25, 3, 2, LiliumUI::kColDangerText);
-      c.fillRect(x + 33, y + 23, 6, 2, LiliumUI::kColDangerText);
-      c.fillRect(x + 32, y + 25, 3, 2, LiliumUI::kColDangerText);
-      c.fillRect(x + 19, y + 28, 4, 4, LiliumUI::kColCharcoal);
-      c.fillRect(x + 33, y + 28, 4, 4, LiliumUI::kColCharcoal);
-      c.fillRect(x + 23, y + 37, 10, 3, LiliumUI::kColDangerFill);
+      c.fillRect(x + 33, y + 10, 5, 2, 0xDC382E);
+      c.fillRect(x + 36, y + 6,  2, 5, 0xDC382E);
+      c.fillRect(x + 41, y + 10, 5, 2, 0xDC382E);
+      c.fillRect(x + 41, y + 6,  2, 5, 0xDC382E);
+      c.fillRect(x + 33, y + 16, 5, 2, 0xDC382E);
+      c.fillRect(x + 36, y + 17, 2, 5, 0xDC382E);
+      c.fillRect(x + 41, y + 16, 5, 2, 0xDC382E);
+      c.fillRect(x + 41, y + 17, 2, 5, 0xDC382E);
+      break;
+    case LiliumLLM::EmoTroubled:
+      c.fillRect(x + 37, y + 7,  6, 2, 0x3578D4);
+      c.fillRect(x + 41, y + 9,  3, 4, 0x3578D4);
+      c.fillRect(x + 38, y + 12, 4, 3, 0x3578D4);
+      c.fillRect(x + 38, y + 17, 3, 3, 0x3578D4);
+      c.fillRect(x + 25, y + 9,  4, 6, 0x5BA2F0);
+      c.fillRect(x + 24, y + 13, 6, 4, 0x5BA2F0);
       break;
     case LiliumLLM::EmoSleepy:
-      // - - eyes + small yawn
-      c.fillRect(x + 17, y + 28, 6, 2, LiliumUI::kColMuted);
-      c.fillRect(x + 33, y + 28, 6, 2, LiliumUI::kColMuted);
-      c.drawBox(x + 26, y + 36, 4, 5, 0xE86A6A, LiliumUI::kColCharcoal);
+      c.fillRect(x + 35, y + 6,  10, 2, 0x4A5CB0);
+      c.fillRect(x + 41, y + 8,  3,  2, 0x4A5CB0);
+      c.fillRect(x + 38, y + 10, 4,  2, 0x4A5CB0);
+      c.fillRect(x + 35, y + 12, 10, 2, 0x4A5CB0);
+      c.fillRect(x + 24, y + 11, 7,  2, 0x6E7ECF);
+      c.fillRect(x + 27, y + 13, 3,  2, 0x6E7ECF);
+      c.fillRect(x + 24, y + 15, 7,  2, 0x6E7ECF);
       break;
     default:
-      // Normal friendly face
-      c.fillRect(x + 19, y + 26, 4, 5, LiliumUI::kColCharcoal);
-      c.fillRect(x + 33, y + 26, 4, 5, LiliumUI::kColCharcoal);
-      c.fillRect(x + 24, y + 37, 8, 2, LiliumUI::kColCharcoal);
+      c.fillRect(x + 38, y + 8,  2, 10, LiliumUI::kColTealDark);
+      c.fillRect(x + 34, y + 12, 10, 2, LiliumUI::kColTealDark);
+      c.fillRect(x + 37, y + 11, 4,  4, LiliumUI::kColTeal);
       break;
   }
 }
 
 static void renderChatArea(LiliumUI::Canvas & c, ChatState * st) {
-  const int ax = 14, ay = kChatViewTop, aw = kChatAreaW, ah = kChatViewBottom - kChatViewTop;
+  const bool candVis = (st->converting && st->candCount > 0);
+  const int ax = 14, ay = kChatViewTop, aw = kChatAreaW;
+  const int ah = (candVis ? kCandBarTop - 4 : kChatViewBottom) - kChatViewTop;
   c.drawBox(ax, ay, aw, ah, LiliumUI::kColWhite, LiliumUI::kColBorder);
 
-  struct RenderedBubble {
-    bool isUser;
-    int lineCount;
-    wchar_t lines[kMaxWrappedPerMsg][96];
-    int boxW;
-    int boxH;
-    int emotionIdx;
-    int tokCount;
-    uint32_t genMs;
-    bool generating;
-  };
-  RenderedBubble * bubbles = static_cast<RenderedBubble *>(calloc(kMaxMsgs, sizeof(RenderedBubble)));
-  if (!bubbles) return;
-
-  const int bubbleMaxTextW = 416;
+  const int bubbleMaxTextW = 484;
   int totalH = 10;
   for (int i = 0; i < st->msgCount; ++i) {
     const ChatMsg & m = st->msgs[i];
-    RenderedBubble & b = bubbles[i];
+    RenderedBubble & b = st->bubbles[i];
     b.isUser = m.isUser;
     b.emotionIdx = m.emotionIdx;
     b.tokCount = m.tokCount;
-    b.genMs = m.genMs;
     b.generating = m.generating;
-    const wchar_t * txt = (m.text[0]) ? m.text : (m.generating ? L"考えているのだ..." : L" ");
+    const wchar_t * txt = (m.text[0]) ? m.text : (m.generating ? L"考え中..." : L" ");
     b.lineCount = wrapBubbleText(c, txt, bubbleMaxTextW, b.lines);
 
     int maxLineW = 0;
@@ -433,12 +630,12 @@ static void renderChatArea(LiliumUI::Canvas & c, ChatState * st) {
       int lw = c.measureWidth(b.lines[l], 2);
       if (lw > maxLineW) maxLineW = lw;
     }
-    int minW = b.isUser ? 64 : 168;
+    int minW = b.isUser ? 64 : 210;
     b.boxW = maxLineW + 24;
     if (b.boxW < minW) b.boxW = minW;
-    if (b.boxW > aw - 28) b.boxW = aw - 28;
-    int footerH = (!b.isUser) ? 20 : 0;
-    b.boxH = 14 + b.lineCount * 20 + footerH;
+    if (b.boxW > aw - 24) b.boxW = aw - 24;
+    int footerH = (!b.isUser) ? 22 : 0;
+    b.boxH = 12 + b.lineCount * 22 + footerH;
     totalH += b.boxH + 10;
   }
 
@@ -453,7 +650,7 @@ static void renderChatArea(LiliumUI::Canvas & c, ChatState * st) {
 
   int curY = ay + 8 - scrollOffsetPx;
   for (int i = 0; i < st->msgCount; ++i) {
-    const RenderedBubble & b = bubbles[i];
+    const RenderedBubble & b = st->bubbles[i];
     int by = curY;
     int bh = b.boxH;
     curY += bh + 10;
@@ -470,54 +667,144 @@ static void renderChatArea(LiliumUI::Canvas & c, ChatState * st) {
     c.drawBox(bx, drawY, b.boxW, drawEnd - drawY, bg, bd);
 
     for (int l = 0; l < b.lineCount; ++l) {
-      int ly = by + 7 + l * 20;
-      if (ly < ay + 4 || ly + 18 > ay + ah - 4) continue;
-      c.drawText(bx + 12, ly, b.boxW - 24, 18,
+      int ly = by + 6 + l * 22;
+      if (ly < ay + 4 || ly + 20 > ay + ah - 4) continue;
+      c.drawText(bx + 12, ly, b.boxW - 24, 20,
                  b.isUser ? LiliumUI::kColTealDeep : LiliumUI::kColText,
                  b.lines[l], 2, LiliumUI::Align::Left, true);
     }
 
     if (!b.isUser) {
-      int fy = by + 9 + b.lineCount * 20;
-      if (fy >= ay + 4 && fy + 16 <= ay + ah - 4) {
-        wchar_t tag[48];
+      int fy = by + 8 + b.lineCount * 22;
+      if (fy >= ay + 4 && fy + 20 <= ay + ah - 4) {
+        wchar_t tag[36];
         if (b.generating) {
-          _snwprintf(tag, 48, L"[生成中... %d tok]", b.tokCount);
+          _snwprintf(tag, 36, L"[生成中 %d]", b.tokCount);
         } else if (b.tokCount > 0) {
-          _snwprintf(tag, 48, L"[%ls] %dtok", LiliumLLM::emotionLabel(b.emotionIdx), b.tokCount);
+          _snwprintf(tag, 36, L"[%ls] %dtok", LiliumLLM::emotionLabel(b.emotionIdx), b.tokCount);
         } else {
-          _snwprintf(tag, 48, L"[%ls]", LiliumLLM::emotionLabel(b.emotionIdx));
+          _snwprintf(tag, 36, L"[%ls]", LiliumLLM::emotionLabel(b.emotionIdx));
         }
-        tag[47] = L'\0';
-        c.drawText(bx + 12, fy, b.boxW - 24, 16, LiliumUI::kColTealDark, tag, 1, LiliumUI::Align::Right, true);
+        tag[35] = L'\0';
+        c.drawText(bx + 12, fy, b.boxW - 24, 18, LiliumUI::kColTealDark,
+                   tag, 2, LiliumUI::Align::Right, true);
       }
     }
   }
-  free(bubbles);
 }
 
-static void renderBottomControls(LiliumUI::Canvas & c, ChatState * st) {
-  const int ix = 14, iy = 398, iw = kChatAreaW, ih = 32;
-  c.drawBox(ix, iy, iw, ih, LiliumUI::kColWhite, LiliumUI::kColTealDark);
-  c.drawText(ix + 12, iy, iw - 24, ih, LiliumUI::kColTealDeep,
-             L"[Enter] 日本語で話しかける (Lilium IME)   [↑↓] スクロール",
-             2, LiliumUI::Align::Left, true);
+static void renderCandidateBar(LiliumUI::Canvas & c, ChatState * st) {
+  if (!st->converting || st->candCount <= 0) return;
+  const int cx0 = 14, cy0 = kCandBarTop, cw = kChatAreaW, ch = kCandBarH;
+  c.drawBox(cx0, cy0, cw, ch, LiliumUI::kColRowAlt, LiliumUI::kColTealDark);
 
-  wchar_t tempBtn[20];
-  _snwprintf(tempBtn, 20, L"[F2]温度:%ls", kTempLabels[st->tempIdx]);
-  tempBtn[19] = L'\0';
+  wchar_t pgBuf[20];
+  _snwprintf(pgBuf, 20, L"%d/%d", st->candSel + 1, st->candCount);
+  pgBuf[19] = L'\0';
+  c.drawText(cx0 + cw - 78, cy0, 72, ch, LiliumUI::kColMuted, pgBuf, 2, LiliumUI::Align::Right, true);
+
+  int px = cx0 + 8;
+  const int maxX = cx0 + cw - 82;
+  for (int i = 0; i < 8 && (st->candPageStart + i) < st->candCount; ++i) {
+    int idx = st->candPageStart + i;
+    bool sel = (idx == st->candSel);
+    wchar_t pillTxt[48];
+    _snwprintf(pillTxt, 48, L"%d.%ls", i + 1, st->cands[idx]);
+    pillTxt[47] = L'\0';
+    int pw = c.measureWidth(pillTxt, 2) + 14;
+    if (pw < 56) pw = 56;
+    if (px + pw > maxX) break;
+    c.drawBox(px, cy0 + 4, pw, ch - 8,
+              sel ? LiliumUI::kColTeal : LiliumUI::kColWhite,
+              sel ? LiliumUI::kColTealDark : LiliumUI::kColBorderStrong);
+    c.drawText(px, cy0 + 4, pw, ch - 8,
+               sel ? LiliumUI::kColWhite : LiliumUI::kColText,
+               pillTxt, 2, LiliumUI::Align::Center, true);
+    px += pw + 6;
+  }
+}
+
+static void renderInputBar(LiliumUI::Canvas & c, ChatState * st) {
+  const int ix = 14, iy = 396, iw = kChatAreaW, ih = 36;
+  c.drawBox(ix, iy, iw, ih, LiliumUI::kColWhite, LiliumUI::kColTealDark);
+
+  static constexpr const wchar_t * kModeLabels[4] = {
+    L"あ(IME)", L"abc", L"ABC", L"12x"
+  };
+  uint32_t mBg = (st->inputMode == 0) ? 0xFFF3D6 : LiliumUI::kColTealSoft;
+  uint32_t mBd = (st->inputMode == 0) ? 0xCC7A00 : LiliumUI::kColTealDark;
+  uint32_t mTx = (st->inputMode == 0) ? 0x8A4E00 : LiliumUI::kColTealDeep;
+  c.drawBox(ix + 4, iy + 4, 88, ih - 8, mBg, mBd);
+  c.drawText(ix + 4, iy + 4, 88, ih - 8, mTx, kModeLabels[st->inputMode], 2, LiliumUI::Align::Center, true);
+
+  wchar_t pre[LiliumIME::kMaxReadingChars] = L"";
+  if (st->converting && st->candCount > 0) {
+    wcsncpy(pre, st->cands[st->candSel], LiliumIME::kMaxReadingChars - 1);
+  } else {
+    st->romaji.getPreeditDisplay(pre, LiliumIME::kMaxReadingChars);
+  }
+  pre[LiliumIME::kMaxReadingChars - 1] = L'\0';
+
+  const int textAreaX = ix + 100;
+  const int textAreaMaxW = (ix + iw - 8) - textAreaX; // ~504 px
+
+  if (!st->inputBuf[0] && !pre[0]) {
+    c.drawText(textAreaX, iy, textAreaMaxW, ih, LiliumUI::kColLightMuted,
+               L"そのまま入力 → [Space]変換 / [Ent]送信",
+               2, LiliumUI::Align::Left, true);
+    c.fillRect(textAreaX, iy + 8, 2, ih - 16, LiliumUI::kColTealDark);
+    return;
+  }
+
+  wchar_t leftPart[kMaxInputChars + 4] = L"";
+  int copyL = (st->inputCursor < kMaxInputChars) ? st->inputCursor : kMaxInputChars - 1;
+  wcsncpy(leftPart, st->inputBuf, static_cast<size_t>(copyL));
+  leftPart[copyL] = L'\0';
+  const wchar_t * rightPart = st->inputBuf + st->inputCursor;
+
+  int preW = pre[0] ? c.measureWidth(pre, 2) + 4 : 0;
+  int maxLeftW = textAreaMaxW - preW - 8;
+  const wchar_t * visLeft = leftPart;
+  while (*visLeft && c.measureWidth(visLeft, 2) > maxLeftW) {
+    ++visLeft;
+  }
+
+  int tx = textAreaX;
+  if (visLeft[0]) {
+    int lw = c.measureWidth(visLeft, 2);
+    c.drawText(tx, iy, lw + 4, ih, LiliumUI::kColText, visLeft, 2, LiliumUI::Align::Left, true);
+    tx += lw;
+  }
+  if (pre[0]) {
+    int pw = c.measureWidth(pre, 2);
+    c.fillRect(tx, iy + 5, pw + 2, ih - 10, st->converting ? LiliumUI::kColTealSoft : 0xFFF3D6);
+    c.drawText(tx, iy, pw + 8, ih, st->converting ? LiliumUI::kColTealDeep : 0x8A4E00,
+               pre, 2, LiliumUI::Align::Left, true);
+    c.fillRect(tx, iy + ih - 6, pw, 2, st->converting ? LiliumUI::kColTealDark : 0xCC7A00);
+    tx += pw + 3;
+  } else {
+    c.fillRect(tx, iy + 8, 2, ih - 16, LiliumUI::kColTealDark);
+    tx += 4;
+  }
+  int remW = (ix + iw - 8) - tx;
+  if (rightPart[0] && remW > 16) {
+    c.drawText(tx, iy, remW, ih, LiliumUI::kColText, rightPart, 2, LiliumUI::Align::Left, true);
+  }
+}
+
+static void renderBottomButtons(LiliumUI::Canvas & c, ChatState * st) {
   const wchar_t * btns[5] = {
-    st->generating ? L"[F1] 停止" : L"[F1] 再生成",
-    tempBtn,
-    L"[F3] 例文送信",
-    L"[F4] 消去",
-    L"[F5] モデル"
+    st->generating ? L"F1:停止" : L"F1:再送",
+    L"F2:あ/A",
+    L"F3:例文",
+    L"F4:温度",
+    L"F5:消去"
   };
   for (int b = 0; b < 5; ++b) {
     int bx = 14 + b * 123;
-    int bw = (b == 4) ? (iw - 4 * 123) : 119;
-    int by = 436;
-    int bh = 32;
+    int bw = (b == 4) ? (kChatAreaW - 4 * 123) : 119;
+    int by = 438;
+    int bh = 34;
     uint32_t bg = LiliumUI::kColWhite;
     uint32_t bd = LiliumUI::kColBorder;
     uint32_t fg = LiliumUI::kColText;
@@ -531,12 +818,47 @@ static void renderBottomControls(LiliumUI::Canvas & c, ChatState * st) {
       fg = LiliumUI::kColTealDeep;
     }
     c.drawBox(bx, by, bw, bh, bg, bd);
-    c.drawText(bx + 2, by, bw - 4, bh, fg, btns[b], 1, LiliumUI::Align::Center, true);
+    c.drawText(bx + 2, by, bw - 4, bh, fg, btns[b], 2, LiliumUI::Align::Center, true);
   }
 }
 
-static void renderChatSidebar(LiliumUI::Canvas & c, ChatState * st) {
-  // Custom sidebar layout integrating emotion portrait + telemetry
+static void renderSidebarStatsBlock(LiliumUI::Canvas & c, ChatState * st) {
+  const int sx = LiliumUI::kSidebarX + 6;
+  const int sw = LiliumUI::kSidebarW - 12;
+
+  c.fillRect(sx + 2, 98, sw - 4, 220, LiliumUI::kColWhite);
+  renderEdamameEmotion(c, sx + (sw - 56) / 2, 102, st->activeEmotion, st->generating, st->animTick);
+
+  wchar_t emoBuf[24];
+  _snwprintf(emoBuf, 24, L"【%ls】", LiliumLLM::emotionLabel(st->activeEmotion));
+  emoBuf[23] = L'\0';
+  c.drawText(sx + 4, 162, sw - 8, 22, LiliumUI::kColTealDark, emoBuf, 2, LiliumUI::Align::Center, true);
+
+  c.fillRect(sx + 8, 190, sw - 16, 1, LiliumUI::kColBorder);
+
+  int totMB = 0, availMB = 0, usedPct = 0;
+  LiliumUI::queryMemoryMB(totMB, availMB, usedPct);
+
+  wchar_t l1[28], l2[28], l3[28], l4[28], l5[28];
+  _snwprintf(l1, 28, L"%.1ftok/s", st->lastTokPerSec);
+  _snwprintf(l2, 28, L"生成 %dtok", st->lastGenTokens);
+  _snwprintf(l3, 28, L"温度 %ls", kTempLabels[st->tempIdx]);
+  _snwprintf(l4, 28, L"RAM %dMB", availMB);
+  if (st->engine.isLoaded()) {
+    _snwprintf(l5, 28, L"Q8 %.1fMB", static_cast<double>(st->engine.info().fileBytes) / (1024.0 * 1024.0));
+  } else {
+    wcsncpy(l5, L"モデル無", 27);
+  }
+  l1[27] = l2[27] = l3[27] = l4[27] = l5[27] = L'\0';
+
+  c.drawText(sx + 6, 196, sw - 12, 22, LiliumUI::kColTealDeep, l1, 2, LiliumUI::Align::Left, true);
+  c.drawText(sx + 6, 220, sw - 12, 22, LiliumUI::kColText,     l2, 2, LiliumUI::Align::Left, true);
+  c.drawText(sx + 6, 244, sw - 12, 22, LiliumUI::kColText,     l3, 2, LiliumUI::Align::Left, true);
+  c.drawText(sx + 6, 268, sw - 12, 22, LiliumUI::kColMuted,    l4, 2, LiliumUI::Align::Left, true);
+  c.drawText(sx + 6, 292, sw - 12, 22, LiliumUI::kColMuted,    l5, 2, LiliumUI::Align::Left, true);
+}
+
+static void renderChatSidebarFull(LiliumUI::Canvas & c, ChatState * st) {
   c.fillRect(LiliumUI::kSidebarX, 0, LiliumUI::kSidebarW, LiliumUI::kScreenH, LiliumUI::kColSidebar);
   c.fillRect(LiliumUI::kSidebarX, 0, 1, LiliumUI::kScreenH, LiliumUI::kColBorder);
 
@@ -544,43 +866,16 @@ static void renderChatSidebar(LiliumUI::Canvas & c, ChatState * st) {
 
   const int sx = LiliumUI::kSidebarX + 6;
   const int sw = LiliumUI::kSidebarW - 12;
-  c.drawBox(sx, 74, sw, 352, LiliumUI::kColWhite, LiliumUI::kColTealBorder);
-  c.drawBox(sx, 74, sw, 24, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
-  c.drawText(sx, 74, sw, 24, LiliumUI::kColTealDeep, L"ローカルLLM", 2, LiliumUI::Align::Center, true);
+  c.drawBox(sx, 70, sw, 356, LiliumUI::kColWhite, LiliumUI::kColTealBorder);
+  c.drawBox(sx, 70, sw, 26, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
+  c.drawText(sx, 70, sw, 26, LiliumUI::kColTealDeep, L"ローカルLLM", 2, LiliumUI::Align::Center, true);
 
-  renderEmotionFace(c, sx + (sw - 56) / 2, 106, st->activeEmotion, st->generating, st->animTick);
+  renderSidebarStatsBlock(c, st);
 
-  wchar_t emoBuf[24];
-  _snwprintf(emoBuf, 24, L"【%ls】", LiliumLLM::emotionLabel(st->activeEmotion));
-  emoBuf[23] = L'\0';
-  c.drawText(sx + 4, 168, sw - 8, 22, LiliumUI::kColTealDark, emoBuf, 2, LiliumUI::Align::Center, true);
-
-  c.fillRect(sx + 8, 196, sw - 16, 1, LiliumUI::kColBorder);
-
-  int totMB = 0, availMB = 0, usedPct = 0;
-  LiliumUI::queryMemoryMB(totMB, availMB, usedPct);
-  wchar_t l1[36], l2[36], l3[36], l4[36], l5[36];
-  if (st->engine.isLoaded()) {
-    _snwprintf(l1, 36, L"規模: INT8 %.1fMB", static_cast<double>(st->engine.info().fileBytes) / (1024.0 * 1024.0));
-  } else {
-    wcsncpy(l1, L"モデル: 未読込", 35);
-  }
-  _snwprintf(l2, 36, L"速度: %.1f tok/s", st->lastTokPerSec);
-  _snwprintf(l3, 36, L"生成: %d tok", st->lastGenTokens);
-  _snwprintf(l4, 36, L"温度: %ls", kTempLabels[st->tempIdx]);
-  _snwprintf(l5, 36, L"空RAM: %d/%dMB", availMB, totMB);
-  l1[35] = l2[35] = l3[35] = l4[35] = l5[35] = L'\0';
-
-  c.drawText(sx + 6, 206, sw - 12, 20, LiliumUI::kColText, l1, 1, LiliumUI::Align::Left, true);
-  c.drawText(sx + 6, 230, sw - 12, 20, LiliumUI::kColTealDeep, l2, 1, LiliumUI::Align::Left, true);
-  c.drawText(sx + 6, 254, sw - 12, 20, LiliumUI::kColText, l3, 1, LiliumUI::Align::Left, true);
-  c.drawText(sx + 6, 278, sw - 12, 20, LiliumUI::kColText, l4, 1, LiliumUI::Align::Left, true);
-  c.drawText(sx + 6, 302, sw - 12, 20, LiliumUI::kColMuted, l5, 1, LiliumUI::Align::Left, true);
-
-  c.fillRect(sx + 8, 330, sw - 16, 1, LiliumUI::kColBorder);
-  c.drawWrappedText(sx + 6, 338, sw - 12, 420, LiliumUI::kColMuted,
-                    L"1.7M超軽量実験モデル。会話の練習用ジョークアプリです。",
-                    1, 4);
+  c.fillRect(sx + 8, 320, sw - 16, 1, LiliumUI::kColBorder);
+  c.drawWrappedText(sx + 6, 328, sw - 12, 422, LiliumUI::kColMuted,
+                    L"1.7M実験AI\n直接IME入力\n[Spc]変換\n[Ent]送信",
+                    2, 4);
 
   c.drawBox(LiliumUI::kExitBtnX, LiliumUI::kExitBtnY, LiliumUI::kExitBtnW, LiliumUI::kExitBtnH,
             LiliumUI::kColBtnBg, LiliumUI::kColBtnBorder);
@@ -591,66 +886,44 @@ static void renderChatSidebar(LiliumUI::Canvas & c, ChatState * st) {
 static void onRender(LiliumUI::Canvas & c, void * userData) {
   ChatState * st = static_cast<ChatState *>(userData);
 
-  if (st->modalOpen && st->inputModal.isOpen() &&
-      !c.fullRedraw && st->inputModal.hasDrawnChrome()) {
-    st->inputModal.render(c, true);
-    return;
-  }
-
   if (c.fullRedraw) {
     c.fillRect(0, 0, LiliumUI::kMainW, LiliumUI::kScreenH, LiliumUI::kColBgMain);
     LiliumUI::renderTopHeader(c, L"Lilium Chat", activeStatusText(st));
     renderChatArea(c, st);
-    renderBottomControls(c, st);
-    renderChatSidebar(c, st);
-  } else {
-    LiliumUI::renderTopHeader(c, L"Lilium Chat", activeStatusText(st));
-    renderChatArea(c, st);
-    renderBottomControls(c, st);
-    renderChatSidebar(c, st);
+    renderCandidateBar(c, st);
+    renderInputBar(c, st);
+    renderBottomButtons(c, st);
+    renderChatSidebarFull(c, st);
+    st->dirtyFlags = kDirtyNone;
+    return;
   }
 
-  if (st->modalOpen) {
-    st->inputModal.render(c, true);
+  uint32_t d = st->dirtyFlags;
+  st->dirtyFlags = kDirtyNone;
+  if (d == kDirtyNone) return;
+
+  if (d & kDirtyHeader) {
+    LiliumUI::renderTopHeader(c, L"Lilium Chat", activeStatusText(st));
+    LiliumUI::renderSidebarStatus(c, activeStatusText(st));
   }
+  if (d & kDirtyArea) renderChatArea(c, st);
+  if (d & kDirtyCandBar) renderCandidateBar(c, st);
+  if (d & kDirtyInputBar) renderInputBar(c, st);
+  if (d & kDirtyButtons) renderBottomButtons(c, st);
+  if (d & kDirtySidebar) renderChatSidebarFull(c, st);
+  else if (d & kDirtySidebarStats) renderSidebarStatsBlock(c, st);
 }
+
+// =============================================================================
+// Input Dispatch & Streaming Loop
+// =============================================================================
 
 static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
   ChatState * st = static_cast<ChatState *>(userData);
 
-  if (st->modalOpen) {
-    bool confirmed = false, closed = false;
-    st->inputModal.handleKey(vkCode, isShift, confirmed, closed);
-    if (confirmed && st->inputModal.text()[0]) {
-      startChatPrompt(st, st->inputModal.text());
-    }
-    if (closed) st->modalOpen = false;
-    st->window.requestRepaint(true);
-    return;
-  }
-
   if (vkCode == VK_HOME || vkCode == VK_F10) {
     stopGeneration(st);
     st->window.requestQuit();
-    return;
-  }
-
-  if (vkCode == VK_ESCAPE) {
-    if (st->generating) {
-      stopGeneration(st);
-      st->window.requestRepaint(true);
-    } else {
-      st->window.requestQuit();
-    }
-    return;
-  }
-
-  if (vkCode == VK_RETURN || vkCode == VK_SPACE) {
-    if (!st->generating) {
-      st->modalOpen = true;
-      st->inputModal.open(L"話しかけるメッセージ入力", L"日本語 (Lilium IME) で入力して決定:", L"", 96);
-      st->window.requestRepaint(true);
-    }
     return;
   }
 
@@ -664,13 +937,20 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
       st->presetIdx = (st->presetIdx + 1) % 6;
       startChatPrompt(st, p);
     }
-    st->window.requestRepaint(true);
+    markDirty(st, kDirtyHeader | kDirtyArea | kDirtyButtons | kDirtySidebarStats);
     return;
   }
 
   if (vkCode == VK_F2) {
-    st->tempIdx = (st->tempIdx + 1) % 4;
-    st->window.requestRepaint(true);
+    uint32_t dirty = kDirtyInputBar;
+    if (st->converting) {
+      commitChatCandidate(st);
+      dirty |= kDirtyArea | kDirtyHeader;
+    } else if (st->romaji.hasContent()) {
+      commitChatRawPreedit(st);
+    }
+    st->inputMode = (st->inputMode + 1) % 4;
+    markDirty(st, dirty);
     return;
   }
 
@@ -678,69 +958,253 @@ static void onKeyDown(WPARAM vkCode, bool isShift, void * userData) {
     const wchar_t * p = kPresetPrompts[st->presetIdx];
     st->presetIdx = (st->presetIdx + 1) % 6;
     startChatPrompt(st, p);
-    st->window.requestRepaint(true);
+    markDirty(st, kDirtyHeader | kDirtyArea | kDirtyButtons | kDirtySidebarStats);
     return;
   }
 
   if (vkCode == VK_F4) {
-    stopGeneration(st);
-    pushWelcomeMessage(st);
-    setToast(st, L"会話履歴を消去しました");
-    st->window.requestRepaint(true);
+    st->tempIdx = (st->tempIdx + 1) % 4;
+    markDirty(st, kDirtySidebarStats);
     return;
   }
 
   if (vkCode == VK_F5) {
+    stopGeneration(st);
+    pushWelcomeMessage(st);
+    setToast(st, L"履歴消去");
+    markDirty(st, kDirtyHeader | kDirtyArea | kDirtyButtons | kDirtySidebarStats);
+    return;
+  }
+
+  if (vkCode == VK_F6) {
     if (!st->generating && st->modelCount > 1) {
       st->modelIdx = (st->modelIdx + 1) % st->modelCount;
       loadActiveModel(st);
       pushWelcomeMessage(st);
-      setToast(st, st->models[st->modelIdx].name);
-      st->window.requestRepaint(true);
+      setToast(st, L"モデル替");
+      markDirty(st, kDirtyHeader | kDirtyArea | kDirtySidebarStats);
     } else if (st->modelCount <= 1) {
-      setToast(st, L"切替可能な他モデルがありません");
-      st->window.requestRepaint(false);
+      setToast(st, L"他モデル無");
+      markDirty(st, kDirtyHeader);
+    }
+    return;
+  }
+
+  // Handle active kanji candidate bar first (only touches input bar + candidate strip)
+  if (st->converting) {
+    if (vkCode == VK_SPACE || vkCode == VK_RIGHT || vkCode == VK_DOWN) {
+      st->candSel = (st->candSel + 1) % st->candCount;
+      st->candPageStart = (st->candSel / 8) * 8;
+      markDirty(st, kDirtyInputBar | kDirtyCandBar);
+      return;
+    }
+    if (vkCode == VK_LEFT || vkCode == VK_UP) {
+      st->candSel = (st->candSel + st->candCount - 1) % st->candCount;
+      st->candPageStart = (st->candSel / 8) * 8;
+      markDirty(st, kDirtyInputBar | kDirtyCandBar);
+      return;
+    }
+    if (vkCode >= '1' && vkCode <= '8') {
+      int pick = st->candPageStart + static_cast<int>(vkCode - '1');
+      if (pick < st->candCount) {
+        st->candSel = pick;
+        commitChatCandidate(st);
+      }
+      uint32_t d = kDirtyInputBar | (st->converting ? kDirtyCandBar : (kDirtyArea | kDirtyHeader));
+      markDirty(st, d);
+      return;
+    }
+    if (vkCode == VK_F7) {
+      commitChatKatakana(st);
+      markDirty(st, kDirtyArea | kDirtyInputBar | kDirtyHeader);
+      return;
+    }
+    if (vkCode == VK_RETURN) {
+      commitChatCandidate(st);
+      uint32_t d = kDirtyInputBar | (st->converting ? kDirtyCandBar : (kDirtyArea | kDirtyHeader));
+      markDirty(st, d);
+      return;
+    }
+    if (vkCode == VK_ESCAPE || vkCode == VK_BACK) {
+      st->converting = false;
+      st->candCount = 0;
+      st->candSel = 0;
+      st->candPageStart = 0;
+      markDirty(st, kDirtyArea | kDirtyInputBar | kDirtyHeader);
+      return;
+    }
+    commitChatCandidate(st);
+    markDirty(st, kDirtyArea);
+  }
+
+  if (vkCode == VK_ESCAPE) {
+    if (st->romaji.hasContent()) {
+      st->romaji.reset();
+      markDirty(st, kDirtyInputBar);
+    } else if (st->inputBuf[0]) {
+      st->inputBuf[0] = L'\0';
+      st->inputCursor = 0;
+      markDirty(st, kDirtyInputBar);
+    } else if (st->generating) {
+      stopGeneration(st);
+      markDirty(st, kDirtyHeader | kDirtyArea | kDirtyButtons | kDirtySidebarStats);
+    } else {
+      st->window.requestQuit();
+    }
+    return;
+  }
+
+  if (vkCode == VK_BACK) {
+    if (st->romaji.backspace()) {
+      markDirty(st, kDirtyInputBar);
+      return;
+    }
+    if (st->inputCursor > 0) {
+      deleteInputBeforeCursor(st);
+      markDirty(st, kDirtyInputBar);
+    }
+    return;
+  }
+
+  if (vkCode == VK_F7 && st->romaji.hasContent()) {
+    commitChatKatakana(st);
+    markDirty(st, kDirtyInputBar);
+    return;
+  }
+
+  if (vkCode == VK_RETURN) {
+    if (st->romaji.hasContent()) {
+      commitChatRawPreedit(st);
+      markDirty(st, kDirtyInputBar);
+      return;
+    }
+    if (st->inputBuf[0]) {
+      wchar_t msg[kMaxInputChars] = L"";
+      wcsncpy(msg, st->inputBuf, kMaxInputChars - 1);
+      msg[kMaxInputChars - 1] = L'\0';
+      st->inputBuf[0] = L'\0';
+      st->inputCursor = 0;
+      startChatPrompt(st, msg);
+      markDirty(st, kDirtyHeader | kDirtyArea | kDirtyInputBar | kDirtyButtons | kDirtySidebarStats);
+    } else {
+      setToast(st, L"入力後Ent");
+      markDirty(st, kDirtyHeader);
+    }
+    return;
+  }
+
+  if (vkCode == VK_SPACE) {
+    if (st->inputMode == 0 && st->romaji.hasContent()) {
+      startChatConversion(st);
+      markDirty(st, kDirtyInputBar | (st->converting ? (kDirtyCandBar | kDirtyHeader) : kDirtyNone));
+    } else {
+      insertInputStr(st, L" ");
+      markDirty(st, kDirtyInputBar);
     }
     return;
   }
 
   if (vkCode == VK_UP) {
-    if (st->scrollLinesFromBottom < st->maxScrollLines) ++st->scrollLinesFromBottom;
-    st->window.requestRepaint(false);
+    if (st->scrollLinesFromBottom < st->maxScrollLines) {
+      st->scrollLinesFromBottom += 2;
+      if (st->scrollLinesFromBottom > st->maxScrollLines) st->scrollLinesFromBottom = st->maxScrollLines;
+      markDirty(st, kDirtyArea);
+    }
     return;
   }
   if (vkCode == VK_DOWN) {
-    if (st->scrollLinesFromBottom > 0) --st->scrollLinesFromBottom;
-    st->window.requestRepaint(false);
+    if (st->scrollLinesFromBottom > 0) {
+      st->scrollLinesFromBottom -= 2;
+      if (st->scrollLinesFromBottom < 0) st->scrollLinesFromBottom = 0;
+      markDirty(st, kDirtyArea);
+    }
     return;
   }
-  if (vkCode == VK_PRIOR) {
-    st->scrollLinesFromBottom += 6;
-    if (st->scrollLinesFromBottom > st->maxScrollLines) st->scrollLinesFromBottom = st->maxScrollLines;
-    st->window.requestRepaint(false);
+  if (vkCode == VK_LEFT) {
+    if (!st->romaji.hasContent() && st->inputCursor > 0) {
+      --st->inputCursor;
+      markDirty(st, kDirtyInputBar);
+    }
     return;
   }
-  if (vkCode == VK_NEXT) {
-    st->scrollLinesFromBottom -= 6;
-    if (st->scrollLinesFromBottom < 0) st->scrollLinesFromBottom = 0;
-    st->window.requestRepaint(false);
+  if (vkCode == VK_RIGHT) {
+    int len = static_cast<int>(wcslen(st->inputBuf));
+    if (!st->romaji.hasContent() && st->inputCursor < len) {
+      ++st->inputCursor;
+      markDirty(st, kDirtyInputBar);
+    }
     return;
+  }
+
+  // Inline text input
+  if (st->inputMode == 0) {
+    if (vkCode == VK_PRIOR || (isShift && vkCode == 'N')) {
+      st->romaji.feedChar(',');
+      markDirty(st, kDirtyInputBar);
+      return;
+    }
+    if (vkCode == VK_NEXT || (isShift && vkCode == 'M')) {
+      st->romaji.feedChar('.');
+      markDirty(st, kDirtyInputBar);
+      return;
+    }
+    if (vkCode >= 'A' && vkCode <= 'Z') {
+      if (st->romaji.romLen == 0 && st->romaji.kanaLen == 1 &&
+          (st->romaji.kana[0] == L'、' || st->romaji.kana[0] == L'。')) {
+        commitChatRawPreedit(st);
+      }
+      st->romaji.feedChar(static_cast<char>(vkCode - 'A' + 'a'));
+      markDirty(st, kDirtyInputBar);
+      return;
+    }
+    if (vkCode >= '0' && vkCode <= '9') {
+      if (st->romaji.romLen == 0 && st->romaji.kanaLen == 1 &&
+          (st->romaji.kana[0] == L'、' || st->romaji.kana[0] == L'。')) {
+        commitChatRawPreedit(st);
+      }
+      st->romaji.feedChar(static_cast<char>(vkCode));
+      markDirty(st, kDirtyInputBar);
+      return;
+    }
+    if (vkCode == VK_OEM_MINUS) { st->romaji.feedChar('-'); markDirty(st, kDirtyInputBar); return; }
+    if (vkCode == VK_OEM_PERIOD) { st->romaji.feedChar('.'); markDirty(st, kDirtyInputBar); return; }
+    if (vkCode == VK_OEM_COMMA) { st->romaji.feedChar(','); markDirty(st, kDirtyInputBar); return; }
+    if (vkCode == VK_OEM_4) { st->romaji.feedChar('['); markDirty(st, kDirtyInputBar); return; }
+    if (vkCode == VK_OEM_6) { st->romaji.feedChar(']'); markDirty(st, kDirtyInputBar); return; }
+    return;
+  }
+
+  if (st->inputMode == 1 || st->inputMode == 2) {
+    if (vkCode >= 'A' && vkCode <= 'Z') {
+      bool upper = (st->inputMode == 2) ^ isShift;
+      wchar_t ch[2] = { static_cast<wchar_t>(upper ? vkCode : (vkCode - 'A' + 'a')), L'\0' };
+      insertInputStr(st, ch);
+      markDirty(st, kDirtyInputBar);
+      return;
+    }
+    if (vkCode >= '0' && vkCode <= '9') {
+      wchar_t ch[2] = { static_cast<wchar_t>(vkCode), L'\0' };
+      insertInputStr(st, ch);
+      markDirty(st, kDirtyInputBar);
+      return;
+    }
+    if (vkCode == VK_OEM_MINUS) { insertInputStr(st, isShift ? L"_" : L"-"); markDirty(st, kDirtyInputBar); return; }
+    if (vkCode == VK_OEM_PERIOD || vkCode == VK_NEXT) { insertInputStr(st, L"."); markDirty(st, kDirtyInputBar); return; }
+    if (vkCode == VK_OEM_COMMA || vkCode == VK_PRIOR) { insertInputStr(st, L","); markDirty(st, kDirtyInputBar); return; }
+    if (vkCode == VK_OEM_2) { insertInputStr(st, isShift ? L"?" : L"/"); markDirty(st, kDirtyInputBar); return; }
+    return;
+  }
+
+  wchar_t sym = mapChat12xSymbol(vkCode);
+  if (sym) {
+    wchar_t ch[2] = { sym, L'\0' };
+    insertInputStr(st, ch);
+    markDirty(st, kDirtyInputBar);
   }
 }
 
 static void onClick(int x, int y, void * userData) {
   ChatState * st = static_cast<ChatState *>(userData);
-
-  if (st->modalOpen) {
-    bool confirmed = false, closed = false;
-    st->inputModal.handleClick(x, y, confirmed, closed);
-    if (confirmed && st->inputModal.text()[0]) {
-      startChatPrompt(st, st->inputModal.text());
-    }
-    if (closed) st->modalOpen = false;
-    st->window.requestRepaint(true);
-    return;
-  }
 
   if (x >= LiliumUI::kExitBtnX && x < LiliumUI::kExitBtnX + LiliumUI::kExitBtnW &&
       y >= LiliumUI::kExitBtnY && y < LiliumUI::kExitBtnY + LiliumUI::kExitBtnH) {
@@ -748,14 +1212,43 @@ static void onClick(int x, int y, void * userData) {
     return;
   }
 
-  // Prompt bar
-  if (x >= 14 && x < 14 + kChatAreaW && y >= 398 && y <= 430) {
-    onKeyDown(VK_RETURN, false, userData);
+  // Click candidate pills while converting
+  if (st->converting && st->candCount > 0 && y >= kCandBarTop && y < kCandBarTop + kCandBarH &&
+      x >= 14 && x < 14 + kChatAreaW) {
+    int px = 22;
+    const int maxX = 14 + kChatAreaW - 82;
+    for (int i = 0; i < 8 && (st->candPageStart + i) < st->candCount; ++i) {
+      int idx = st->candPageStart + i;
+      wchar_t pillTxt[48];
+      _snwprintf(pillTxt, 48, L"%d.%ls", i + 1, st->cands[idx]);
+      pillTxt[47] = L'\0';
+      int pw = ::MisakiFont::measureTextWidth(pillTxt, static_cast<int>(wcslen(pillTxt)), 2) + 14;
+      if (pw < 56) pw = 56;
+      if (px + pw > maxX) break;
+      if (x >= px && x < px + pw) {
+        st->candSel = idx;
+        commitChatCandidate(st);
+        uint32_t d = kDirtyInputBar | (st->converting ? kDirtyCandBar : (kDirtyArea | kDirtyHeader));
+        markDirty(st, d);
+        return;
+      }
+      px += pw + 6;
+    }
     return;
   }
 
-  // Bottom 5 action buttons
-  if (y >= 436 && y <= 468 && x >= 14 && x < 14 + kChatAreaW) {
+  // Click mode badge on left of inline input bar (x=18..106, y=396..432) -> cycle mode
+  if (y >= 396 && y < 432 && x >= 14 && x < 14 + kChatAreaW) {
+    if (x < 108) {
+      onKeyDown(VK_F2, false, userData);
+    } else if (st->inputBuf[0] && !st->romaji.hasContent() && !st->converting) {
+      onKeyDown(VK_RETURN, false, userData);
+    }
+    return;
+  }
+
+  // Bottom 5 action buttons (y = 438..472)
+  if (y >= 438 && y <= 472 && x >= 14 && x < 14 + kChatAreaW) {
     int b = (x - 14) / 123;
     static constexpr WPARAM kBtnVks[5] = { VK_F1, VK_F2, VK_F3, VK_F4, VK_F5 };
     if (b >= 0 && b < 5) onKeyDown(kBtnVks[b], false, userData);
@@ -764,7 +1257,6 @@ static void onClick(int x, int y, void * userData) {
 
 static void onTimer(LiliumUI::Canvas & c, void * userData) {
   ChatState * st = static_cast<ChatState *>(userData);
-  if (st->modalOpen) return;
 
   if (!st->generating) {
     SYSTEMTIME tm;
@@ -785,7 +1277,6 @@ static void onTimer(LiliumUI::Canvas & c, void * userData) {
   bool gotTextTok = false;
   bool anyDone = false;
 
-  // Execute prefill fast within a 35ms slice; emit 1 generated text token per timer tick
   for (int iter = 0; iter < 32; ++iter) {
     wchar_t delta[32] = L"";
     bool isGen = false;
@@ -836,8 +1327,14 @@ static void onTimer(LiliumUI::Canvas & c, void * userData) {
       ChatMsg & ai = st->msgs[st->activeAiMsgIdx];
       ai.generating = false;
       ai.genMs = elapsedMs;
-      if (!ai.text[0]) wcsncpy(ai.text, L"...", 383);
+      if (!ai.text[0]) {
+        wcsncpy(ai.text, L"...", 383);
+        ai.text[383] = L'\0';
+      }
     }
+    st->dirtyFlags |= kDirtyHeader | kDirtyArea | kDirtyButtons | kDirtySidebarStats;
+    if (st->converting) st->dirtyFlags |= kDirtyCandBar;
+    onRender(c, st);
   } else if (gotTextTok) {
     DWORD genMs = (st->firstTokTick > 0) ? (GetTickCount() - st->firstTokTick) : 0;
     int genToks = st->engine.generatedTokenCount();
@@ -845,9 +1342,13 @@ static void onTimer(LiliumUI::Canvas & c, void * userData) {
     if (genMs >= 50 && genToks > 0) {
       st->lastTokPerSec = static_cast<double>(genToks) * 1000.0 / static_cast<double>(genMs);
     }
+    st->dirtyFlags |= kDirtyArea | kDirtySidebarStats;
+    if (st->converting) st->dirtyFlags |= kDirtyCandBar;
+    onRender(c, st);
+  } else if ((st->animTick % 3) == 0) {
+    st->dirtyFlags |= kDirtySidebarStats;
+    onRender(c, st);
   }
-
-  onRender(c, st);
 }
 
 static bool onCloseRequest(void * userData) {
@@ -915,6 +1416,7 @@ int main(int argc, char * argv[]) {
   ChatState * st = new (raw) ChatState();
   st->manageTaskBar = !LiliumUI::isLaunchedFromLauncherArg();
 
+  st->ime.connectOrLaunch(true);
   scanModels(st);
   loadActiveModel(st);
   pushWelcomeMessage(st);

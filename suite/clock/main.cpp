@@ -744,7 +744,7 @@ static void onTimer(LiliumUI::Canvas & c, void * userData) {
     st->timerRunning = false;
     st->timerRemainingMs = 0;
     st->alarmModal = true;
-    MessageBeep(MB_OK);
+    // Visual alert only: keep Clock completely silent (only Lilium Recorder emits audio)
     updateTimerCadence(st);
     st->window.requestRepaint(true);
     onRender(c, userData);
