@@ -131,8 +131,9 @@ Lilium/
 ./build_brain.sh --installer
 ```
 - 出力先: `output/release/LiliumInstaller/LiliumInstaller.exe` ＋ `payload/`（ARM 版ビルド済みファイル群）
-- Brain 側 Lilium と同じ `#4FBFAF` × 美咲フォント UI を Windows デスクトップ上で再現し、`<ドライブ>\アプリ\Lilium\` へ選択したアプリだけを導入（SD カードのフォーマット不要・既存設定保持・旧版検出時はアップデート・導入済検出に対応）
-- 対応機種判定（`PW-SH1` 未満の 480×320 機・第 5 世代非 WinCE 機のブロック）、`exeopener.exe`（`AppMain.exe`）ユーザー指定（ライセンス保護のため非同梱）、`AppMain.cfg`（8 バイト）のプログラム生成（標準 WVGA / 800×480 / 実験用 `liliumpj`）、および実書込ゼロの試運転コード（`LILIUM-TEST`）を搭載
+- Brain 側 Lilium と同じ `#4FBFAF` × 美咲フォント UI（`scale=2` 統一）を Windows デスクトップ上で再現し、`<ドライブ>\アプリ\Lilium\` へ選択アプリを一括配置（SD カードのフォーマット不要・既存設定保持・旧版検出時はアップデート・導入済検出に対応）
+- **ランチャーなし個別導入にも対応**: `ランチャー` のチェックを外すと各アプリを `<ドライブ>\アプリ\<アプリ名>\` へ個別に `AppMain.exe` / `AppMain.cfg` / `index.din` 付きで配置します（※ランチャーなしの場合、IME 自動起動や共通設定の連動など一部アプリ・機能が正常に動作しない場合があります）
+- 対応機種判定（`PW-SH1` 未満の 480×320 機・第 5 世代非 WinCE 機のブロック）、`exeopener.exe`（`AppMain.exe`）ユーザー指定（ライセンス保護のため非同梱）、`AppMain.cfg`（8 バイト）のプログラム生成（標準 WVGA / 800×480 / 実験用 `liliumpj`）を搭載
 
 ### 4. IME 辞書の再生成（任意）
 ```bash

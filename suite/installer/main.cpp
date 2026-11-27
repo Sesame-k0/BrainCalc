@@ -9,6 +9,13 @@ namespace {
 
 using namespace LiliumInstallerCore;
 
+static constexpr int kWinW = 960;
+static constexpr int kWinH = 580;
+static constexpr int kMainW = 736;
+static constexpr int kSidebarX = 736;
+static constexpr int kSidebarW = 224;
+static constexpr int kHeaderH = 44;
+
 static constexpr int kMaxVisDrives = 4;
 static constexpr int kMaxLogLines = 12;
 
@@ -24,13 +31,14 @@ enum class ModalKind {
   DryRunSelect,
   AlreadyInstalled,
   UpdateConfirm,
+  StandaloneWarn,
   ErrorNotice,
   ExitConfirm
 };
 
 enum class FocusedInput {
   None = 0,
-  Step1TestCode,
+  Step1PathInput,
   Step2ModelName
 };
 
@@ -39,9 +47,8 @@ struct HitZone {
   int x, y, w, h;
 };
 
-static constexpr int kMaxZones = 48;
+static constexpr int kMaxZones = 52;
 
-// Bottom navigation & sidebar control IDs
 enum ZoneId {
   Z_NONE = 0,
   Z_STEP_BASE = 10,        // 10..14 step strip
@@ -50,8 +57,9 @@ enum ZoneId {
   Z_DRIVE_DOWN = 29,
   Z_RESCAN = 30,
   Z_BROWSE_DIR = 31,
-  Z_CODE_BOX = 32,
-  Z_CODE_APPLY = 33,
+  Z_PATH_BOX = 32,
+  Z_PATH_CLEAR = 33,
+  Z_PATH_APPLY = 34,
   Z_MODEL_BOX = 40,
   Z_MODEL_CLEAR = 41,
   Z_GEN_BASE = 42,         // 42..45 gen cards
@@ -81,38 +89,38 @@ struct InstallerAppState {
   bool payloadOk = false;
 
   int currentStep = 0; // 0..4
-  FocusedInput focusedInput = FocusedInput::Step1TestCode;
+  FocusedInput focusedInput = FocusedInput::Step1PathInput;
   int hoverZone = Z_NONE;
 
-  // Step 1: Drives & target
+  // Step 1: Drives & normal path input
   DriveEntry drives[kMaxDrives] = {};
   int driveCount = 0;
   int selectedDriveIdx = -1;
   int driveScroll = 0;
   DriveEntry customTarget = {};
   bool useCustomTarget = false;
-  wchar_t testCodeText[32] = L"";
+  wchar_t pathInputText[MAX_PATH] = L"";
 
-  // Dry-Run state
+  // Hidden Dry-Run state
   bool dryRun = false;
   DryRunScenario dryScenario = DryRunScenario::None;
 
   // Step 2: Model verification
   wchar_t modelText[32] = L"PW-SB4";
   BrainGen brainGen = BrainGen::Gen4Supported;
-  bool genSelectedManually = false;
 
   // Step 3: App selection
   bool appSelected[kCatalogCount] = {};
   uint64_t appSizes[kCatalogCount] = {};
   int hoveredAppIdx = -1;
+  bool standaloneWarnShown = false;
 
   // Step 4: Loader & AppMain.cfg
   LoaderMode loaderMode = LoaderMode::None;
   wchar_t exeopenerPath[MAX_PATH] = L"";
-  wchar_t loaderStatusMsg[96] = L"未選択: お手元の exeopener.exe を参照してください";
+  wchar_t loaderStatusMsg[96] = L"未選択: お手元の exeopener.exe を参照";
   bool loaderVerified = false;
-  int cfgMode = 0; // 0=StdWVGA, 1=Explicit800x480, 2=ExperimentalTag
+  int cfgMode = 0;
 
   // Step 5: Install execution
   InstallPhase phase = InstallPhase::Ready;
@@ -170,11 +178,11 @@ static void syncDefaultLoaderMode(InstallerAppState & st) {
     st.loaderVerified = true;
   } else if (st.brainGen == BrainGen::Gen3Supported && st.payloadOk) {
     st.loaderMode = LoaderMode::DirectNoOpener;
-    wcscpy(st.loaderStatusMsg, L"第3世代: exeopener無しで AppMain_.exe を直接起動配置");
+    wcscpy(st.loaderStatusMsg, L"第3世代: exeopener不要の直接起動で配置");
     st.loaderVerified = true;
   } else {
     st.loaderMode = LoaderMode::None;
-    wcscpy(st.loaderStatusMsg, L"未選択: お手元の exeopener.exe を参照してください");
+    wcscpy(st.loaderStatusMsg, L"未選択: お手元の exeopener.exe を参照");
     st.loaderVerified = false;
   }
 }
@@ -182,21 +190,31 @@ static void syncDefaultLoaderMode(InstallerAppState & st) {
 static void computeSelectionSummary(const InstallerAppState & st, int & outCount, uint64_t & outBytes) {
   outCount = 0;
   outBytes = 0;
+  int standaloneFolders = 0;
   for (int i = 0; i < kCatalogCount; ++i) {
-    if (st.appSelected[i] || kAppCatalog[i].required) {
+    if (st.appSelected[i]) {
       ++outCount;
       outBytes += st.appSizes[i];
+      if (!st.appSelected[0] && i >= 1 && i != 11) {
+        ++standaloneFolders;
+      }
     }
   }
-  if (st.loaderMode == LoaderMode::UserExeOpener || st.loaderMode == LoaderMode::DirectNoOpener || st.loaderMode == LoaderMode::VirtualDryRun) {
-    outBytes += 192512ULL;
+  if (st.loaderMode == LoaderMode::UserExeOpener || st.loaderMode == LoaderMode::DirectNoOpener ||
+      st.loaderMode == LoaderMode::VirtualDryRun) {
+    int loaderCopies = st.appSelected[0] ? 1 : standaloneFolders;
+    outBytes += static_cast<uint64_t>(loaderCopies) * 192512ULL;
+  }
+  // Standalone Calc carries Misaki font copy
+  if (!st.appSelected[0] && st.appSelected[1]) {
+    outBytes += 140000ULL;
   }
 }
 
 static uint32_t buildSelectedMask(const InstallerAppState & st) {
   uint32_t mask = 0;
   for (int i = 0; i < kCatalogCount; ++i) {
-    if (st.appSelected[i] || kAppCatalog[i].required) mask |= (1U << i);
+    if (st.appSelected[i]) mask |= (1U << i);
   }
   return mask;
 }
@@ -216,6 +234,14 @@ static void appendInstallLog(InstallerAppState & st, const wchar_t * line) {
   }
 }
 
+static void syncPathInputFromActive(InstallerAppState & st) {
+  const DriveEntry * t = getActiveTargetConst(st);
+  if (t && !st.dryRun) {
+    wcsncpy(st.pathInputText, t->rootPath, MAX_PATH - 1);
+    st.pathInputText[MAX_PATH - 1] = L'\0';
+  }
+}
+
 static void refreshDrives(InstallerAppState & st) {
   wchar_t prevRoot[MAX_PATH] = L"";
   if (!st.useCustomTarget && st.selectedDriveIdx >= 0 && st.selectedDriveIdx < st.driveCount) {
@@ -232,11 +258,14 @@ static void refreshDrives(InstallerAppState & st) {
     }
   }
   st.driveScroll = 0;
-  if (st.useCustomTarget && st.customTarget.isReady) {
+  if (st.useCustomTarget && st.customTarget.isReady && !st.dryRun) {
     st.customTarget.existing = inspectTargetInstall(st.customTarget.destLiliumDir);
   }
   for (int i = 0; i < kCatalogCount; ++i) {
     st.appSizes[i] = computeCatalogItemBytes(st.payloadDir, i, st.payloadOk);
+  }
+  if (!st.pathInputText[0]) {
+    syncPathInputFromActive(st);
   }
 }
 
@@ -248,6 +277,59 @@ static void initInstallerState(InstallerAppState & st) {
   refreshDrives(st);
   st.brainGen = classifyBrainModel(st.modelText);
   syncDefaultLoaderMode(st);
+}
+
+static bool setCustomFolderPath(InstallerAppState & st, const wchar_t * rawDir) {
+  if (!rawDir || !rawDir[0]) return false;
+  wchar_t norm[MAX_PATH] = L"";
+  wcsncpy(norm, rawDir, MAX_PATH - 1);
+  norm[MAX_PATH - 1] = L'\0';
+  // Trim trailing whitespace
+  size_t len = wcslen(norm);
+  while (len > 0 && iswspace(norm[len - 1])) norm[--len] = L'\0';
+  // Strip surrounding quotes if pasted from Explorer
+  if (len >= 2 && norm[0] == L'"' && norm[len - 1] == L'"') {
+    norm[len - 1] = L'\0';
+    memmove(norm, norm + 1, (len - 1) * sizeof(wchar_t));
+    len -= 2;
+  }
+  // Convert "E:" -> "E:\"
+  if (len == 2 && norm[1] == L':') {
+    norm[2] = L'\\';
+    norm[3] = L'\0';
+  }
+  if (!dirExistsW(norm)) return false;
+
+  st.dryRun = false;
+  st.dryScenario = DryRunScenario::None;
+  st.useCustomTarget = true;
+  st.customTarget = DriveEntry{};
+  wcsncpy(st.customTarget.rootPath, norm, MAX_PATH - 1);
+  st.customTarget.rootPath[MAX_PATH - 1] = L'\0';
+  computeDestLiliumDir(norm, st.customTarget.destLiliumDir, MAX_PATH);
+  wcscpy(st.customTarget.label, L"指定フォルダ");
+  wcscpy(st.customTarget.fsName, L"FS");
+
+  wchar_t volRoot[MAX_PATH] = L"";
+  if (wcslen(norm) >= 2 && norm[1] == L':') {
+    _snwprintf(volRoot, MAX_PATH, L"%c:\\", norm[0]);
+  }
+  ULARGE_INTEGER avail = {}, tot = {}, freeTot = {};
+  if (GetDiskFreeSpaceExW(volRoot[0] ? volRoot : norm, &avail, &tot, &freeTot)) {
+    st.customTarget.totalBytes = tot.QuadPart;
+    st.customTarget.freeBytes = avail.QuadPart;
+  } else {
+    st.customTarget.totalBytes = 1024ULL * 1024ULL * 1024ULL;
+    st.customTarget.freeBytes = 1024ULL * 1024ULL * 1024ULL;
+  }
+  st.customTarget.isRemovable = false;
+  st.customTarget.isCustomFolder = true;
+  st.customTarget.isReady = true;
+  st.customTarget.existing = inspectTargetInstall(st.customTarget.destLiliumDir);
+  wcsncpy(st.pathInputText, norm, MAX_PATH - 1);
+  st.pathInputText[MAX_PATH - 1] = L'\0';
+  syncDefaultLoaderMode(st);
+  return true;
 }
 
 static void applyDryRunScenario(InstallerAppState & st, DryRunScenario sc) {
@@ -273,7 +355,7 @@ static void applyDryRunScenario(InstallerAppState & st, DryRunScenario sc) {
     st.currentStep = 1;
     st.focusedInput = FocusedInput::Step2ModelName;
     st.loaderMode = LoaderMode::VirtualDryRun;
-    wcscpy(st.loaderStatusMsg, L"試運転: 仮想ローダー(書込なし)を使用");
+    wcscpy(st.loaderStatusMsg, L"試運転: 仮想ローダ(書込なし)を使用");
     st.loaderVerified = true;
   } else if (sc == DryRunScenario::UpdateFromOlder) {
     st.customTarget.existing.dirExists = true;
@@ -284,8 +366,8 @@ static void applyDryRunScenario(InstallerAppState & st, DryRunScenario sc) {
     st.modal = ModalKind::UpdateConfirm;
     st.modalFocus = 0;
     wcscpy(st.modalTitle, L"旧バージョン検出 (試運転)");
-    _snwprintf(st.modalLine1, 95, L"旧版 (v2.5.0) が見つかりました -> %ls へ更新", kInstallerVersion);
-    wcscpy(st.modalLine2, L"設定・メモを保持してアップデートします (実書込なし)");
+    _snwprintf(st.modalLine1, 95, L"旧版(v2.5.0)が見つかりました -> %ls", kInstallerVersion);
+    wcscpy(st.modalLine2, L"設定を保持しアップデートします(書込なし)");
     st.loaderMode = LoaderMode::ReuseExisting;
     wcscpy(st.loaderStatusMsg, L"試運転: 既存 AppMain.exe を流用");
     st.loaderVerified = true;
@@ -298,8 +380,8 @@ static void applyDryRunScenario(InstallerAppState & st, DryRunScenario sc) {
     st.modal = ModalKind::AlreadyInstalled;
     st.modalFocus = 0;
     wcscpy(st.modalTitle, L"すでに導入済みです (試運転)");
-    _snwprintf(st.modalLine1, 95, L"Lilium %ls は既にこの保存先へ導入されています", kInstallerVersion);
-    wcscpy(st.modalLine2, L"アプリの追加・再導入を行うか、導入先を選び直してください");
+    _snwprintf(st.modalLine1, 95, L"Lilium %ls は既に導入されています", kInstallerVersion);
+    wcscpy(st.modalLine2, L"再導入するか、別の導入先を選び直してください");
     st.loaderMode = LoaderMode::ReuseExisting;
     wcscpy(st.loaderStatusMsg, L"試運転: 既存 AppMain.exe を流用");
     st.loaderVerified = true;
@@ -318,35 +400,7 @@ static bool browseTargetFolder(InstallerAppState & st) {
   bool ok = (SHGetPathFromIDListW(pidl, picked) != FALSE && picked[0]);
   CoTaskMemFree(pidl);
   if (!ok) return false;
-
-  st.dryRun = false;
-  st.dryScenario = DryRunScenario::None;
-  st.useCustomTarget = true;
-  st.customTarget = DriveEntry{};
-  wcsncpy(st.customTarget.rootPath, picked, MAX_PATH - 1);
-  st.customTarget.rootPath[MAX_PATH - 1] = L'\0';
-  computeDestLiliumDir(picked, st.customTarget.destLiliumDir, MAX_PATH);
-  wcscpy(st.customTarget.label, L"指定フォルダ");
-  wcscpy(st.customTarget.fsName, L"FS");
-
-  wchar_t volRoot[MAX_PATH] = L"";
-  if (wcslen(picked) >= 2 && picked[1] == L':') {
-    _snwprintf(volRoot, MAX_PATH, L"%c:\\", picked[0]);
-  }
-  ULARGE_INTEGER avail = {}, tot = {}, freeTot = {};
-  if (GetDiskFreeSpaceExW(volRoot[0] ? volRoot : picked, &avail, &tot, &freeTot)) {
-    st.customTarget.totalBytes = tot.QuadPart;
-    st.customTarget.freeBytes = avail.QuadPart;
-  } else {
-    st.customTarget.totalBytes = 1024ULL * 1024ULL * 1024ULL;
-    st.customTarget.freeBytes = 1024ULL * 1024ULL * 1024ULL;
-  }
-  st.customTarget.isRemovable = false;
-  st.customTarget.isCustomFolder = true;
-  st.customTarget.isReady = true;
-  st.customTarget.existing = inspectTargetInstall(st.customTarget.destLiliumDir);
-  syncDefaultLoaderMode(st);
-  return true;
+  return setCustomFolderPath(st, picked);
 }
 
 static bool browseExeOpenerFile(InstallerAppState & st) {
@@ -378,7 +432,7 @@ static bool browseExeOpenerFile(InstallerAppState & st) {
     st.modalFocus = 0;
     wcscpy(st.modalTitle, L"ローダー形式エラー");
     wcsncpy(st.modalLine1, reason, 95);
-    wcscpy(st.modalLine2, L"WinCE ARM版 exeopener.exe (AppMain.exe) を選択してください");
+    wcscpy(st.modalLine2, L"WinCE ARM版 exeopener を指定してください");
     return false;
   }
 }
@@ -400,7 +454,7 @@ static int hitTestZones(const InstallerAppState & st, int mx, int my) {
 
 static void drawButton(LiliumUI::Canvas & c, InstallerAppState & st, int id,
                        int x, int y, int w, int h, const wchar_t * label,
-                       bool primary, bool danger, bool enabled, int scale = 2) {
+                       bool primary, bool danger, bool enabled) {
   const bool hovered = enabled && (st.hoverZone == id);
   uint32_t bg = LiliumUI::kColBtnBg;
   uint32_t bd = LiliumUI::kColBtnBorder;
@@ -425,47 +479,117 @@ static void drawButton(LiliumUI::Canvas & c, InstallerAppState & st, int id,
   }
 
   c.drawBox(x, y, w, h, bg, bd);
-  c.drawText(x + 2, y, w - 4, h, tx, label, scale, LiliumUI::Align::Center, true);
+  c.drawText(x + 4, y, w - 8, h, tx, label, 2, LiliumUI::Align::Center, true);
   if (enabled) addZone(st, id, x, y, w, h);
 }
 
-// Crisp 24x24 mini pixel-art icon matching Lilium Launcher identity
+static void renderInstallerHeader(LiliumUI::Canvas & c, const wchar_t * title, const wchar_t * badge) {
+  c.fillRect(0, 0, kMainW, kHeaderH, LiliumUI::kColTeal);
+  c.fillRect(0, kHeaderH - 1, kMainW, 1, 0x39A899);
+  c.drawText(16, 0, kMainW - 290, kHeaderH, LiliumUI::kColWhite, title, 2, LiliumUI::Align::Left, true);
+  if (badge && badge[0]) {
+    int bw = c.measureWidth(badge, 2) + 22;
+    if (bw > 270) bw = 270;
+    if (bw < 130) bw = 130;
+    c.drawBox(kMainW - bw - 12, 8, bw, 28, LiliumUI::kColTealHeader, LiliumUI::kColWhite);
+    c.drawText(kMainW - bw - 12, 8, bw, 28, LiliumUI::kColTealDeep, badge, 2, LiliumUI::Align::Center, true);
+  }
+}
+
+static void renderInstallerModal(LiliumUI::Canvas & c, InstallerAppState & st,
+                                 const wchar_t * title, const wchar_t * line1, const wchar_t * line2,
+                                 const LiliumUI::ModalButton * buttons, int bCount,
+                                 int focusedIndex, const wchar_t * hint) {
+  c.darkenScreen();
+  const int dlgW = 656;
+  const int dlgH = 268;
+  const int dlgX = (kWinW - dlgW) / 2;
+  const int dlgY = (kWinH - dlgH) / 2;
+
+  c.fillRect(dlgX + 5, dlgY + 5, dlgW, dlgH, LiliumUI::kColBorderStrong);
+  c.drawBox(dlgX, dlgY, dlgW, dlgH, 0xF6F8FC, 0xA5B2C2);
+  c.drawBox(dlgX, dlgY, dlgW, 42, LiliumUI::kColTealHeader, 0xB4D7D2);
+  c.drawText(dlgX + 12, dlgY + 2, dlgW - 24, 38, LiliumUI::kColTealDeep, title, 2, LiliumUI::Align::Center, true);
+
+  if (line1 && line1[0]) {
+    c.drawText(dlgX + 18, dlgY + 58, dlgW - 36, 28, LiliumUI::kColText, line1, 2, LiliumUI::Align::Center, true);
+  }
+  if (line2 && line2[0]) {
+    c.drawText(dlgX + 18, dlgY + 94, dlgW - 36, 28, LiliumUI::kColMuted, line2, 2, LiliumUI::Align::Center, true);
+  }
+
+  if (buttons && bCount > 0) {
+    const int btnW = (bCount == 1) ? 200 : ((bCount == 2) ? 250 : 184);
+    const int gap = 20;
+    const int totalW = bCount * btnW + (bCount - 1) * gap;
+    int bx = dlgX + (dlgW - totalW) / 2;
+    const int by = dlgY + 148;
+    const int bh = 46;
+
+    for (int i = 0; i < bCount; ++i) {
+      bool sel = (i == focusedIndex);
+      uint32_t bg = LiliumUI::kColWhite;
+      uint32_t bd = LiliumUI::kColBorder;
+      uint32_t tx = LiliumUI::kColTextSub;
+
+      if (sel) {
+        bg = buttons[i].isDanger ? LiliumUI::kColDangerFill : LiliumUI::kColTeal;
+        bd = buttons[i].isDanger ? 0xAA281C : 0x289687;
+        tx = LiliumUI::kColWhite;
+      } else if (buttons[i].isDanger) {
+        bg = LiliumUI::kColDangerBg;
+        bd = 0xE1B4AF;
+        tx = LiliumUI::kColDangerText;
+      }
+
+      c.drawBox(bx, by, btnW, bh, bg, bd);
+      c.drawText(bx + 4, by, btnW - 8, bh, tx, buttons[i].label, 2, LiliumUI::Align::Center, true);
+      addZone(st, Z_MODAL_BTN_BASE + i, bx, by, btnW, bh);
+      bx += btnW + gap;
+    }
+  }
+
+  if (hint && hint[0]) {
+    c.drawText(dlgX + 16, dlgY + 216, dlgW - 32, 28, LiliumUI::kColLightMuted, hint, 2, LiliumUI::Align::Center, true);
+  }
+}
+
 static void renderMiniAppIcon(LiliumUI::Canvas & c, int kind, int x, int y) {
   c.drawBox(x, y, 26, 26, LiliumUI::kColWhite, LiliumUI::kColBorderStrong);
   switch (kind) {
-    case 99: // Launcher 4x3 teal grid
+    case 99:
       for (int r = 0; r < 2; ++r) {
         for (int cl = 0; cl < 2; ++cl) {
           c.fillRect(x + 4 + cl * 10, y + 4 + r * 10, 8, 8, ((r + cl) % 2 == 0) ? LiliumUI::kColTeal : LiliumUI::kColTealDark);
         }
       }
       break;
-    case 0: // Calc
+    case 0:
       c.fillRect(x + 4, y + 4, 18, 6, LiliumUI::kColTealDark);
       for (int r = 0; r < 2; ++r)
         for (int cl = 0; cl < 3; ++cl)
           c.fillRect(x + 4 + cl * 6, y + 12 + r * 5, 4, 4, (r == 1 && cl == 2) ? LiliumUI::kColTeal : LiliumUI::kColCharcoal);
       break;
-    case 1: // TaskMgr bars
+    case 1:
       c.fillRect(x + 4, y + 14, 4, 8, LiliumUI::kColCharcoal);
       c.fillRect(x + 10, y + 9, 4, 13, LiliumUI::kColTeal);
       c.fillRect(x + 16, y + 5, 4, 17, LiliumUI::kColTealDark);
       break;
-    case 2: // Clock
+    case 2:
       c.drawThickFrame(x + 4, y + 4, 18, 18, 2, LiliumUI::kColCharcoal);
       c.fillRect(x + 12, y + 7, 2, 7, LiliumUI::kColCharcoal);
       c.fillRect(x + 12, y + 12, 6, 2, LiliumUI::kColTealDark);
       break;
-    case 3: // Filer
+    case 3:
       c.fillRect(x + 4, y + 5, 9, 3, LiliumUI::kColTeal);
       c.drawBox(x + 4, y + 8, 18, 13, LiliumUI::kColTealSoft, LiliumUI::kColCharcoal);
       break;
-    case 4: // DOOM
+    case 4:
       c.fillRect(x + 3, y + 3, 20, 20, LiliumUI::kColCharcoal);
       c.fillRect(x + 5, y + 7, 16, 6, LiliumUI::kColTeal);
       c.fillRect(x + 7, y + 16, 12, 3, LiliumUI::kColDangerFill);
       break;
-    case 5: // Life glider
+    case 5:
       c.fillRect(x + 3, y + 3, 20, 20, 0x141B20);
       c.fillRect(x + 11, y + 5, 4, 4, LiliumUI::kColTeal);
       c.fillRect(x + 15, y + 9, 4, 4, 0xA8ECE2);
@@ -473,7 +597,7 @@ static void renderMiniAppIcon(LiliumUI::Canvas & c, int kind, int x, int y) {
       c.fillRect(x + 11, y + 13, 4, 4, LiliumUI::kColTeal);
       c.fillRect(x + 15, y + 13, 4, 4, LiliumUI::kColTeal);
       break;
-    case 6: // TimeTable 3x3
+    case 6:
       c.fillRect(x + 4, y + 4, 18, 4, LiliumUI::kColTealDark);
       c.fillRect(x + 4, y + 10, 5, 5, 0x3578D4);
       c.fillRect(x + 10, y + 10, 5, 5, 0x2E9B56);
@@ -482,69 +606,70 @@ static void renderMiniAppIcon(LiliumUI::Canvas & c, int kind, int x, int y) {
       c.fillRect(x + 10, y + 17, 5, 5, 0xCC8218);
       c.fillRect(x + 16, y + 17, 5, 5, LiliumUI::kColTeal);
       break;
-    case 7: // Editor #
+    case 7:
       c.fillRect(x + 16, y + 3, 6, 6, LiliumUI::kColTeal);
-      c.drawText(x + 4, y + 4, 12, 12, LiliumUI::kColTealDark, L"#", 1, LiliumUI::Align::Left, true);
-      c.fillRect(x + 5, y + 15, 16, 2, LiliumUI::kColCharcoal);
-      c.fillRect(x + 5, y + 19, 12, 2, LiliumUI::kColMuted);
+      c.fillRect(x + 5, y + 6, 8, 2, LiliumUI::kColTealDark);
+      c.fillRect(x + 5, y + 11, 16, 2, LiliumUI::kColCharcoal);
+      c.fillRect(x + 5, y + 15, 14, 2, LiliumUI::kColMuted);
+      c.fillRect(x + 5, y + 19, 10, 2, LiliumUI::kColTeal);
       break;
-    case 8: // Setting gear
+    case 8:
       c.fillRect(x + 10, y + 4, 6, 18, LiliumUI::kColCharcoal);
       c.fillRect(x + 4, y + 10, 18, 6, LiliumUI::kColCharcoal);
       c.drawBox(x + 7, y + 7, 12, 12, LiliumUI::kColTeal, LiliumUI::kColCharcoal);
       c.fillRect(x + 11, y + 11, 4, 4, LiliumUI::kColWhite);
       break;
-    case 9: // Recorder mic
+    case 9:
       c.drawBox(x + 9, y + 4, 8, 12, LiliumUI::kColTealSoft, LiliumUI::kColCharcoal);
       c.fillRect(x + 7, y + 17, 12, 2, LiliumUI::kColCharcoal);
       c.fillRect(x + 12, y + 19, 2, 3, LiliumUI::kColCharcoal);
       c.fillRect(x + 19, y + 4, 4, 4, LiliumUI::kColDangerFill);
       break;
-    case 10: // Chat 1.7M (Edamame bubble)
+    case 10:
       c.drawBox(x + 4, y + 5, 18, 14, 0x76D45E, LiliumUI::kColCharcoal);
       c.fillRect(x + 7, y + 9, 4, 6, 0xB8F59E);
       c.fillRect(x + 14, y + 9, 4, 6, 0xB8F59E);
       c.fillRect(x + 8, y + 19, 5, 3, LiliumUI::kColCharcoal);
       break;
-    case 11: // Chat +10M (Brain dict)
+    case 11:
       c.drawBox(x + 4, y + 4, 18, 11, LiliumUI::kColTealSoft, LiliumUI::kColCharcoal);
       c.fillRect(x + 6, y + 6, 14, 7, LiliumUI::kColWhite);
       c.drawBox(x + 4, y + 16, 18, 6, LiliumUI::kColBtnBg, LiliumUI::kColCharcoal);
       break;
-    default: // 12: IME 'あ'
+    default:
       c.drawBox(x + 3, y + 3, 20, 20, LiliumUI::kColTealSoft, LiliumUI::kColTealDark);
-      c.drawText(x + 4, y + 4, 18, 18, LiliumUI::kColTealDeep, L"あ", 2, LiliumUI::Align::Center, true);
+      c.drawText(x + 3, y + 3, 20, 20, LiliumUI::kColTealDeep, L"あ", 2, LiliumUI::Align::Center, true);
       break;
   }
 }
 
 static void renderSidebarPanel(LiliumUI::Canvas & c, InstallerAppState & st) {
-  const int sx = LiliumUI::kSidebarX;
-  const int sw = LiliumUI::kSidebarW;
+  const int sx = kSidebarX;
+  const int sw = kSidebarW;
 
-  c.fillRect(sx, 0, sw, LiliumUI::kScreenH, LiliumUI::kColSidebar);
-  c.fillRect(sx, 0, 1, LiliumUI::kScreenH, LiliumUI::kColBorder);
+  c.fillRect(sx, 0, sw, kWinH, LiliumUI::kColSidebar);
+  c.fillRect(sx, 0, 1, kWinH, LiliumUI::kColBorder);
 
   // Top status pill
-  c.drawBox(sx + 5, 6, sw - 10, 56, LiliumUI::kColWhite, LiliumUI::kColBtnBorder);
+  c.drawBox(sx + 6, 8, sw - 12, 66, LiliumUI::kColWhite, LiliumUI::kColBtnBorder);
   wchar_t clockBuf[16] = L"";
   LiliumUI::queryClockStr(clockBuf, 16);
   wchar_t topLine[48] = L"";
-  _snwprintf(topLine, 48, L"%ls  %ls", clockBuf, kInstallerVersion);
+  _snwprintf(topLine, 47, L"%ls %ls", clockBuf, kInstallerVersion);
   topLine[47] = L'\0';
-  c.drawText(sx + 7, 10, sw - 14, 18, LiliumUI::kColTealDeep, topLine, 2, LiliumUI::Align::Center, true);
-  c.fillRect(sx + 10, 32, sw - 20, 1, 0xE2E8EE);
-  const wchar_t * stMode = st.dryRun ? L"試運転(安全)" : (st.payloadOk ? L"Win11 準備OK" : L"payload探索中");
-  c.drawText(sx + 7, 36, sw - 14, 22, st.dryRun ? LiliumUI::kColWarnText : LiliumUI::kColTextSub,
-             stMode, (c.measureWidth(stMode, 2) <= sw - 14) ? 2 : 1, LiliumUI::Align::Center, true);
+  c.drawText(sx + 10, 12, sw - 20, 24, LiliumUI::kColTealDeep, topLine, 2, LiliumUI::Align::Center, true);
+  c.fillRect(sx + 12, 39, sw - 24, 1, 0xE2E8EE);
+  const wchar_t * stMode = st.dryRun ? L"試運転(安全)" : (st.payloadOk ? L"Win11準備OK" : L"準備中");
+  c.drawText(sx + 10, 44, sw - 20, 26, st.dryRun ? LiliumUI::kColWarnText : LiliumUI::kColTextSub,
+             stMode, 2, LiliumUI::Align::Center, true);
 
   // Info Card
-  const int cardX = sx + 5;
-  const int cardY = 66;
-  const int cardW = sw - 10;
-  const int cardH = 308;
+  const int cardX = sx + 6;
+  const int cardY = 82;
+  const int cardW = sw - 12;
+  const int cardH = 374;
   c.drawBox(cardX, cardY, cardW, cardH, LiliumUI::kColWhite, LiliumUI::kColTealBorder);
-  c.drawBox(cardX, cardY, cardW, 30, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
+  c.drawBox(cardX, cardY, cardW, 34, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
 
   int selCnt = 0;
   uint64_t selBytes = 0;
@@ -556,76 +681,73 @@ static void renderSidebarPanel(LiliumUI::Canvas & c, InstallerAppState & st) {
   wchar_t body[384] = L"";
 
   if (st.currentStep == 0) {
-    wcscpy(cardTitle, L"導入手順 1/5");
+    wcscpy(cardTitle, L"手順 1/5");
     const DriveEntry * t = getActiveTargetConst(st);
     if (t) {
       wchar_t freeBuf[32] = L"";
       formatBytesHuman(t->freeBytes, freeBuf, 32);
-      _snwprintf(body, 383, L"【対象】\n%ls\n\n【空き】\n%ls\n\n【形式】\nフォーマット不要\nデータ消去なし",
+      _snwprintf(body, 383, L"【対象】\n%ls\n\n【空き】\n%ls\n\n【形式】\n初期化なし\n設定保持",
                  t->rootPath, freeBuf);
     } else {
-      wcscpy(body, L"【導入先】\nSDカードまたは\nBrainドライブを\n選択してください\n\nコード入力で\n試運転も可能です");
+      wcscpy(body, L"【導入先】\nSDカードや\nパスを指定\nしてください");
     }
   } else if (st.currentStep == 1) {
-    wcscpy(cardTitle, L"機種判定 2/5");
+    wcscpy(cardTitle, L"機種 2/5");
     if (st.brainGen == BrainGen::Gen4Supported) {
-      wcscpy(body, L"【判定】\n第4世代 (800x480)\n\n【起動方式】\nexeopener経由\n\n第4世代は手順4で\nローダ指定します");
+      wcscpy(body, L"【判定】\n第4世代対応\n\n【方式】\nローダ必須\n手順4で選択");
     } else if (st.brainGen == BrainGen::Gen3Supported) {
-      wcscpy(body, L"【判定】\n第3世代 (800x480)\n\n【起動方式】\n直接起動対応\n\nPW-SH1〜SH3等が\n該当します");
+      wcscpy(body, L"【判定】\n第3世代対応\n\n【方式】\n直接起動可\nSH1〜SH3等");
     } else if (st.brainGen == BrainGen::Gen1or2Blocked) {
-      wcscpy(body, L"【判定】\n導入不可\n\nPW-SH1以前の\n480x320機では\n動作しません");
+      wcscpy(body, L"【判定】\n導入不可\n\nPW-SH1前は\n480x320機");
     } else if (st.brainGen == BrainGen::Gen5Blocked) {
-      wcscpy(body, L"【判定】\n導入不可\n\n2021年以降の第5世代\nはWinCE非搭載の\nため動作しません");
+      wcscpy(body, L"【判定】\n導入不可\n\n第5世代は\n非WinCE機");
     } else {
-      wcscpy(body, L"【入力例】\nPW-SB4, SH5, SH1\n\n型番を入力するか\n世代カードを選択\nしてください");
+      wcscpy(body, L"【入力例】\nPW-SB4\nPW-SH5\nPW-SH1");
     }
   } else if (st.currentStep == 2) {
     int detailIdx = (st.hoveredAppIdx >= 0 && st.hoveredAppIdx < kCatalogCount) ? st.hoveredAppIdx : 0;
     wcscpy(cardTitle, kAppCatalog[detailIdx].shortName);
     wchar_t itemSz[32] = L"";
     formatBytesHuman(st.appSizes[detailIdx], itemSz, 32);
-    _snwprintf(body, 383, L"【詳細】\n%ls\n%ls\n\n【単体容量】\n%ls\n\n【選択合計】\n%d個 / %ls",
-               kAppCatalog[detailIdx].descLine1,
-               kAppCatalog[detailIdx].descLine2,
-               itemSz, selCnt, sizeBuf);
+    const wchar_t * modeNm = st.appSelected[0] ? L"ランチャ統合" : L"個別配置(注意)";
+    _snwprintf(body, 383, L"【形式】\n%ls\n\n【容量】\n%ls\n\n【選択計】\n%d個 / %ls",
+               modeNm, itemSz, selCnt, sizeBuf);
   } else if (st.currentStep == 3) {
     wcscpy(cardTitle, L"ローダ 4/5");
-    const wchar_t * cfgTxt = (st.cfgMode == 0) ? L"標準WVGA\n(推奨8B)" :
-                             (st.cfgMode == 1) ? L"800x480明示" : L"実験用タグ\nliliumpj";
-    _snwprintf(body, 383, L"【exeopener】\n非同梱・任意指定\n\n【AppMain.cfg】\n%ls\n\n【合計容量】\n%ls",
-               cfgTxt, sizeBuf);
+    const wchar_t * cfgTxt = (st.cfgMode == 0) ? L"標準WVGA" :
+                             (st.cfgMode == 1) ? L"800x480明示" : L"liliumpj";
+    _snwprintf(body, 383, L"【配置】\n%ls\n\n【cfg設定】\n%ls\n\n【合計】\n%ls",
+               st.appSelected[0] ? L"統合導入" : L"各個別", cfgTxt, sizeBuf);
   } else {
     wcscpy(cardTitle, L"実行 5/5");
-    _snwprintf(body, 383, L"【選択数】\n%d アプリ\n\n【合計】\n%ls\n\n【状態】\n%ls",
+    _snwprintf(body, 383, L"【選択数】\n%d 個\n\n【合計】\n%ls\n\n【状態】\n%ls",
                selCnt, sizeBuf,
                (st.phase == InstallPhase::Done) ? (st.dryRun ? L"試運転完了" : L"導入完了") :
-               (st.phase == InstallPhase::Running) ? L"コピー実行中" :
-               (st.phase == InstallPhase::Failed) ? L"エラー停止" : L"開始待機中");
+               (st.phase == InstallPhase::Running) ? L"実行中" :
+               (st.phase == InstallPhase::Failed) ? L"失敗" : L"待機中");
   }
   body[383] = L'\0';
 
-  int ts = (c.measureWidth(cardTitle, 2) <= cardW - 8) ? 2 : 1;
-  c.drawText(cardX + 4, cardY + 2, cardW - 8, 26, LiliumUI::kColTealDeep, cardTitle, ts, LiliumUI::Align::Center, true);
-  c.drawWrappedText(cardX + 6, cardY + 38, cardW - 12, cardY + cardH - 6, LiliumUI::kColTextSub, body, 1, 5);
-  // Make key summary lines slightly bolder if needed — wait: let's test legibility, scale=1 or 2!
-  // Let's draw scale=2 for short sidebar status card (y=380..428) too:
-  c.drawBox(sx + 5, 380, sw - 10, 48, LiliumUI::kColWhite, LiliumUI::kColBtnBorder);
-  c.drawText(sx + 7, 384, sw - 14, 20, LiliumUI::kColTextSub, L"Esc:戻る/中止", 1, LiliumUI::Align::Center, true);
-  c.drawText(sx + 7, 404, sw - 14, 20, LiliumUI::kColMuted, L"FAT形式維持", 1, LiliumUI::Align::Center, true);
+  c.drawText(cardX + 6, cardY + 3, cardW - 12, 28, LiliumUI::kColTealDeep, cardTitle, 2, LiliumUI::Align::Center, true);
+  c.drawWrappedText(cardX + 10, cardY + 42, cardW - 20, cardY + cardH - 8, LiliumUI::kColTextSub, body, 2, 6);
 
-  drawButton(c, st, Z_BTN_EXIT, LiliumUI::kExitBtnX, LiliumUI::kExitBtnY,
-             LiliumUI::kExitBtnW, LiliumUI::kExitBtnH, L"終了", false, true,
-             st.phase != InstallPhase::Running, 2);
+  // Hint Box (all scale=2)
+  c.drawBox(sx + 6, 464, sw - 12, 54, LiliumUI::kColWhite, LiliumUI::kColBtnBorder);
+  c.drawText(sx + 10, 468, sw - 20, 22, LiliumUI::kColTextSub, L"Esc:戻る", 2, LiliumUI::Align::Center, true);
+  c.drawText(sx + 10, 492, sw - 20, 22, LiliumUI::kColMuted, L"FAT形式維持", 2, LiliumUI::Align::Center, true);
+
+  drawButton(c, st, Z_BTN_EXIT, sx + 6, 526, sw - 12, 44, L"終了",
+             false, true, st.phase != InstallPhase::Running);
 }
 
 static void renderStepStrip(LiliumUI::Canvas & c, InstallerAppState & st) {
   static constexpr const wchar_t * kSteps[5] = {
     L"1.導入先", L"2.機種", L"3.アプリ", L"4.ローダ", L"5.実行"
   };
-  c.drawBox(0, 42, LiliumUI::kMainW, 28, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
-  const int x0 = 6;
-  const int w = 123;
-  const int gap = 3;
+  c.drawBox(0, kHeaderH, kMainW, 34, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
+  const int x0 = 8;
+  const int w = 141;
+  const int gap = 4;
   for (int i = 0; i < 5; ++i) {
     int sx = x0 + i * (w + gap);
     bool active = (i == st.currentStep);
@@ -634,40 +756,37 @@ static void renderStepStrip(LiliumUI::Canvas & c, InstallerAppState & st) {
     uint32_t bg = active ? LiliumUI::kColTealDark : (done ? LiliumUI::kColTealSoft : LiliumUI::kColSidebar);
     uint32_t bd = active ? LiliumUI::kColTealDeep : (done ? LiliumUI::kColTeal : LiliumUI::kColBorder);
     uint32_t tx = active ? LiliumUI::kColWhite : (done ? LiliumUI::kColTealDeep : LiliumUI::kColMuted);
-    c.drawBox(sx, 45, w, 22, bg, bd);
-    c.drawText(sx + 2, 45, w - 4, 22, tx, kSteps[i], 2, LiliumUI::Align::Center, true);
-    if (canJump) addZone(st, Z_STEP_BASE + i, sx, 45, w, 22);
+    c.drawBox(sx, kHeaderH + 4, w, 26, bg, bd);
+    c.drawText(sx + 2, kHeaderH + 4, w - 4, 26, tx, kSteps[i], 2, LiliumUI::Align::Center, true);
+    if (canJump) addZone(st, Z_STEP_BASE + i, sx, kHeaderH + 4, w, 26);
   }
 }
 
 static void renderStep1Drives(LiliumUI::Canvas & c, InstallerAppState & st) {
-  c.drawBox(12, 76, 616, 28, LiliumUI::kColTealSoft, LiliumUI::kColTealBorder);
-  c.drawText(20, 76, 600, 28, LiliumUI::kColTealDeep,
-             L"BrainまたはSDを選択 (フォーマット不要・アプリフォルダへ配置)", 2, LiliumUI::Align::Left, true);
+  c.drawBox(12, 84, 712, 32, LiliumUI::kColTealSoft, LiliumUI::kColTealBorder);
+  c.drawText(20, 84, 696, 32, LiliumUI::kColTealDeep,
+             L"BrainまたはSDを選択 (フォーマット不要・設定維持)", 2, LiliumUI::Align::Left, true);
 
-  drawButton(c, st, Z_RESCAN, 12, 110, 96, 30, L"再検出", false, false, true, 2);
-  drawButton(c, st, Z_BROWSE_DIR, 114, 110, 166, 30, L"フォルダ参照...", false, false, true, 2);
+  drawButton(c, st, Z_RESCAN, 12, 122, 108, 34, L"再検出", false, false, true);
+  drawButton(c, st, Z_BROWSE_DIR, 126, 122, 188, 34, L"フォルダ参照...", false, false, true);
 
   const DriveEntry * active = getActiveTargetConst(st);
-  wchar_t targetBar[128] = L"導入先: 未選択 (ドライブまたはコード入力)";
+  wchar_t targetBar[128] = L"配置先: 未選択";
   if (active) {
-    _snwprintf(targetBar, 127, L"導入先: %ls", active->destLiliumDir);
+    _snwprintf(targetBar, 127, L"配置先: %ls", active->destLiliumDir);
     targetBar[127] = L'\0';
   }
-  c.drawBox(286, 110, 342, 30, LiliumUI::kColWhite, LiliumUI::kColBorder);
-  c.drawText(294, 110, 326, 30, active ? LiliumUI::kColTealDeep : LiliumUI::kColMuted,
-             targetBar, (c.measureWidth(targetBar, 2) <= 326) ? 2 : 1, LiliumUI::Align::Left, true);
+  c.drawBox(322, 122, 402, 34, LiliumUI::kColWhite, LiliumUI::kColBorder);
+  c.drawText(330, 122, 386, 34, active ? LiliumUI::kColTealDeep : LiliumUI::kColMuted,
+             targetBar, 2, LiliumUI::Align::Left, true);
 
-  // Build visible drive list (include customTarget at slot 0 if chosen outside DryRun)
   int totalCards = st.driveCount + ((st.useCustomTarget && st.customTarget.isReady) ? 1 : 0);
   if (totalCards == 0) {
-    c.drawBox(12, 148, 616, 212, LiliumUI::kColWhite, LiliumUI::kColBorder);
-    c.drawText(24, 186, 592, 26, LiliumUI::kColText,
-               L"リムーバブルドライブ (Brain / SDカード) が見つかりません", 2, LiliumUI::Align::Center, true);
-    c.drawText(24, 224, 592, 24, LiliumUI::kColMuted,
-               L"[フォルダ参照...] で任意フォルダを指定するか、下欄に", 2, LiliumUI::Align::Center, true);
-    c.drawText(24, 256, 592, 24, LiliumUI::kColTealDark,
-               L"「LILIUM-TEST」を入力すると書込なしで試運転できます", 2, LiliumUI::Align::Center, true);
+    c.drawBox(12, 164, 712, 270, LiliumUI::kColWhite, LiliumUI::kColBorder);
+    c.drawText(24, 236, 688, 30, LiliumUI::kColText,
+               L"リムーバブルドライブ (Brain / SD) が見つかりません", 2, LiliumUI::Align::Center, true);
+    c.drawText(24, 282, 688, 28, LiliumUI::kColMuted,
+               L"[フォルダ参照...] または下の導入先パス欄で指定してください", 2, LiliumUI::Align::Center, true);
   } else {
     if (st.driveScroll > totalCards - kMaxVisDrives) st.driveScroll = totalCards - kMaxVisDrives;
     if (st.driveScroll < 0) st.driveScroll = 0;
@@ -690,30 +809,29 @@ static void renderStep1Drives(LiliumUI::Canvas & c, InstallerAppState & st) {
         isSelected = (listIdx == st.selectedDriveIdx);
       }
 
-      int cy = 148 + slot * 54;
+      int cy = 164 + slot * 68;
       uint32_t bg = isSelected ? LiliumUI::kColTealSoft : LiliumUI::kColWhite;
       uint32_t bd = isSelected ? LiliumUI::kColTeal : LiliumUI::kColBorder;
-      c.drawBox(12, cy, 586, 48, bg, bd);
-      if (isSelected) c.drawThickFrame(12, cy, 586, 48, 2, LiliumUI::kColTeal);
+      c.drawBox(12, cy, 672, 62, bg, bd);
+      if (isSelected) c.drawThickFrame(12, cy, 672, 62, 2, LiliumUI::kColTeal);
 
-      const wchar_t * tag = st.dryRun && isSelected ? L"試運転" :
+      const wchar_t * tag = (st.dryRun && isSelected) ? L"試運転" :
                             (de->isCustomFolder ? L"フォルダ" : (de->isRemovable ? L"SD/USB" : L"固定"));
-      c.drawBox(20, cy + 10, 74, 28, isSelected ? LiliumUI::kColTealDark : LiliumUI::kColBtnBg, LiliumUI::kColTealBorder);
-      c.drawText(22, cy + 10, 70, 28, isSelected ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
-                 tag, 1, LiliumUI::Align::Center, true);
+      c.drawBox(20, cy + 13, 94, 36, isSelected ? LiliumUI::kColTealDark : LiliumUI::kColBtnBg, LiliumUI::kColTealBorder);
+      c.drawText(22, cy + 13, 90, 36, isSelected ? LiliumUI::kColWhite : LiliumUI::kColTextSub,
+                 tag, 2, LiliumUI::Align::Center, true);
 
       wchar_t titleBuf[96] = L"";
       _snwprintf(titleBuf, 95, L"%ls (%ls)", de->rootPath, de->label);
       titleBuf[95] = L'\0';
-      c.drawText(102, cy + 4, 300, 22, LiliumUI::kColText, titleBuf, 2, LiliumUI::Align::Left, true);
+      c.drawText(124, cy + 6, 336, 26, LiliumUI::kColText, titleBuf, 2, LiliumUI::Align::Left, true);
 
       wchar_t freeBuf[32] = L"";
       formatBytesHuman(de->freeBytes, freeBuf, 32);
       wchar_t subBuf[96] = L"";
-      _snwprintf(subBuf, 95, L"%ls  空き: %ls", de->fsName, freeBuf);
-      c.drawText(102, cy + 26, 300, 18, LiliumUI::kColMuted, subBuf, 1, LiliumUI::Align::Left, true);
+      _snwprintf(subBuf, 95, L"%ls 空き %ls", de->fsName, freeBuf);
+      c.drawText(124, cy + 34, 336, 22, LiliumUI::kColMuted, subBuf, 2, LiliumUI::Align::Left, true);
 
-      // Existing install badge
       const wchar_t * exBadge = L"未導入 (新規)";
       uint32_t exBg = LiliumUI::kColSidebar;
       uint32_t exBd = LiliumUI::kColBorder;
@@ -726,62 +844,63 @@ static void renderStep1Drives(LiliumUI::Canvas & c, InstallerAppState & st) {
         exBd = LiliumUI::kColTeal;
         exTx = LiliumUI::kColTealDeep;
       } else if (de->existing.status == InstallDetectStatus::OlderVersion) {
-        _snwprintf(exBuf, 47, L"旧版 %ls(更新)", de->existing.installedVersion);
+        _snwprintf(exBuf, 47, L"旧版 %ls", de->existing.installedVersion);
         exBadge = exBuf;
         exBg = LiliumUI::kColWarnBg;
         exBd = LiliumUI::kColWarnBorder;
         exTx = LiliumUI::kColWarnText;
       }
-      c.drawBox(412, cy + 10, 176, 28, exBg, exBd);
-      c.drawText(414, cy + 10, 172, 28, exTx, exBadge, 1, LiliumUI::Align::Center, true);
+      c.drawBox(468, cy + 12, 206, 38, exBg, exBd);
+      c.drawText(472, cy + 12, 198, 38, exTx, exBadge, 2, LiliumUI::Align::Center, true);
 
-      addZone(st, Z_DRIVE_BASE + slot, 12, cy, 586, 48);
+      addZone(st, Z_DRIVE_BASE + slot, 12, cy, 672, 62);
     }
 
-    drawButton(c, st, Z_DRIVE_UP, 602, 148, 26, 98, L"^", false, false, st.driveScroll > 0, 2);
-    drawButton(c, st, Z_DRIVE_DOWN, 602, 258, 26, 98, L"v", false, false, st.driveScroll + kMaxVisDrives < totalCards, 2);
+    drawButton(c, st, Z_DRIVE_UP, 690, 164, 34, 128, L"^", false, false, st.driveScroll > 0);
+    drawButton(c, st, Z_DRIVE_DOWN, 690, 302, 34, 128, L"v", false, false, st.driveScroll + kMaxVisDrives < totalCards);
   }
 
-  // Test code bar
-  c.drawBox(12, 370, 616, 52, LiliumUI::kColWhite, LiliumUI::kColBorder);
-  c.drawText(20, 380, 134, 32, LiliumUI::kColTextSub, L"テストコード:", 2, LiliumUI::Align::Left, true);
+  // Standard Destination Path Input Bar (no mention of dry-run test code)
+  c.drawBox(12, 444, 712, 68, LiliumUI::kColWhite, LiliumUI::kColBorder);
+  c.drawText(22, 460, 126, 36, LiliumUI::kColTextSub, L"導入先パス:", 2, LiliumUI::Align::Left, true);
 
-  bool boxFocused = (st.focusedInput == FocusedInput::Step1TestCode);
-  c.drawBox(156, 378, 366, 36, boxFocused ? LiliumUI::kColWhite : LiliumUI::kColRowAlt,
+  bool boxFocused = (st.focusedInput == FocusedInput::Step1PathInput);
+  c.drawBox(150, 458, 390, 40, boxFocused ? LiliumUI::kColWhite : LiliumUI::kColRowAlt,
             boxFocused ? LiliumUI::kColTeal : LiliumUI::kColBorderStrong);
-  if (boxFocused) c.drawThickFrame(156, 378, 366, 36, 2, LiliumUI::kColTeal);
+  if (boxFocused) c.drawThickFrame(150, 458, 390, 40, 2, LiliumUI::kColTeal);
 
-  if (st.testCodeText[0]) {
-    wchar_t disp[40] = L"";
-    _snwprintf(disp, 39, L"%ls%ls", st.testCodeText, boxFocused ? L"_" : L"");
-    c.drawText(164, 378, 350, 36, LiliumUI::kColText, disp, 2, LiliumUI::Align::Left, true);
+  if (st.pathInputText[0]) {
+    wchar_t disp[MAX_PATH + 4] = L"";
+    _snwprintf(disp, MAX_PATH + 2, L"%ls%ls", st.pathInputText, boxFocused ? L"_" : L"");
+    c.drawText(160, 458, 370, 40, LiliumUI::kColText, disp, 2, LiliumUI::Align::Left, true);
   } else {
-    const wchar_t * ph = boxFocused ? L"_ (LILIUM-TEST 等で試運転)" : L"LILIUM-TEST 等を入力で試運転";
-    c.drawText(164, 378, 350, 36, LiliumUI::kColLightMuted, ph, 2, LiliumUI::Align::Left, true);
+    const wchar_t * ph = boxFocused ? L"_ (例: E:\\ や保存先フォルダパス)" : L"例: E:\\ や保存先フォルダパスを入力";
+    c.drawText(160, 458, 370, 40, LiliumUI::kColLightMuted, ph, 2, LiliumUI::Align::Left, true);
   }
-  addZone(st, Z_CODE_BOX, 156, 378, 366, 36);
-  drawButton(c, st, Z_CODE_APPLY, 528, 378, 92, 36, L"試運転", true, false, st.testCodeText[0] != L'\0', 2);
+  addZone(st, Z_PATH_BOX, 150, 458, 390, 40);
+  drawButton(c, st, Z_PATH_CLEAR, 546, 458, 82, 40, L"消去", false, false, st.pathInputText[0] != L'\0');
+  drawButton(c, st, Z_PATH_APPLY, 634, 458, 82, 40, L"適用", true, false, st.pathInputText[0] != L'\0');
 }
 
 static void renderStep2Model(LiliumUI::Canvas & c, InstallerAppState & st) {
-  c.drawBox(12, 76, 616, 28, LiliumUI::kColTealSoft, LiliumUI::kColTealBorder);
-  c.drawText(20, 76, 600, 28, LiliumUI::kColTealDeep,
-             L"対応世代確認: PW-SH1未満 (480x320機) は非対応です", 2, LiliumUI::Align::Left, true);
+  c.drawBox(12, 84, 712, 32, LiliumUI::kColTealSoft, LiliumUI::kColTealBorder);
+  c.drawText(20, 84, 696, 32, LiliumUI::kColTealDeep,
+             L"対応世代確認: PW-SH1未満 (480x320機) は導入不可です", 2, LiliumUI::Align::Left, true);
 
-  c.drawText(12, 112, 114, 34, LiliumUI::kColText, L"型番入力:", 2, LiliumUI::Align::Left, true);
+  c.drawText(14, 126, 114, 38, LiliumUI::kColText, L"型番入力:", 2, LiliumUI::Align::Left, true);
   bool focused = (st.focusedInput == FocusedInput::Step2ModelName);
-  c.drawBox(128, 110, 386, 36, focused ? LiliumUI::kColWhite : LiliumUI::kColRowAlt,
+  c.drawBox(132, 124, 466, 40, focused ? LiliumUI::kColWhite : LiliumUI::kColRowAlt,
             focused ? LiliumUI::kColTeal : LiliumUI::kColBorderStrong);
-  if (focused) c.drawThickFrame(128, 110, 386, 36, 2, LiliumUI::kColTeal);
+  if (focused) c.drawThickFrame(132, 124, 466, 40, 2, LiliumUI::kColTeal);
   if (st.modelText[0]) {
     wchar_t disp[40] = L"";
     _snwprintf(disp, 39, L"%ls%ls", st.modelText, focused ? L"_" : L"");
-    c.drawText(138, 110, 366, 36, LiliumUI::kColText, disp, 2, LiliumUI::Align::Left, true);
+    c.drawText(144, 124, 442, 40, LiliumUI::kColText, disp, 2, LiliumUI::Align::Left, true);
   } else {
-    c.drawText(138, 110, 366, 36, LiliumUI::kColLightMuted, L"例: PW-SB4, PW-SH5, PW-G5300", 2, LiliumUI::Align::Left, true);
+    c.drawText(144, 124, 442, 40, LiliumUI::kColLightMuted, L"例: PW-SB4, PW-SH5, PW-G5300", 2, LiliumUI::Align::Left, true);
   }
-  addZone(st, Z_MODEL_BOX, 128, 110, 386, 36);
-  drawButton(c, st, Z_MODEL_CLEAR, 522, 110, 106, 36, L"クリア", false, false, true, 2);
+  addZone(st, Z_MODEL_BOX, 132, 124, 466, 40);
+  drawButton(c, st, Z_MODEL_CLEAR, 606, 124, 118, 40, L"クリア", false, false, true);
 
   struct GenCardSpec {
     BrainGen gen;
@@ -791,96 +910,98 @@ static void renderStep2Model(LiliumUI::Canvas & c, InstallerAppState & st) {
     bool ok;
   };
   static constexpr GenCardSpec kCards[4] = {
-    { BrainGen::Gen4Supported, L"第4世代 (2017-2020)", L"SH4..SH7 / SB4..SB7 / H7700等", L"対応 (800x480 / exeopener必須)", true },
-    { BrainGen::Gen3Supported, L"第3世代 (2014-2016)", L"SH1..SH3 / SB1..SB3 / SA1..SA3", L"対応 (800x480 / ローダ任意)", true },
-    { BrainGen::Gen1or2Blocked, L"第1・2世代 (PW-SH1前)", L"G5300 / AC880 / GC610 / A9300", L"非対応 (480x320機のため不可)", false },
-    { BrainGen::Gen5Blocked, L"第5世代 (2021以降)", L"PW-H1 / S1 / B1 / J1 / A1 / ES", L"非対応 (WinCE非搭載の新OS)", false }
+    { BrainGen::Gen4Supported, L"第4世代 (2017-2020)", L"SH4..7 / SB4..7 / H7700等", L"対応: 800x480 / ローダ要", true },
+    { BrainGen::Gen3Supported, L"第3世代 (2014-2016)", L"SH1..3 / SB1..3 / SA1..3", L"対応: 800x480 / 直接起動可", true },
+    { BrainGen::Gen1or2Blocked, L"第1・2世代 (PW-SH1前)", L"G5300 / AC880 / A9300等", L"非対応: 480x320液晶機", false },
+    { BrainGen::Gen5Blocked, L"第5世代 (2021以降)", L"PW-H1 / S1 / B1 / J1 / ES", L"非対応: WinCE非搭載OS", false }
   };
 
   for (int i = 0; i < 4; ++i) {
     int col = i % 2;
     int row = i / 2;
-    int gx = 12 + col * 312;
-    int gy = 154 + row * 90;
+    int gx = 12 + col * 362;
+    int gy = 176 + row * 112;
     bool sel = (st.brainGen == kCards[i].gen);
     uint32_t bg = sel ? (kCards[i].ok ? LiliumUI::kColTealSoft : LiliumUI::kColDangerBg) : LiliumUI::kColWhite;
     uint32_t bd = sel ? (kCards[i].ok ? LiliumUI::kColTeal : LiliumUI::kColDangerBorder) : LiliumUI::kColBorder;
-    c.drawBox(gx, gy, 304, 82, bg, bd);
-    if (sel) c.drawThickFrame(gx, gy, 304, 82, 2, bd);
+    c.drawBox(gx, gy, 350, 102, bg, bd);
+    if (sel) c.drawThickFrame(gx, gy, 350, 102, 2, bd);
 
-    c.drawText(gx + 10, gy + 6, 284, 24,
+    c.drawText(gx + 12, gy + 8, 326, 26,
                kCards[i].ok ? LiliumUI::kColTealDeep : LiliumUI::kColDangerText,
                kCards[i].title, 2, LiliumUI::Align::Left, true);
-    c.drawText(gx + 10, gy + 34, 284, 20, LiliumUI::kColTextSub, kCards[i].line1, 1, LiliumUI::Align::Left, true);
-    c.drawText(gx + 10, gy + 54, 284, 20,
+    c.drawText(gx + 12, gy + 38, 326, 24, LiliumUI::kColTextSub, kCards[i].line1, 2, LiliumUI::Align::Left, true);
+    c.drawText(gx + 12, gy + 66, 326, 24,
                kCards[i].ok ? LiliumUI::kColTealDark : LiliumUI::kColDangerText,
-               kCards[i].line2, 1, LiliumUI::Align::Left, true);
-    addZone(st, Z_GEN_BASE + i, gx, gy, 304, 82);
+               kCards[i].line2, 2, LiliumUI::Align::Left, true);
+    addZone(st, Z_GEN_BASE + i, gx, gy, 350, 102);
   }
 
-  // Verdict panel
   bool ok = (st.brainGen == BrainGen::Gen4Supported || st.brainGen == BrainGen::Gen3Supported);
   bool bad = (st.brainGen == BrainGen::Gen1or2Blocked || st.brainGen == BrainGen::Gen5Blocked);
   uint32_t vbg = ok ? LiliumUI::kColTealSoft : (bad ? LiliumUI::kColDangerBg : LiliumUI::kColWhite);
   uint32_t vbd = ok ? LiliumUI::kColTeal : (bad ? LiliumUI::kColDangerBorder : LiliumUI::kColBorder);
   uint32_t vtx = ok ? LiliumUI::kColTealDeep : (bad ? LiliumUI::kColDangerText : LiliumUI::kColMuted);
-  c.drawBox(12, 338, 616, 84, vbg, vbd);
+  c.drawBox(12, 404, 712, 108, vbg, vbd);
 
   const wchar_t * headline = ok ? L"判定OK: Liliumを導入できる対応機種です" :
-                             bad ? L"導入不可: この世代のBrainではLiliumを起動できません" :
-                                   L"型番を入力するか、上の世代カードをクリックしてください";
-  const wchar_t * detail = (st.brainGen == BrainGen::Gen4Supported) ? L"第4世代 (800x480 WinCE 6.0): 手順4で exeopener.exe を指定します" :
-                           (st.brainGen == BrainGen::Gen3Supported) ? L"第3世代 (PW-SH1以降 WinCE 6.0): 直接起動またはexeopenerで動作" :
-                           (st.brainGen == BrainGen::Gen1or2Blocked) ? L"PW-SH1より前の機種は画面解像度(480x320)と仕様が異なるため非対応" :
-                           (st.brainGen == BrainGen::Gen5Blocked) ? L"2021年以降の第5世代(PW-H1/S1等)はOSがWindows CEではないため非対応" :
-                                                                    L"対応確認が完了すると[次へ >]が有効になります";
-  c.drawText(24, 350, 592, 26, vtx, headline, 2, LiliumUI::Align::Left, true);
-  c.drawText(24, 384, 592, 24, bad ? LiliumUI::kColDangerText : LiliumUI::kColTextSub, detail, 2, LiliumUI::Align::Left, true);
+                             bad ? L"導入不可: この世代のBrainでは動作しません" :
+                                   L"型番を入力するか、上の世代カードを選択してください";
+  const wchar_t * detail = (st.brainGen == BrainGen::Gen4Supported) ? L"第4世代(800x480 WinCE6.0): 手順4でexeopener等を指定" :
+                           (st.brainGen == BrainGen::Gen3Supported) ? L"第3世代(PW-SH1以降 WinCE6.0): 直接起動・ローダ両対応" :
+                           (st.brainGen == BrainGen::Gen1or2Blocked) ? L"PW-SH1より前の機種は480x320解像度のため起動不可です" :
+                           (st.brainGen == BrainGen::Gen5Blocked) ? L"2021年以降の第5世代はWinCE非搭載のため非対応です" :
+                                                                    L"対応機種を確認すると [次へ >] が有効になります";
+  c.drawText(24, 418, 688, 30, vtx, headline, 2, LiliumUI::Align::Left, true);
+  c.drawWrappedText(24, 454, 688, 506, bad ? LiliumUI::kColDangerText : LiliumUI::kColTextSub, detail, 2, 4);
 }
 
 static void renderStep3Apps(LiliumUI::Canvas & c, InstallerAppState & st) {
   const DriveEntry * target = getActiveTargetConst(st);
   const uint32_t existMask = target ? target->existing.installedAppMask : 0;
+  const bool launcherOn = st.appSelected[0];
+
+  c.drawBox(12, 82, 712, 32,
+            launcherOn ? LiliumUI::kColTealSoft : LiliumUI::kColWarnBg,
+            launcherOn ? LiliumUI::kColTealBorder : LiliumUI::kColWarnBorder);
+  c.drawText(20, 82, 696, 32,
+             launcherOn ? LiliumUI::kColTealDeep : LiliumUI::kColWarnText,
+             launcherOn ? L"ランチャーあり: アプリ/Lilium/ 配下に統合導入します"
+                        : L"注意: ランチャー無し個別配置 (一部機能・IME連携が非対応)",
+             2, LiliumUI::Align::Left, true);
 
   for (int i = 0; i < kCatalogCount; ++i) {
     int col = i % 3;
     int row = i / 3;
-    int ax = 12 + col * 208;
-    int ay = 76 + row * 69;
-    bool on = st.appSelected[i] || kAppCatalog[i].required;
+    int ax = 12 + col * 241;
+    int ay = 120 + row * 79;
+    bool on = st.appSelected[i];
     bool hovered = (st.hoverZone == (Z_APP_BASE + i));
 
-    uint32_t bg = kAppCatalog[i].required ? 0xDBF2EE :
-                  (on ? LiliumUI::kColTealSoft : (hovered ? LiliumUI::kColRowAlt : LiliumUI::kColWhite));
+    uint32_t bg = on ? LiliumUI::kColTealSoft : (hovered ? LiliumUI::kColRowAlt : LiliumUI::kColWhite);
     uint32_t bd = on ? LiliumUI::kColTeal : (hovered ? LiliumUI::kColBorderStrong : LiliumUI::kColBorder);
-    c.drawBox(ax, ay, 200, 63, bg, bd);
-    if (on) c.drawThickFrame(ax, ay, 200, 63, 2, LiliumUI::kColTeal);
+    c.drawBox(ax, ay, 230, 74, bg, bd);
+    if (on) c.drawThickFrame(ax, ay, 230, 74, 2, LiliumUI::kColTeal);
 
-    renderMiniAppIcon(c, kAppCatalog[i].iconKind, ax + 6, ay + 8);
+    renderMiniAppIcon(c, kAppCatalog[i].iconKind, ax + 8, ay + 12);
 
-    c.drawText(ax + 38, ay + 6, 126, 24, on ? LiliumUI::kColTealDeep : LiliumUI::kColText,
+    c.drawText(ax + 40, ay + 10, 146, 26, on ? LiliumUI::kColTealDeep : LiliumUI::kColText,
                kAppCatalog[i].shortName, 2, LiliumUI::Align::Left, true);
 
     wchar_t szBuf[32] = L"";
     formatBytesHuman(st.appSizes[i], szBuf, 32);
     wchar_t meta[48] = L"";
     if ((existMask & (1U << i)) != 0) {
-      _snwprintf(meta, 47, L"%ls (導入済)", szBuf);
+      _snwprintf(meta, 47, L"%ls 済", szBuf);
     } else {
       wcscpy(meta, szBuf);
     }
-    c.drawText(ax + 38, ay + 34, 154, 20, LiliumUI::kColMuted, meta, 1, LiliumUI::Align::Left, true);
+    c.drawText(ax + 40, ay + 40, 178, 24, LiliumUI::kColMuted, meta, 2, LiliumUI::Align::Left, true);
 
-    // Check badge top-right
-    if (kAppCatalog[i].required) {
-      c.drawBox(ax + 162, ay + 6, 32, 18, LiliumUI::kColTealDark, LiliumUI::kColTealDeep);
-      c.drawText(ax + 162, ay + 6, 32, 18, LiliumUI::kColWhite, L"必須", 1, LiliumUI::Align::Center, true);
-    } else {
-      c.drawBox(ax + 170, ay + 6, 22, 22, on ? LiliumUI::kColTeal : LiliumUI::kColWhite,
-                on ? LiliumUI::kColTealDeep : LiliumUI::kColBorderStrong);
-      if (on) c.drawText(ax + 170, ay + 6, 22, 22, LiliumUI::kColWhite, L"レ", 1, LiliumUI::Align::Center, true);
-    }
-    addZone(st, Z_APP_BASE + i, ax, ay, 200, 63);
+    c.drawBox(ax + 194, ay + 8, 28, 28, on ? LiliumUI::kColTeal : LiliumUI::kColWhite,
+              on ? LiliumUI::kColTealDeep : LiliumUI::kColBorderStrong);
+    if (on) c.drawText(ax + 194, ay + 8, 28, 28, LiliumUI::kColWhite, L"レ", 2, LiliumUI::Align::Center, true);
+    addZone(st, Z_APP_BASE + i, ax, ay, 230, 74);
   }
 
   // Slot 14 summary card
@@ -889,47 +1010,49 @@ static void renderStep3Apps(LiliumUI::Canvas & c, InstallerAppState & st) {
   computeSelectionSummary(st, cnt, totBytes);
   wchar_t totBuf[32] = L"";
   formatBytesHuman(totBytes, totBuf, 32);
-  int sx = 12 + 2 * 208;
-  int sy = 76 + 4 * 69;
-  c.drawBox(sx, sy, 200, 63, LiliumUI::kColSidebar, LiliumUI::kColTealBorder);
+  int sx = 12 + 2 * 241;
+  int sy = 120 + 4 * 79;
+  c.drawBox(sx, sy, 230, 74, LiliumUI::kColSidebar, LiliumUI::kColTealBorder);
   wchar_t l1[32] = L"";
   _snwprintf(l1, 31, L"選択: %d / %d", cnt, kCatalogCount);
-  c.drawText(sx + 8, sy + 8, 184, 24, LiliumUI::kColTealDeep, l1, 2, LiliumUI::Align::Center, true);
-  c.drawText(sx + 8, sy + 36, 184, 20, LiliumUI::kColTextSub, totBuf, 2, LiliumUI::Align::Center, true);
+  c.drawText(sx + 8, sy + 10, 214, 26, LiliumUI::kColTealDeep, l1, 2, LiliumUI::Align::Center, true);
+  c.drawText(sx + 8, sy + 40, 214, 24, LiliumUI::kColTextSub, totBuf, 2, LiliumUI::Align::Center, true);
 }
 
 static void renderStep4LoaderAndCfg(LiliumUI::Canvas & c, InstallerAppState & st) {
-  // Top card: exeopener / AppMain.exe
-  c.drawBox(12, 76, 616, 160, LiliumUI::kColWhite, LiliumUI::kColTealBorder);
-  c.drawBox(12, 76, 616, 28, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
-  c.drawText(20, 76, 600, 28, LiliumUI::kColTealDeep, L"1. 起動ローダー (AppMain.exe / exeopener)", 2, LiliumUI::Align::Left, true);
+  c.drawBox(12, 84, 712, 188, LiliumUI::kColWhite, LiliumUI::kColTealBorder);
+  c.drawBox(12, 84, 712, 32, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
+  c.drawText(22, 84, 692, 32, LiliumUI::kColTealDeep,
+             L"1. 起動ローダー (AppMain.exe / exeopener)", 2, LiliumUI::Align::Left, true);
 
-  c.drawWrappedText(22, 110, 596, 152, LiliumUI::kColTextSub,
-                    L"ライセンス保護のため exeopener.exe は非同梱です。お手元のファイルをご指定ください。", 2, 3);
+  const wchar_t * loaderDesc = st.appSelected[0]
+      ? L"ライセンス保護のため exeopener.exe は非同梱です。お手元のファイルをご指定ください。"
+      : L"非同梱のため exeopener.exe をご指定ください。選択した各アプリへそれぞれ配置します。";
+  c.drawWrappedText(24, 124, 688, 174, LiliumUI::kColTextSub, loaderDesc, 2, 4);
 
   uint32_t stBg = st.loaderVerified ? LiliumUI::kColTealSoft : LiliumUI::kColWarnBg;
   uint32_t stBd = st.loaderVerified ? LiliumUI::kColTeal : LiliumUI::kColWarnBorder;
   uint32_t stTx = st.loaderVerified ? LiliumUI::kColTealDeep : LiliumUI::kColWarnText;
-  c.drawBox(22, 154, 596, 30, stBg, stBd);
-  c.drawText(30, 154, 580, 30, stTx, st.loaderStatusMsg, 2, LiliumUI::Align::Left, true);
+  c.drawBox(24, 180, 688, 34, stBg, stBd);
+  c.drawText(34, 180, 668, 34, stTx, st.loaderStatusMsg, 2, LiliumUI::Align::Left, true);
 
-  drawButton(c, st, Z_BROWSE_OPENER, 22, 192, 232, 34, L"exeopenerを参照...", true, false, true, 2);
+  drawButton(c, st, Z_BROWSE_OPENER, 24, 222, 266, 38, L"exeopenerを参照...", true, false, true);
 
   if (hasReusableExistingLoader(st)) {
-    drawButton(c, st, Z_ALT_LOADER, 266, 192, 240, 34, L"既存AppMain.exeを流用",
-               st.loaderMode == LoaderMode::ReuseExisting, false, true, 2);
+    drawButton(c, st, Z_ALT_LOADER, 304, 222, 290, 38, L"既存AppMain.exeを流用",
+               st.loaderMode == LoaderMode::ReuseExisting, false, true);
   } else if (st.brainGen == BrainGen::Gen3Supported) {
-    drawButton(c, st, Z_ALT_LOADER, 266, 192, 260, 34, L"第3世代: 直接起動を使用",
-               st.loaderMode == LoaderMode::DirectNoOpener, false, true, 2);
+    drawButton(c, st, Z_ALT_LOADER, 304, 222, 290, 38, L"第3世代: 直接起動を使用",
+               st.loaderMode == LoaderMode::DirectNoOpener, false, true);
   } else if (st.dryRun) {
-    drawButton(c, st, Z_ALT_LOADER, 266, 192, 240, 34, L"試運転: 仮想ローダ使用",
-               st.loaderMode == LoaderMode::VirtualDryRun, false, true, 2);
+    drawButton(c, st, Z_ALT_LOADER, 304, 222, 290, 38, L"試運転: 仮想ローダ使用",
+               st.loaderMode == LoaderMode::VirtualDryRun, false, true);
   }
 
-  // Bottom card: AppMain.cfg (8 bytes)
-  c.drawBox(12, 244, 616, 178, LiliumUI::kColWhite, LiliumUI::kColTealBorder);
-  c.drawBox(12, 244, 616, 28, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
-  c.drawText(20, 244, 600, 28, LiliumUI::kColTealDeep, L"2. AppMain.cfg (8バイト高解像度設定) の生成方式", 2, LiliumUI::Align::Left, true);
+  c.drawBox(12, 282, 712, 232, LiliumUI::kColWhite, LiliumUI::kColTealBorder);
+  c.drawBox(12, 282, 712, 32, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
+  c.drawText(22, 282, 692, 32, LiliumUI::kColTealDeep,
+             L"2. AppMain.cfg (8バイト高解像度設定) 生成", 2, LiliumUI::Align::Left, true);
 
   struct CfgOpt {
     const wchar_t * title;
@@ -938,21 +1061,21 @@ static void renderStep4LoaderAndCfg(LiliumUI::Canvas & c, InstallerAppState & st
   static constexpr CfgOpt kCfgOpts[3] = {
     { L"標準 WVGA 仕様 [推奨]", L"01 00 00 00 FF FF FF FF" },
     { L"800x480 解像度明示生成", L"01 00 00 00 20 03 E0 01" },
-    { L"実験用タグ liliumpj [一部実機未検証]", L"6C 69 6C 69 75 6D 70 6A" }
+    { L"実験用タグ liliumpj [要確認]", L"6C 69 6C 69 75 6D 70 6A" }
   };
 
   for (int i = 0; i < 3; ++i) {
-    int oy = 280 + i * 46;
+    int oy = 324 + i * 60;
     bool sel = (st.cfgMode == i);
     uint32_t bg = sel ? LiliumUI::kColTealSoft : LiliumUI::kColRowAlt;
     uint32_t bd = sel ? LiliumUI::kColTeal : LiliumUI::kColBorder;
-    c.drawBox(22, oy, 596, 40, bg, bd);
-    if (sel) c.drawThickFrame(22, oy, 596, 40, 2, LiliumUI::kColTeal);
+    c.drawBox(24, oy, 688, 52, bg, bd);
+    if (sel) c.drawThickFrame(24, oy, 688, 52, 2, LiliumUI::kColTeal);
 
-    c.drawText(32, oy + 9, 360, 22, sel ? LiliumUI::kColTealDeep : LiliumUI::kColText,
+    c.drawText(36, oy + 12, 390, 28, sel ? LiliumUI::kColTealDeep : LiliumUI::kColText,
                kCfgOpts[i].title, 2, LiliumUI::Align::Left, true);
-    c.drawText(400, oy + 9, 210, 22, LiliumUI::kColMuted, kCfgOpts[i].hex, 1, LiliumUI::Align::Right, true);
-    addZone(st, Z_CFG_BASE + i, 22, oy, 596, 40);
+    c.drawText(432, oy + 12, 268, 28, LiliumUI::kColMuted, kCfgOpts[i].hex, 2, LiliumUI::Align::Right, true);
+    addZone(st, Z_CFG_BASE + i, 24, oy, 688, 52);
   }
 }
 
@@ -965,119 +1088,146 @@ static void renderStep5Execute(LiliumUI::Canvas & c, InstallerAppState & st) {
   formatBytesHuman(totBytes, szBuf, 32);
 
   if (st.phase == InstallPhase::Ready) {
-    c.drawBox(12, 76, 616, 266, LiliumUI::kColWhite, LiliumUI::kColTealBorder);
-    c.drawBox(12, 76, 616, 28, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
-    c.drawText(20, 76, 600, 28, LiliumUI::kColTealDeep,
+    c.drawBox(12, 84, 712, 320, LiliumUI::kColWhite, LiliumUI::kColTealBorder);
+    c.drawBox(12, 84, 712, 32, LiliumUI::kColTealHeader, LiliumUI::kColTealBorder);
+    c.drawText(22, 84, 692, 32, LiliumUI::kColTealDeep,
                st.dryRun ? L"試運転の内容確認 (実際の書込は行いません)" : L"導入内容の最終確認",
                2, LiliumUI::Align::Left, true);
 
-    const wchar_t * modeTxt = st.dryRun ? L"試運転 (シミュレーション)" :
+    wchar_t destDisp[96] = L"(未指定)";
+    if (t) {
+      if (st.appSelected[0]) {
+        wcsncpy(destDisp, t->destLiliumDir, 95);
+      } else {
+        wchar_t appsRoot[MAX_PATH] = L"";
+        extractAppsRootFromDestDir(t->destLiliumDir, appsRoot, MAX_PATH);
+        _snwprintf(destDisp, 95, L"%ls\\<各アプリ名>\\", appsRoot);
+      }
+      destDisp[95] = L'\0';
+    }
+
+    const wchar_t * modeTxt = st.dryRun ? L"試運転 (書込なし)" :
                               (t && t->existing.status == InstallDetectStatus::OlderVersion) ? L"アップデート (設定保持)" :
-                              (t && t->existing.status == InstallDetectStatus::SameOrNewer) ? L"追加・再導入 (上書き更新)" : L"新規インストール";
+                              (t && t->existing.status == InstallDetectStatus::SameOrNewer) ? L"追加・再導入" : L"新規インストール";
     const wchar_t * genTxt = (st.brainGen == BrainGen::Gen3Supported) ? L"第3世代 (800x480)" : L"第4世代 (800x480)";
-    const wchar_t * ldrTxt = (st.loaderMode == LoaderMode::UserExeOpener) ? L"ユーザー指定 exeopener.exe -> AppMain.exe" :
-                             (st.loaderMode == LoaderMode::ReuseExisting) ? L"導入先の既存 AppMain.exe を流用" :
-                             (st.loaderMode == LoaderMode::DirectNoOpener) ? L"第3世代直接起動 (AppMain_.exe)" : L"仮想ローダー (試運転)";
+    const wchar_t * ldrTxt = (st.loaderMode == LoaderMode::UserExeOpener) ? L"指定 exeopener.exe -> AppMain.exe" :
+                             (st.loaderMode == LoaderMode::ReuseExisting) ? L"既存 AppMain.exe を流用" :
+                             (st.loaderMode == LoaderMode::DirectNoOpener) ? L"第3世代直接起動" : L"仮想ローダ (試運転)";
     const wchar_t * cfgTxt = (st.cfgMode == 0) ? L"標準 WVGA (01 00 00 00 FF FF FF FF)" :
-                             (st.cfgMode == 1) ? L"800x480 明示 (01 00 00 00 20 03 E0 01)" : L"実験用タグ (liliumpj / 8バイト)";
+                             (st.cfgMode == 1) ? L"800x480 明示 (01 00 00 00 20 03 E0 01)" : L"実験用タグ (liliumpj)";
 
     wchar_t rows[6][2][96];
-    wcscpy(rows[0][0], L"導入先");
-    _snwprintf(rows[0][1], 95, L"%ls", t ? t->destLiliumDir : L"(未指定)");
+    wcscpy(rows[0][0], L"配置先");
+    _snwprintf(rows[0][1], 95, L"%ls", destDisp);
     wcscpy(rows[1][0], L"方式");
     _snwprintf(rows[1][1], 95, L"%ls", modeTxt);
     wcscpy(rows[2][0], L"対象機種");
     _snwprintf(rows[2][1], 95, L"%ls (%ls)", st.modelText[0] ? st.modelText : L"標準", genTxt);
     wcscpy(rows[3][0], L"選択内容");
-    _snwprintf(rows[3][1], 95, L"%d 項目 / 合計 %ls", cnt, szBuf);
+    _snwprintf(rows[3][1], 95, L"%d 項目 / %ls (%ls)", cnt, szBuf,
+               st.appSelected[0] ? L"ランチャ統合" : L"個別配置");
     wcscpy(rows[4][0], L"ローダー");
     _snwprintf(rows[4][1], 95, L"%ls", ldrTxt);
     wcscpy(rows[5][0], L"AppMain.cfg");
     _snwprintf(rows[5][1], 95, L"%ls", cfgTxt);
 
     for (int r = 0; r < 6; ++r) {
-      int ry = 112 + r * 36;
-      if (r % 2 == 1) c.fillRect(16, ry, 608, 34, LiliumUI::kColRowAlt);
-      c.drawText(24, ry, 128, 34, LiliumUI::kColTealDeep, rows[r][0], 2, LiliumUI::Align::Left, true);
-      c.drawText(156, ry, 460, 34, LiliumUI::kColText, rows[r][1], 2, LiliumUI::Align::Left, true);
+      int ry = 124 + r * 44;
+      if (r % 2 == 1) c.fillRect(16, ry, 704, 42, LiliumUI::kColRowAlt);
+      c.drawText(26, ry, 148, 42, LiliumUI::kColTealDeep, rows[r][0], 2, LiliumUI::Align::Left, true);
+      c.drawText(178, ry, 534, 42, LiliumUI::kColText, rows[r][1], 2, LiliumUI::Align::Left, true);
     }
 
-    c.drawBox(12, 350, 616, 72, LiliumUI::kColTealSoft, LiliumUI::kColTealBorder);
-    c.drawText(24, 358, 592, 26, LiliumUI::kColTealDeep,
-               L"SDカードはフォーマットされません。既存データ・設定は保持されます。", 2, LiliumUI::Align::Left, true);
-    c.drawText(24, 388, 592, 24, LiliumUI::kColTextSub,
-               L"右下の [導入を開始] を押すとファイルの配置を実行します。", 2, LiliumUI::Align::Left, true);
+    if (!st.appSelected[0]) {
+      c.drawBox(12, 412, 712, 102, LiliumUI::kColWarnBg, LiliumUI::kColWarnBorder);
+      c.drawText(24, 420, 688, 28, LiliumUI::kColWarnText,
+                 L"注意: ランチャーなしの個別配置が選択されています", 2, LiliumUI::Align::Left, true);
+      c.drawWrappedText(24, 452, 688, 508, LiliumUI::kColTextSub,
+                        L"IME自動連携や設定共有など一部アプリが正常動作しない場合があります。(初期化なし)", 2, 4);
+    } else {
+      c.drawBox(12, 412, 712, 102, LiliumUI::kColTealSoft, LiliumUI::kColTealBorder);
+      c.drawText(24, 424, 688, 30, LiliumUI::kColTealDeep,
+                 L"SDカードはフォーマットされません。既存データ・設定は保持されます。", 2, LiliumUI::Align::Left, true);
+      c.drawText(24, 464, 688, 30, LiliumUI::kColTextSub,
+                 L"右下の [導入を開始] / [試運転を開始] を押すと処理を開始します。", 2, LiliumUI::Align::Left, true);
+    }
     return;
   }
 
-  // Running / Done / Failed view
   bool isDone = (st.phase == InstallPhase::Done);
   bool isErr = (st.phase == InstallPhase::Failed);
   uint32_t topBg = isDone ? LiliumUI::kColTealSoft : (isErr ? LiliumUI::kColDangerBg : LiliumUI::kColWhite);
   uint32_t topBd = isDone ? LiliumUI::kColTeal : (isErr ? LiliumUI::kColDangerBorder : LiliumUI::kColTealBorder);
-  c.drawBox(12, 76, 616, 98, topBg, topBd);
+  c.drawBox(12, 84, 712, 112, topBg, topBd);
 
   const wchar_t * statusTitle = isDone ? (st.dryRun ? L"試運転が完了しました！(実書込なし)" : L"導入が完了しました！") :
                                 isErr ? L"導入中にエラーが発生しました" :
                                 (st.dryRun ? L"試運転を実行中..." : L"ファイルを配置しています...");
-  c.drawText(24, 84, 592, 28, isErr ? LiliumUI::kColDangerText : LiliumUI::kColTealDeep,
+  c.drawText(24, 92, 688, 30, isErr ? LiliumUI::kColDangerText : LiliumUI::kColTealDeep,
              statusTitle, 2, LiliumUI::Align::Left, true);
 
   int pct = (st.taskCount > 0) ? ((st.taskCursor * 100) / st.taskCount) : 0;
   if (isDone) pct = 100;
-  c.drawBox(24, 120, 520, 22, LiliumUI::kColWhite, LiliumUI::kColBorderStrong);
-  int fillW = (516 * pct) / 100;
-  if (fillW > 0) c.fillRect(26, 122, fillW, 18, isErr ? LiliumUI::kColDangerFill : LiliumUI::kColTeal);
+  c.drawBox(24, 130, 594, 24, LiliumUI::kColWhite, LiliumUI::kColBorderStrong);
+  int fillW = (590 * pct) / 100;
+  if (fillW > 0) c.fillRect(26, 132, fillW, 20, isErr ? LiliumUI::kColDangerFill : LiliumUI::kColTeal);
 
   wchar_t pctBuf[24] = L"";
   _snwprintf(pctBuf, 23, L"%d%%", pct);
-  c.drawText(552, 118, 66, 26, LiliumUI::kColText, pctBuf, 2, LiliumUI::Align::Right, true);
+  c.drawText(624, 128, 86, 28, LiliumUI::kColText, pctBuf, 2, LiliumUI::Align::Right, true);
 
   wchar_t curTxt[128] = L"";
   if (isDone) {
-    _snwprintf(curTxt, 127, L"処理: %d / %d 項目完了 (%ls)", st.taskCount, st.taskCount, t ? t->destLiliumDir : L"");
+    _snwprintf(curTxt, 127, L"完了: %d / %d 項目", st.taskCount, st.taskCount);
   } else if (st.taskCursor < st.taskCount) {
     _snwprintf(curTxt, 127, L"(%d/%d) %ls", st.taskCursor + 1, st.taskCount, st.tasks[st.taskCursor].displayName);
   }
-  c.drawText(24, 148, 592, 20, LiliumUI::kColMuted, curTxt, 1, LiliumUI::Align::Left, true);
+  c.drawText(24, 162, 688, 26, LiliumUI::kColMuted, curTxt, 2, LiliumUI::Align::Left, true);
 
   if (isDone) {
-    c.drawBox(12, 182, 616, 108, LiliumUI::kColWhite, LiliumUI::kColTealBorder);
-    c.drawText(24, 188, 592, 24, LiliumUI::kColTealDeep, L"Brainでの起動方法:", 2, LiliumUI::Align::Left, true);
-    c.drawText(24, 216, 592, 22, LiliumUI::kColText, L"1. PCからBrain/SDカードを安全に取り外します", 2, LiliumUI::Align::Left, true);
-    c.drawText(24, 242, 592, 22, LiliumUI::kColText, L"2. Brain本体の「追加アプリ・動画」->「Lilium」を起動", 2, LiliumUI::Align::Left, true);
-    c.drawText(24, 266, 592, 20, LiliumUI::kColMuted, L"※表示崩れ時は手順4のAppMain.cfg方式を変更し再導入", 1, LiliumUI::Align::Left, true);
+    c.drawBox(12, 204, 712, 124, LiliumUI::kColWhite, LiliumUI::kColTealBorder);
+    c.drawText(24, 212, 688, 26, LiliumUI::kColTealDeep, L"Brainでの起動方法:", 2, LiliumUI::Align::Left, true);
+    c.drawText(24, 240, 688, 26, LiliumUI::kColText, L"1. PCからBrain/SDカードを安全に取り外します", 2, LiliumUI::Align::Left, true);
+    c.drawText(24, 268, 688, 26, LiliumUI::kColText,
+               st.appSelected[0] ? L"2. Brain本体の「追加アプリ・動画」->「Lilium」を起動"
+                                 : L"2. 本体の「追加アプリ・動画」から各アプリを起動",
+               2, LiliumUI::Align::Left, true);
+    c.drawText(24, 296, 688, 26, st.appSelected[0] ? LiliumUI::kColMuted : LiliumUI::kColWarnText,
+               st.appSelected[0] ? L"※表示崩れ時は手順4のAppMain.cfg方式を変更し再導入"
+                                 : L"※個別配置のため一部アプリの連携機能は制限されます",
+               2, LiliumUI::Align::Left, true);
 
-    c.drawBox(12, 296, 616, 126, LiliumUI::kColRowAlt, LiliumUI::kColBorder);
-    int start = (st.logCount > 5) ? (st.logCount - 5) : 0;
+    c.drawBox(12, 336, 712, 178, LiliumUI::kColRowAlt, LiliumUI::kColBorder);
+    int start = (st.logCount > 6) ? (st.logCount - 6) : 0;
     for (int i = start; i < st.logCount; ++i) {
-      c.drawText(22, 302 + (i - start) * 23, 596, 20, LiliumUI::kColTextSub, st.logLines[i], 1, LiliumUI::Align::Left, true);
+      c.drawText(24, 344 + (i - start) * 28, 688, 24, LiliumUI::kColTextSub, st.logLines[i], 2, LiliumUI::Align::Left, true);
     }
   } else {
-    c.drawBox(12, 182, 616, 240, LiliumUI::kColWhite, LiliumUI::kColBorder);
-    for (int i = 0; i < st.logCount; ++i) {
-      c.drawText(22, 188 + i * 19, 596, 18, LiliumUI::kColTextSub, st.logLines[i], 1, LiliumUI::Align::Left, true);
+    c.drawBox(12, 204, 712, 310, LiliumUI::kColWhite, LiliumUI::kColBorder);
+    int start = (st.logCount > 10) ? (st.logCount - 10) : 0;
+    for (int i = start; i < st.logCount; ++i) {
+      c.drawText(24, 212 + (i - start) * 29, 688, 25, LiliumUI::kColTextSub, st.logLines[i], 2, LiliumUI::Align::Left, true);
     }
   }
 }
 
 static void renderBottomNavBar(LiliumUI::Canvas & c, InstallerAppState & st) {
-  c.fillRect(0, 430, LiliumUI::kMainW, 50, LiliumUI::kColSidebar);
-  c.fillRect(0, 430, LiliumUI::kMainW, 1, LiliumUI::kColBorder);
+  c.fillRect(0, 522, kMainW, 58, LiliumUI::kColSidebar);
+  c.fillRect(0, 522, kMainW, 1, LiliumUI::kColBorder);
 
   if (st.currentStep == 4 && (st.phase == InstallPhase::Done || st.phase == InstallPhase::Failed)) {
-    drawButton(c, st, Z_BTN_START_OVER, 12, 437, 170, 36, L"最初に戻る", false, false, true, 2);
-    drawButton(c, st, Z_BTN_EXIT, 466, 437, 162, 36, L"閉じる", true, false, true, 2);
+    drawButton(c, st, Z_BTN_START_OVER, 12, 530, 188, 40, L"最初に戻る", false, false, true);
+    drawButton(c, st, Z_BTN_EXIT, 538, 530, 186, 40, L"閉じる", true, false, true);
     return;
   }
 
   bool canBack = (st.currentStep > 0) && (st.phase != InstallPhase::Running);
-  drawButton(c, st, Z_BTN_BACK, 12, 437, 108, 36, L"< 戻る", false, false, canBack, 2);
+  drawButton(c, st, Z_BTN_BACK, 12, 530, 118, 40, L"< 戻る", false, false, canBack);
 
   if (st.currentStep == 2) {
-    drawButton(c, st, Z_PRESET_ALL, 134, 439, 98, 32, L"全選択", false, false, true, 2);
-    drawButton(c, st, Z_PRESET_REC, 240, 439, 104, 32, L"おすすめ", false, false, true, 2);
-    drawButton(c, st, Z_PRESET_MIN, 352, 439, 96, 32, L"最小", false, false, true, 2);
+    drawButton(c, st, Z_PRESET_ALL, 148, 532, 112, 36, L"全選択", false, false, true);
+    drawButton(c, st, Z_PRESET_REC, 268, 532, 120, 36, L"おすすめ", false, false, true);
+    drawButton(c, st, Z_PRESET_MIN, 396, 532, 98, 36, L"最小", false, false, true);
   }
 
   bool canNext = false;
@@ -1087,7 +1237,10 @@ static void renderBottomNavBar(LiliumUI::Canvas & c, InstallerAppState & st) {
   } else if (st.currentStep == 1) {
     canNext = (st.brainGen == BrainGen::Gen4Supported || st.brainGen == BrainGen::Gen3Supported);
   } else if (st.currentStep == 2) {
-    canNext = st.dryRun || st.payloadOk;
+    int cnt = 0;
+    uint64_t tot = 0;
+    computeSelectionSummary(st, cnt, tot);
+    canNext = (cnt > 0) && (st.dryRun || st.payloadOk);
   } else if (st.currentStep == 3) {
     canNext = st.loaderVerified && (st.loaderMode != LoaderMode::None);
   } else if (st.currentStep == 4) {
@@ -1095,7 +1248,7 @@ static void renderBottomNavBar(LiliumUI::Canvas & c, InstallerAppState & st) {
     nextLbl = st.dryRun ? L"試運転を開始" : L"導入を開始";
   }
 
-  drawButton(c, st, Z_BTN_NEXT, 466, 437, 162, 36, nextLbl, true, false, canNext, 2);
+  drawButton(c, st, Z_BTN_NEXT, 538, 530, 186, 40, nextLbl, true, false, canNext);
 }
 
 static void renderModalOverlay(LiliumUI::Canvas & c, InstallerAppState & st) {
@@ -1103,14 +1256,14 @@ static void renderModalOverlay(LiliumUI::Canvas & c, InstallerAppState & st) {
 
   LiliumUI::ModalButton btns[3] = {};
   int bCount = 0;
-  const wchar_t * hint = L"クリック または 左右キー/Enter/Esc";
+  const wchar_t * hint = L"クリック または 左右キー / Enter / Esc";
 
   if (st.modal == ModalKind::DryRunSelect) {
     btns[0] = { L"新規試運転", false };
     btns[1] = { L"更新試運転", false };
     btns[2] = { L"導入済確認", false };
     bCount = 3;
-    hint = L"テスト種別を選択してください (Escで閉じる)";
+    hint = L"テスト種別を選択 (Escで閉じる)";
   } else if (st.modal == ModalKind::AlreadyInstalled) {
     btns[0] = { L"追加/再導入", false };
     btns[1] = { L"選び直す", false };
@@ -1120,6 +1273,11 @@ static void renderModalOverlay(LiliumUI::Canvas & c, InstallerAppState & st) {
     btns[0] = { L"アップデート", false };
     btns[1] = { L"選び直す", false };
     bCount = 2;
+  } else if (st.modal == ModalKind::StandaloneWarn) {
+    btns[0] = { L"個別配置にする", false };
+    btns[1] = { L"ランチャー有に戻す", false };
+    bCount = 2;
+    hint = L"個別配置では一部機能が動作しない恐れがあります";
   } else if (st.modal == ModalKind::ErrorNotice) {
     btns[0] = { L"閉じる", false };
     bCount = 1;
@@ -1129,39 +1287,23 @@ static void renderModalOverlay(LiliumUI::Canvas & c, InstallerAppState & st) {
     bCount = 2;
   }
 
-  LiliumUI::renderConfirmModal(c, st.modalTitle, st.modalLine1, st.modalLine2,
-                               btns, bCount, st.modalFocus, hint);
-
-  // Register exact hitboxes matching renderConfirmModal geometry
-  const int dlgW = 500;
-  const int dlgH = 224;
-  const int dlgX = (LiliumUI::kScreenW - dlgW) / 2;
-  const int dlgY = (LiliumUI::kScreenH - dlgH) / 2;
-  const int btnW = (bCount == 1) ? 160 : ((bCount == 2) ? 160 : 132);
-  const int gap = 22;
-  const int totalW = bCount * btnW + (bCount - 1) * gap;
-  int bx = dlgX + (dlgW - totalW) / 2;
-  const int by = dlgY + 132;
-  const int bh = 42;
-  for (int i = 0; i < bCount; ++i) {
-    addZone(st, Z_MODAL_BTN_BASE + i, bx, by, btnW, bh);
-    bx += btnW + gap;
-  }
+  renderInstallerModal(c, st, st.modalTitle, st.modalLine1, st.modalLine2,
+                       btns, bCount, st.modalFocus, hint);
 }
 
 static void renderAll(InstallerAppState & st) {
   if (!st.pixels) return;
   LiliumUI::Canvas c = {};
   c.pixels = st.pixels;
-  c.width = LiliumUI::kScreenW;
-  c.height = LiliumUI::kScreenH;
+  c.width = kWinW;
+  c.height = kWinH;
   c.fullRedraw = true;
   c.clearDirty();
 
-  c.fillRect(0, 0, LiliumUI::kMainW, LiliumUI::kScreenH, LiliumUI::kColBgMain);
+  c.fillRect(0, 0, kMainW, kWinH, LiliumUI::kColBgMain);
   const wchar_t * badge = st.dryRun ? L"試運転・書込なし" :
                           (st.payloadOk ? kInstallerVersion : L"payload未検出");
-  LiliumUI::renderTopHeader(c, L"Lilium Installer", badge);
+  renderInstallerHeader(c, L"Lilium Installer", badge);
 
   st.zoneCount = 0;
   renderStepStrip(c, st);
@@ -1180,7 +1322,7 @@ static void renderAll(InstallerAppState & st) {
   if (st.hwnd && st.memDC) {
     HDC hdcWin = GetDC(st.hwnd);
     if (hdcWin) {
-      BitBlt(hdcWin, 0, 0, LiliumUI::kScreenW, LiliumUI::kScreenH, st.memDC, 0, 0, SRCCOPY);
+      BitBlt(hdcWin, 0, 0, kWinW, kWinH, st.memDC, 0, 0, SRCCOPY);
       ReleaseDC(st.hwnd, hdcWin);
     }
   }
@@ -1197,11 +1339,11 @@ static void startInstallation(InstallerAppState & st) {
                                    st.tasks, kMaxInstallTasks, st.totalCopyBytes);
   if (st.taskCount <= 0) {
     st.phase = InstallPhase::Failed;
-    appendInstallLog(st, L"[失敗] コピー対象タスクを作成できませんでした");
+    appendInstallLog(st, L"[失敗] コピー対象タスクを作成できません");
     return;
   }
   st.phase = InstallPhase::Running;
-  SetTimer(st.hwnd, 1, 30, NULL);
+  SetTimer(st.hwnd, 1, 25, NULL);
 }
 
 static void advanceFromStep1(InstallerAppState & st) {
@@ -1212,14 +1354,14 @@ static void advanceFromStep1(InstallerAppState & st) {
     st.modalFocus = 0;
     wcscpy(st.modalTitle, L"すでに導入済みです");
     _snwprintf(st.modalLine1, 95, L"Lilium %ls は既に導入されています", t->existing.installedVersion);
-    wcscpy(st.modalLine2, L"アプリ追加・再導入を行うか、導入先を選び直してください");
+    wcscpy(st.modalLine2, L"アプリ追加・再導入を行うか、選び直してください");
     return;
   }
   if (!st.dryRun && t->existing.status == InstallDetectStatus::OlderVersion) {
     st.modal = ModalKind::UpdateConfirm;
     st.modalFocus = 0;
     wcscpy(st.modalTitle, L"旧バージョンの検出 (アップデート)");
-    _snwprintf(st.modalLine1, 95, L"旧版 (%ls) を %ls へアップデートします",
+    _snwprintf(st.modalLine1, 95, L"旧版(%ls) を %ls へ更新します",
                t->existing.installedVersion, kInstallerVersion);
     wcscpy(st.modalLine2, L"既存の設定・メモは削除せず維持されます");
     return;
@@ -1229,19 +1371,21 @@ static void advanceFromStep1(InstallerAppState & st) {
   syncDefaultLoaderMode(st);
 }
 
-static void triggerDryRunCheck(InstallerAppState & st) {
-  if (isDryRunCode(st.testCodeText)) {
+static void applyPathInputOrSecret(InstallerAppState & st) {
+  if (isDryRunCode(st.pathInputText)) {
     st.modal = ModalKind::DryRunSelect;
     st.modalFocus = 0;
     wcscpy(st.modalTitle, L"試運転モード (実際には書込しません)");
     wcscpy(st.modalLine1, L"導入処理のUIをドライブ書込ゼロで試運転できます");
     wcscpy(st.modalLine2, L"再現するテストシナリオを選択してください");
-  } else {
+    return;
+  }
+  if (!setCustomFolderPath(st, st.pathInputText)) {
     st.modal = ModalKind::ErrorNotice;
     st.modalFocus = 0;
-    wcscpy(st.modalTitle, L"コード不一致");
-    wcscpy(st.modalLine1, L"試運転コードは LILIUM-TEST です");
-    wcscpy(st.modalLine2, L"または [フォルダ参照...] / ドライブ一覧から選択してください");
+    wcscpy(st.modalTitle, L"パスエラー");
+    wcscpy(st.modalLine1, L"指定されたドライブまたはフォルダが見つかりません");
+    wcscpy(st.modalLine2, L"実在するパス (例: E:\\) を入力するか参照してください");
   }
 }
 
@@ -1282,6 +1426,15 @@ static void handleModalAction(InstallerAppState & st, int btnIdx) {
         refreshDrives(st);
       }
     }
+  } else if (st.modal == ModalKind::StandaloneWarn) {
+    if (btnIdx == 0) {
+      st.appSelected[0] = false;
+      st.standaloneWarnShown = true;
+      st.modal = ModalKind::None;
+    } else {
+      st.appSelected[0] = true;
+      st.modal = ModalKind::None;
+    }
   } else if (st.modal == ModalKind::ErrorNotice) {
     st.modal = ModalKind::None;
   } else if (st.modal == ModalKind::ExitConfirm) {
@@ -1313,7 +1466,7 @@ static void handleZoneActivate(InstallerAppState & st, int zid) {
   if (zid == Z_BTN_START_OVER) {
     st.phase = InstallPhase::Ready;
     st.currentStep = 0;
-    st.focusedInput = FocusedInput::Step1TestCode;
+    st.focusedInput = FocusedInput::Step1PathInput;
     refreshDrives(st);
     return;
   }
@@ -1322,7 +1475,7 @@ static void handleZoneActivate(InstallerAppState & st, int zid) {
     int targetStep = zid - Z_STEP_BASE;
     if (targetStep < st.currentStep && st.phase != InstallPhase::Running) {
       st.currentStep = targetStep;
-      st.focusedInput = (targetStep == 0) ? FocusedInput::Step1TestCode :
+      st.focusedInput = (targetStep == 0) ? FocusedInput::Step1PathInput :
                         (targetStep == 1) ? FocusedInput::Step2ModelName : FocusedInput::None;
     }
     return;
@@ -1330,7 +1483,7 @@ static void handleZoneActivate(InstallerAppState & st, int zid) {
 
   if (zid == Z_BTN_BACK && st.currentStep > 0 && st.phase != InstallPhase::Running) {
     st.currentStep--;
-    st.focusedInput = (st.currentStep == 0) ? FocusedInput::Step1TestCode :
+    st.focusedInput = (st.currentStep == 0) ? FocusedInput::Step1PathInput :
                       (st.currentStep == 1) ? FocusedInput::Step2ModelName : FocusedInput::None;
     return;
   }
@@ -1349,10 +1502,13 @@ static void handleZoneActivate(InstallerAppState & st, int zid) {
       refreshDrives(st);
     } else if (zid == Z_BROWSE_DIR) {
       browseTargetFolder(st);
-    } else if (zid == Z_CODE_BOX) {
-      st.focusedInput = FocusedInput::Step1TestCode;
-    } else if (zid == Z_CODE_APPLY) {
-      triggerDryRunCheck(st);
+    } else if (zid == Z_PATH_BOX) {
+      st.focusedInput = FocusedInput::Step1PathInput;
+    } else if (zid == Z_PATH_CLEAR) {
+      st.pathInputText[0] = L'\0';
+      st.focusedInput = FocusedInput::Step1PathInput;
+    } else if (zid == Z_PATH_APPLY) {
+      applyPathInputOrSecret(st);
     } else if (zid == Z_DRIVE_UP && st.driveScroll > 0) {
       st.driveScroll--;
     } else if (zid == Z_DRIVE_DOWN) {
@@ -1365,11 +1521,13 @@ static void handleZoneActivate(InstallerAppState & st, int zid) {
           st.dryRun = false;
           st.dryScenario = DryRunScenario::None;
           st.selectedDriveIdx = listIdx - 1;
+          syncPathInputFromActive(st);
           syncDefaultLoaderMode(st);
         }
       } else if (listIdx >= 0 && listIdx < st.driveCount) {
         st.selectedDriveIdx = listIdx;
         st.dryRun = false;
+        syncPathInputFromActive(st);
         syncDefaultLoaderMode(st);
       }
     }
@@ -1397,9 +1555,17 @@ static void handleZoneActivate(InstallerAppState & st, int zid) {
     if (zid >= Z_APP_BASE && zid < Z_APP_BASE + kCatalogCount) {
       int idx = zid - Z_APP_BASE;
       st.hoveredAppIdx = idx;
-      if (!kAppCatalog[idx].required) {
+      if (idx == 0 && st.appSelected[0]) {
+        st.appSelected[0] = false;
+        if (!st.standaloneWarnShown) {
+          st.modal = ModalKind::StandaloneWarn;
+          st.modalFocus = 0;
+          wcscpy(st.modalTitle, L"ランチャーなし(個別配置)の注意");
+          wcscpy(st.modalLine1, L"各アプリを個別フォルダへ配置し本体から直接起動します");
+          wcscpy(st.modalLine2, L"IME連携や設定共有等の一部機能が正常動作しない恐れがあります");
+        }
+      } else {
         st.appSelected[idx] = !st.appSelected[idx];
-        // Dependency sync between Chat 1.7M (10) and Akebono +10M (11)
         if (idx == 11 && st.appSelected[11]) st.appSelected[10] = true;
         if (idx == 10 && !st.appSelected[10]) st.appSelected[11] = false;
       }
@@ -1420,11 +1586,11 @@ static void handleZoneActivate(InstallerAppState & st, int zid) {
         st.loaderVerified = true;
       } else if (st.brainGen == BrainGen::Gen3Supported) {
         st.loaderMode = LoaderMode::DirectNoOpener;
-        wcscpy(st.loaderStatusMsg, L"第3世代: exeopener無しで AppMain_.exe を直接起動配置");
+        wcscpy(st.loaderStatusMsg, L"第3世代: exeopener不要の直接起動で配置");
         st.loaderVerified = true;
       } else if (st.dryRun) {
         st.loaderMode = LoaderMode::VirtualDryRun;
-        wcscpy(st.loaderStatusMsg, L"試運転: 仮想ローダー(書込なし)を使用");
+        wcscpy(st.loaderStatusMsg, L"試運転: 仮想ローダ(書込なし)を使用");
         st.loaderVerified = true;
       }
     } else if (zid >= Z_CFG_BASE && zid < Z_CFG_BASE + 3) {
@@ -1466,7 +1632,7 @@ static LRESULT CALLBACK installerWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPA
     case WM_PRINTCLIENT: {
       HDC hdcT = reinterpret_cast<HDC>(wParam);
       if (st->memDC && hdcT) {
-        BitBlt(hdcT, 0, 0, LiliumUI::kScreenW, LiliumUI::kScreenH, st->memDC, 0, 0, SRCCOPY);
+        BitBlt(hdcT, 0, 0, kWinW, kWinH, st->memDC, 0, 0, SRCCOPY);
       }
       return 0;
     }
@@ -1500,19 +1666,22 @@ static LRESULT CALLBACK installerWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPA
     case WM_CHAR: {
       wchar_t ch = static_cast<wchar_t>(wParam);
       if (st->modal != ModalKind::None) return 0;
-      if (st->currentStep == 0 && st->focusedInput == FocusedInput::Step1TestCode) {
+      if (st->currentStep == 0 && st->focusedInput == FocusedInput::Step1PathInput) {
         if (ch == L'\r') {
-          if (st->testCodeText[0]) triggerDryRunCheck(*st);
+          if (st->pathInputText[0]) applyPathInputOrSecret(*st);
           renderAll(*st);
         } else if (ch == L'\b') {
-          size_t n = wcslen(st->testCodeText);
-          if (n > 0) st->testCodeText[n - 1] = L'\0';
+          size_t n = wcslen(st->pathInputText);
+          if (n > 0) st->pathInputText[n - 1] = L'\0';
+          renderAll(*st);
+        } else if (ch == 0x01) { // Ctrl+A quick clear
+          st->pathInputText[0] = L'\0';
           renderAll(*st);
         } else if (ch >= 0x20 && ch <= 0x7E) {
-          size_t n = wcslen(st->testCodeText);
-          if (n + 1 < 30) {
-            st->testCodeText[n] = ch;
-            st->testCodeText[n + 1] = L'\0';
+          size_t n = wcslen(st->pathInputText);
+          if (n + 1 < MAX_PATH - 4) {
+            st->pathInputText[n] = ch;
+            st->pathInputText[n + 1] = L'\0';
             renderAll(*st);
           }
         }
@@ -1551,6 +1720,10 @@ static LRESULT CALLBACK installerWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPA
           handleModalAction(*st, st->modalFocus);
           renderAll(*st);
         } else if (wParam == VK_ESCAPE) {
+          if (st->modal == ModalKind::StandaloneWarn) {
+            st->appSelected[0] = false;
+            st->standaloneWarnShown = true;
+          }
           st->modal = ModalKind::None;
           renderAll(*st);
         }
@@ -1561,8 +1734,8 @@ static LRESULT CALLBACK installerWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPA
         handleZoneActivate(*st, (st->currentStep > 0 && st->phase != InstallPhase::Running) ? Z_BTN_BACK : Z_BTN_EXIT);
         renderAll(*st);
       } else if (wParam == VK_RETURN) {
-        if (st->currentStep == 0 && st->focusedInput == FocusedInput::Step1TestCode && st->testCodeText[0]) {
-          // Already handled in WM_CHAR except if synthesized via SendMessage
+        if (st->currentStep == 0 && st->focusedInput == FocusedInput::Step1PathInput && st->pathInputText[0]) {
+          // Handled via WM_CHAR
         } else if (st->currentStep < 4 || st->phase == InstallPhase::Ready) {
           handleZoneActivate(*st, Z_BTN_NEXT);
           renderAll(*st);
@@ -1621,8 +1794,8 @@ static bool initDesktopBackbuffer(InstallerAppState & st) {
   st.memDC = CreateCompatibleDC(hdcScreen);
   BITMAPINFO bmi = {};
   bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-  bmi.bmiHeader.biWidth = LiliumUI::kScreenW;
-  bmi.bmiHeader.biHeight = -LiliumUI::kScreenH;
+  bmi.bmiHeader.biWidth = kWinW;
+  bmi.bmiHeader.biHeight = -kWinH;
   bmi.bmiHeader.biPlanes = 1;
   bmi.bmiHeader.biBitCount = 32;
   bmi.bmiHeader.biCompression = BI_RGB;
@@ -1681,7 +1854,6 @@ static int runSelfTest() {
     }
   };
 
-  // 1. Model classifier
   check(classifyBrainModel(L"PW-SB4") == BrainGen::Gen4Supported, "Gen4 PW-SB4");
   check(classifyBrainModel(L"sh6") == BrainGen::Gen4Supported, "Gen4 sh6");
   check(classifyBrainModel(L"PW-SH1") == BrainGen::Gen3Supported, "Gen3 PW-SH1");
@@ -1690,13 +1862,11 @@ static int runSelfTest() {
   check(classifyBrainModel(L"PW-H1") == BrainGen::Gen5Blocked, "Blocked Gen5 PW-H1");
   check(classifyBrainModel(L"PW-ES9200") == BrainGen::Gen5Blocked, "Blocked Gen5 PW-ES9200");
 
-  // 2. Dry-Run secret codes
   check(isDryRunCode(L"LILIUM-TEST"), "DryRun LILIUM-TEST");
   check(isDryRunCode(L" lilium-test "), "DryRun lowercase trimmed");
   check(isDryRunCode(L"dryrun"), "DryRun dryrun");
-  check(!isDryRunCode(L"PW-SB4"), "DryRun rejects non-code");
+  check(!isDryRunCode(L"E:\\"), "DryRun rejects real path");
 
-  // 3. SemVer compare & AppMain.cfg generation
   check(compareSemVer(L"v2.5.0", L"v2.7.0") < 0, "SemVer v2.5.0 < v2.7.0");
   check(compareSemVer(L"v2.7.0", L"v2.7.0") == 0, "SemVer v2.7.0 == v2.7.0");
   uint8_t cfg[8] = {};
@@ -1707,12 +1877,11 @@ static int runSelfTest() {
   generateAppMainCfgBytes(2, cfg);
   check(memcmp(cfg, "liliumpj", 8) == 0, "Cfg mode 2 liliumpj");
 
-  // 4. Locate payload & PE validator
   wchar_t payloadDir[MAX_PATH] = L"";
   bool hasPayload = locatePayloadDir(payloadDir, MAX_PATH);
   check(hasPayload, "locatePayloadDir");
+  wchar_t probeCe[MAX_PATH] = L"";
   if (hasPayload) {
-    wchar_t probeCe[MAX_PATH] = L"";
     LiliumUI::joinPath(payloadDir, L"AppMain_.exe", probeCe, MAX_PATH);
     wchar_t reason[96] = L"";
     check(validateWinCeArmExe(probeCe, reason, 96), "validateWinCeArmExe accepts ARM CE binary");
@@ -1721,7 +1890,6 @@ static int runSelfTest() {
     check(!validateWinCeArmExe(selfExe, reason, 96), "validateWinCeArmExe rejects PC x64 EXE");
   }
 
-  // 5. Sandbox destination install, user data preservation, update detection, dry-run zero-write
   wchar_t tmpRoot[MAX_PATH] = L"";
   GetTempPathW(MAX_PATH, tmpRoot);
   wchar_t sandbox[MAX_PATH] = L"";
@@ -1732,7 +1900,6 @@ static int runSelfTest() {
   wchar_t destDir[MAX_PATH] = L"";
   computeDestLiliumDir(sandbox, destDir, MAX_PATH);
 
-  // Create fake older v2.5.0 manifest + existing user settings file
   wchar_t appParent[MAX_PATH] = L"";
   LiliumUI::joinPath(sandbox, L"アプリ", appParent, MAX_PATH);
   CreateDirectoryW(appParent, NULL);
@@ -1747,7 +1914,6 @@ static int runSelfTest() {
   TargetInspectInfo before = inspectTargetInstall(destDir);
   check(before.status == InstallDetectStatus::OlderVersion, "Detects v2.5.0 as OlderVersion");
 
-  // Run real sandbox update using Gen3 Direct mode (or payload copy)
   bool sel[kCatalogCount] = {};
   for (int i = 0; i < kCatalogCount; ++i) sel[i] = kAppCatalog[i].minimalOn;
   InstallTask tasks[kMaxInstallTasks] = {};
@@ -1770,7 +1936,42 @@ static int runSelfTest() {
   TargetInspectInfo after = inspectTargetInstall(destDir);
   check(after.status == InstallDetectStatus::SameOrNewer, "After install detects SameOrNewer v2.7.0");
 
-  // Dry-run zero-write test on fresh non-existent directory
+  // Standalone (No-Launcher) sandbox verification
+  wchar_t saSandbox[MAX_PATH] = L"";
+  LiliumUI::joinPath(sandbox, L"standalone_root", saSandbox, MAX_PATH);
+  CreateDirectoryW(saSandbox, NULL);
+  wchar_t saDest[MAX_PATH] = L"";
+  computeDestLiliumDir(saSandbox, saDest, MAX_PATH);
+  bool saSel[kCatalogCount] = {};
+  saSel[0] = false; // Launcher OFF
+  saSel[1] = true;  // Calc
+  saSel[10] = true; // Chat 1.7M
+  saSel[12] = true; // DOOM
+  uint64_t saTot = 0;
+  int saCnt = buildInstallTasks(payloadDir, saDest, saSel, LoaderMode::UserExeOpener,
+                                probeCe, false, tasks, kMaxInstallTasks, saTot);
+  bool saOk = (saCnt > 0);
+  for (int i = 0; i < saCnt; ++i) {
+    wchar_t logL[96] = L"";
+    if (!executeOneInstallTask(tasks[i], 0, L"PW-SB4", BrainGen::Gen4Supported, 0x1402, false, logL, 96)) {
+      saOk = false;
+    }
+  }
+  check(saOk, "Standalone no-launcher sandbox install succeeded");
+  wchar_t pCalcA[MAX_PATH] = L"", pCalcB[MAX_PATH] = L"", pCalcFont[MAX_PATH] = L"";
+  wchar_t pChatBin[MAX_PATH] = L"", pDoomZwad[MAX_PATH] = L"", pNoLauncher[MAX_PATH] = L"";
+  LiliumUI::joinPath(saSandbox, L"アプリ\\LiliumCalc\\AppMain.exe", pCalcA, MAX_PATH);
+  LiliumUI::joinPath(saSandbox, L"アプリ\\LiliumCalc\\AppMain_.exe", pCalcB, MAX_PATH);
+  LiliumUI::joinPath(saSandbox, L"アプリ\\LiliumCalc\\font.ttf", pCalcFont, MAX_PATH);
+  LiliumUI::joinPath(saSandbox, L"アプリ\\LiliumChat\\models\\zundamon-v4-base_q8.bin", pChatBin, MAX_PATH);
+  LiliumUI::joinPath(saSandbox, L"アプリ\\LiliumDOOM\\freedoom1.zwad", pDoomZwad, MAX_PATH);
+  LiliumUI::joinPath(saSandbox, L"アプリ\\Lilium\\AppMain_.exe", pNoLauncher, MAX_PATH);
+  check(fileExistsW(pCalcA) && fileExistsW(pCalcB) && fileExistsW(pCalcFont), "Standalone Calc has AppMain.exe/_.exe/font.ttf");
+  check(fileExistsW(pChatBin), "Standalone Chat has models\\zundamon-v4-base_q8.bin");
+  check(fileExistsW(pDoomZwad), "Standalone DOOM has freedoom1.zwad");
+  check(!fileExistsW(pNoLauncher), "Standalone omits アプリ\\Lilium\\AppMain_.exe");
+
+  // Dry-run zero-write check
   wchar_t dryTarget[MAX_PATH] = L"";
   LiliumUI::joinPath(sandbox, L"dry_only\\アプリ\\Lilium", dryTarget, MAX_PATH);
   uint64_t dryTot = 0;
@@ -1825,9 +2026,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow) {
   wc.lpszClassName = L"LiliumWin11InstallerWnd";
   RegisterClassExW(&wc);
 
-  // Desktop non-topmost centered 800x480 window matching Brain Lilium aesthetic
   DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE;
-  RECT rc = { 0, 0, LiliumUI::kScreenW, LiliumUI::kScreenH };
+  RECT rc = { 0, 0, kWinW, kWinH };
   AdjustWindowRect(&rc, style, FALSE);
   int winW = rc.right - rc.left;
   int winH = rc.bottom - rc.top;

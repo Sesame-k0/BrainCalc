@@ -28,7 +28,7 @@ static constexpr const wchar_t * kInstallerVersion = LiliumSettings::kLiliumVers
 static constexpr int kCatalogCount = 14;
 static constexpr int kMaxFilesPerApp = 4;
 static constexpr int kMaxDrives = 16;
-static constexpr int kMaxInstallTasks = 64;
+static constexpr int kMaxInstallTasks = 160;
 
 enum class BrainGen {
   Unknown = 0,
@@ -63,6 +63,7 @@ struct AppCatalogItem {
   const wchar_t * id;
   const wchar_t * title;
   const wchar_t * shortName;
+  const wchar_t * standaloneFolder;
   const wchar_t * descLine1;
   const wchar_t * descLine2;
   int iconKind;       // 99=Launcher, 0..10 matching Launcher, 11=Chat10M, 12=IME
@@ -75,46 +76,60 @@ struct AppCatalogItem {
 };
 
 static constexpr AppCatalogItem kAppCatalog[kCatalogCount] = {
-  { L"launcher", L"Lilium Launcher", L"ランチャー", L"4x3画面ランチャー本体(必須)", L"AppMain_.exe + 美咲フォント",
-    99, true, true, true, true, 3,
+  { L"launcher", L"Lilium Launcher", L"ランチャー", L"Lilium",
+    L"4x3画面ランチャー本体(推奨)", L"連携機能・日本語IME自動管理",
+    99, false, true, true, true, 3,
     { L"AppMain_.exe", L"font.ttf", L"misaki_gothic.ttf", nullptr } },
-  { L"calc", L"Lilium Calc", L"関数電卓", L"グラフ関数電卓+経理電卓", L"Epsilon/Upsilon + CashCalc",
+  { L"calc", L"Lilium Calc", L"関数電卓", L"LiliumCalc",
+    L"グラフ関数電卓+経理電卓", L"Epsilon/Upsilon + CashCalc",
     0, false, true, true, true, 1,
     { L"apps\\LiliumCalc.exe", nullptr, nullptr, nullptr } },
-  { L"editor", L"Lilium Editor", L"メモ帳", L"Markdown対応テキストメモ", L"日本語IME直接入力・プレビュー",
+  { L"editor", L"Lilium Editor", L"メモ帳", L"LiliumEditor",
+    L"Markdown対応テキストメモ", L"日本語IME連携テキスト編集",
     7, false, true, true, false, 1,
     { L"apps\\LiliumEditor.exe", nullptr, nullptr, nullptr } },
-  { L"timetable", L"Lilium TimeTable", L"時間割", L"高校/大学時間割管理アプリ", L"コマ配色・時刻連動対応",
+  { L"timetable", L"Lilium TimeTable", L"時間割", L"LiliumTimeTable",
+    L"高校/大学時間割管理アプリ", L"コマ配色・時刻連動対応",
     6, false, true, true, false, 1,
     { L"apps\\LiliumTimeTable.exe", nullptr, nullptr, nullptr } },
-  { L"filer", L"Lilium Filer", L"ファイラ", L"システム保護付きファイル管理", L"HEX/テキスト表示・改名対応",
+  { L"filer", L"Lilium Filer", L"ファイラ", L"LiliumFiler",
+    L"システム保護付きファイル管理", L"HEX/テキスト表示・改名対応",
     3, false, true, true, false, 1,
     { L"apps\\LiliumFiler.exe", nullptr, nullptr, nullptr } },
-  { L"taskmgr", L"Lilium TaskMgr", L"タスク管理", L"プロセス・RAM監視/辞書終了", L"内蔵辞書メモリの安全解放",
+  { L"taskmgr", L"Lilium TaskMgr", L"タスク管理", L"LiliumTaskMgr",
+    L"プロセス・RAM監視/辞書終了", L"内蔵辞書メモリの安全解放",
     1, false, true, true, false, 1,
     { L"apps\\LiliumTaskMgr.exe", nullptr, nullptr, nullptr } },
-  { L"clock", L"Lilium Clock", L"時計/タイマ", L"デジタル時計・ストップウォッチ", L"タイマー付・完全消音動作",
+  { L"clock", L"Lilium Clock", L"時計/タイマ", L"LiliumClock",
+    L"デジタル時計・ストップウォッチ", L"タイマー付・完全消音動作",
     2, false, true, true, false, 1,
     { L"apps\\LiliumClock.exe", nullptr, nullptr, nullptr } },
-  { L"life", L"Lilium Life", L"ライフゲーム", L"Conway / Brian / Langton", L"セルオートマトン&画面保護",
+  { L"life", L"Lilium Life", L"ライフゲーム", L"LiliumLife",
+    L"Conway / Brian / Langton", L"セルオートマトン&画面保護",
     5, false, true, true, false, 1,
     { L"apps\\LiliumLife.exe", nullptr, nullptr, nullptr } },
-  { L"setting", L"Lilium Setting", L"統合設定", L"輝度・電源・蓋・並替・ログ", L"lilium_settings.cfg 一括管理",
+  { L"setting", L"Lilium Setting", L"統合設定", L"LiliumSetting",
+    L"輝度・電源・蓋・並替・ログ", L"lilium_settings.cfg 一括管理",
     8, false, true, true, true, 1,
     { L"apps\\LiliumSetting.exe", nullptr, nullptr, nullptr } },
-  { L"recorder", L"Lilium Recorder", L"録音機", L"内蔵マイク PCM WAV録音", L"波形表示・倍速・A-Bリピート",
+  { L"recorder", L"Lilium Recorder", L"録音機", L"LiliumRecorder",
+    L"内蔵マイク PCM WAV録音", L"波形表示・倍速・A-Bリピート",
     9, false, true, true, false, 1,
     { L"apps\\LiliumRecorder.exe", nullptr, nullptr, nullptr } },
-  { L"chat17m", L"Lilium Chat 1.7M", L"AIチャット小", L"ずんだもん 1.7M ローカルLLM", L"軽量高速・1往復会話モデル",
+  { L"chat17m", L"Lilium Chat 1.7M", L"AIチャット小", L"LiliumChat",
+    L"ずんだもん 1.7M ローカルLLM", L"軽量高速・1往復会話モデル",
     10, false, true, true, false, 3,
     { L"apps\\LiliumChat.exe", L"apps\\models\\zundamon-v4-base_q8.bin", L"apps\\models\\tok.bin", nullptr } },
-  { L"chat10m", L"Akebono +10M", L"AI追加10M", L"Akebono 10M 連続会話モデル", L"容量約10.5MB(Chat本体連動)",
+  { L"chat10m", L"Akebono +10M", L"AI追加10M", L"LiliumChat",
+    L"Akebono 10M 連続会話モデル", L"容量約10.5MB(Chat本体連動)",
     11, false, true, false, false, 2,
     { L"apps\\models\\akebono-10m-chat_q8.bin", L"apps\\models\\akebono-10m-chat_q8.tok", nullptr, nullptr } },
-  { L"doom", L"Lilium DOOM", L"DOOM", L"サイレント版 Freedoom Ep.1", L"音声なし・軽量ZWAD版(約4.6MB)",
+  { L"doom", L"Lilium DOOM", L"DOOM", L"LiliumDOOM",
+    L"サイレント版 Freedoom Ep.1", L"音声なし・軽量ZWAD版(約4.6MB)",
     4, false, true, false, false, 2,
     { L"apps\\doom.exe", L"apps\\freedoom1.zwad", nullptr, nullptr } },
-  { L"ime", L"Lilium IME", L"日本語IME", L"常駐ローマ字漢字変換デーモン", L"Mozc由来辞書(約920KB・推奨)",
+  { L"ime", L"Lilium IME", L"日本語IME", L"LiliumIME",
+    L"常駐ローマ字漢字変換デーモン", L"Mozc由来辞書(約920KB・推奨)",
     12, false, true, true, true, 2,
     { L"apps\\LiliumIME.exe", L"apps\\lilium_ime.dic", nullptr, nullptr } }
 };
@@ -328,9 +343,9 @@ inline int compareSemVer(const wchar_t * a, const wchar_t * b) {
   return 0;
 }
 
-inline void computeDestLiliumDir(const wchar_t * basePath, wchar_t * outDir, size_t maxLen) {
-  if (!outDir || maxLen == 0) return;
-  outDir[0] = L'\0';
+inline void computeAppsRootDir(const wchar_t * basePath, wchar_t * outAppsDir, size_t maxLen) {
+  if (!outAppsDir || maxLen == 0) return;
+  outAppsDir[0] = L'\0';
   if (!basePath || !basePath[0]) return;
 
   wchar_t clean[MAX_PATH] = L"";
@@ -338,16 +353,15 @@ inline void computeDestLiliumDir(const wchar_t * basePath, wchar_t * outDir, siz
   clean[MAX_PATH - 1] = L'\0';
   trimTrailingSlashW(clean);
 
-  // Check if root drive (X:\ or X:)
   size_t len = wcslen(clean);
   if (len == 2 && clean[1] == L':') {
-    _snwprintf(outDir, maxLen, L"%ls\\アプリ\\Lilium", clean);
-    outDir[maxLen - 1] = L'\0';
+    _snwprintf(outAppsDir, maxLen, L"%ls\\アプリ", clean);
+    outAppsDir[maxLen - 1] = L'\0';
     return;
   }
   if (len == 3 && clean[1] == L':' && clean[2] == L'\\') {
-    _snwprintf(outDir, maxLen, L"%c:\\アプリ\\Lilium", clean[0]);
-    outDir[maxLen - 1] = L'\0';
+    _snwprintf(outAppsDir, maxLen, L"%c:\\アプリ", clean[0]);
+    outAppsDir[maxLen - 1] = L'\0';
     return;
   }
 
@@ -357,11 +371,37 @@ inline void computeDestLiliumDir(const wchar_t * basePath, wchar_t * outDir, siz
   const wchar_t * leaf = slash ? (slash + 1) : clean;
 
   if (_wcsicmp(leaf, L"アプリ") == 0) {
-    _snwprintf(outDir, maxLen, L"%ls\\Lilium", clean);
+    wcsncpy(outAppsDir, clean, maxLen - 1);
   } else {
-    _snwprintf(outDir, maxLen, L"%ls\\アプリ\\Lilium", clean);
+    _snwprintf(outAppsDir, maxLen, L"%ls\\アプリ", clean);
   }
-  outDir[maxLen - 1] = L'\0';
+  outAppsDir[maxLen - 1] = L'\0';
+}
+
+inline void computeDestLiliumDir(const wchar_t * basePath, wchar_t * outDir, size_t maxLen) {
+  if (!outDir || maxLen == 0) return;
+  outDir[0] = L'\0';
+  wchar_t appsRoot[MAX_PATH] = L"";
+  computeAppsRootDir(basePath, appsRoot, MAX_PATH);
+  if (appsRoot[0]) {
+    _snwprintf(outDir, maxLen, L"%ls\\Lilium", appsRoot);
+    outDir[maxLen - 1] = L'\0';
+  }
+}
+
+inline void extractAppsRootFromDestDir(const wchar_t * destLiliumDir, wchar_t * outAppsDir, size_t maxLen) {
+  if (!outAppsDir || maxLen == 0) return;
+  outAppsDir[0] = L'\0';
+  if (!destLiliumDir || !destLiliumDir[0]) return;
+  wcsncpy(outAppsDir, destLiliumDir, maxLen - 1);
+  outAppsDir[maxLen - 1] = L'\0';
+  trimTrailingSlashW(outAppsDir);
+  wchar_t * lastSl = wcsrchr(outAppsDir, L'\\');
+  if (lastSl && _wcsicmp(lastSl + 1, L"Lilium") == 0) {
+    *lastSl = L'\0';
+    return;
+  }
+  computeAppsRootDir(destLiliumDir, outAppsDir, maxLen);
 }
 
 inline bool scanVersionFromExe(const wchar_t * exePath, wchar_t * outVer, size_t maxLen) {
@@ -754,79 +794,193 @@ inline int buildInstallTasks(const wchar_t * payloadDir,
     outTotalBytes += sz;
   };
 
-  // Compute parent "<Drive>\アプリ" so we create it safely without formatting
-  wchar_t appFolder[MAX_PATH] = L"";
-  wcsncpy(appFolder, destLiliumDir, MAX_PATH - 1);
-  appFolder[MAX_PATH - 1] = L'\0';
-  trimTrailingSlashW(appFolder);
-  wchar_t * lastSl = wcsrchr(appFolder, L'\\');
-  if (lastSl) *lastSl = L'\0';
+  const bool standaloneMode = !selected[0];
 
-  if (appFolder[0]) {
-    pushTask(CopyTaskKind::MkDir, nullptr, appFolder, L"アプリフォルダ確認", 0);
-  }
-  pushTask(CopyTaskKind::MkDir, nullptr, destLiliumDir, L"Liliumフォルダ作成", 0);
+  if (!standaloneMode) {
+    // Launcher mode: integrated <Base>\アプリ\Lilium\ bundle
+    wchar_t appFolder[MAX_PATH] = L"";
+    extractAppsRootFromDestDir(destLiliumDir, appFolder, MAX_PATH);
 
-  wchar_t appsSub[MAX_PATH] = L"";
-  LiliumUI::joinPath(destLiliumDir, L"apps", appsSub, MAX_PATH);
-  pushTask(CopyTaskKind::MkDir, nullptr, appsSub, L"appsフォルダ作成", 0);
+    if (appFolder[0]) {
+      pushTask(CopyTaskKind::MkDir, nullptr, appFolder, L"アプリフォルダ確認", 0);
+    }
+    pushTask(CopyTaskKind::MkDir, nullptr, destLiliumDir, L"Liliumフォルダ作成", 0);
 
-  if (selected[10] || selected[11]) {
-    wchar_t modelsSub[MAX_PATH] = L"";
-    LiliumUI::joinPath(destLiliumDir, L"apps\\models", modelsSub, MAX_PATH);
-    pushTask(CopyTaskKind::MkDir, nullptr, modelsSub, L"modelsフォルダ作成", 0);
-  }
+    wchar_t appsSub[MAX_PATH] = L"";
+    LiliumUI::joinPath(destLiliumDir, L"apps", appsSub, MAX_PATH);
+    pushTask(CopyTaskKind::MkDir, nullptr, appsSub, L"appsフォルダ作成", 0);
 
-  wchar_t scriptsSub[MAX_PATH] = L"";
-  LiliumUI::joinPath(destLiliumDir, L"scripts", scriptsSub, MAX_PATH);
-  pushTask(CopyTaskKind::MkDir, nullptr, scriptsSub, L"scriptsフォルダ確認", 0);
+    if (selected[10] || selected[11]) {
+      wchar_t modelsSub[MAX_PATH] = L"";
+      LiliumUI::joinPath(destLiliumDir, L"apps\\models", modelsSub, MAX_PATH);
+      pushTask(CopyTaskKind::MkDir, nullptr, modelsSub, L"modelsフォルダ作成", 0);
+    }
 
-  // Loader (AppMain.exe)
-  wchar_t dstAppMain[MAX_PATH] = L"";
-  LiliumUI::joinPath(destLiliumDir, L"AppMain.exe", dstAppMain, MAX_PATH);
-  if (loaderMode == LoaderMode::UserExeOpener && exeopenerPath && exeopenerPath[0]) {
-    uint64_t lsz = queryFileSizeW(exeopenerPath);
-    if (lsz == 0) lsz = 192512ULL;
-    pushTask(CopyTaskKind::CopyFile, exeopenerPath, dstAppMain, L"AppMain.exe (exeopener)", lsz);
-  } else if (loaderMode == LoaderMode::ReuseExisting) {
-    pushTask(CopyTaskKind::ReuseLoader, nullptr, dstAppMain, L"AppMain.exe (既存を流用)", 0);
-  } else if (loaderMode == LoaderMode::DirectNoOpener) {
-    wchar_t srcLauncher[MAX_PATH] = L"";
-    LiliumUI::joinPath(payloadDir, L"AppMain_.exe", srcLauncher, MAX_PATH);
-    uint64_t lsz = queryFileSizeW(srcLauncher);
-    if (lsz == 0) lsz = 188416ULL;
-    pushTask(CopyTaskKind::CopyFile, srcLauncher, dstAppMain, L"AppMain.exe (第3世代直接)", lsz);
-  } else {
-    pushTask(CopyTaskKind::VirtualLoader, nullptr, dstAppMain, L"AppMain.exe (試運転仮想)", dryRun ? 192512ULL : 0);
-  }
+    wchar_t scriptsSub[MAX_PATH] = L"";
+    LiliumUI::joinPath(destLiliumDir, L"scripts", scriptsSub, MAX_PATH);
+    pushTask(CopyTaskKind::MkDir, nullptr, scriptsSub, L"scriptsフォルダ確認", 0);
 
-  // Selected catalog files
-  for (int i = 0; i < kCatalogCount; ++i) {
-    if (!selected[i] && !kAppCatalog[i].required) continue;
-    for (int f = 0; f < kAppCatalog[i].fileCount; ++f) {
-      const wchar_t * rel = kAppCatalog[i].relFiles[f];
-      if (!rel) continue;
-      wchar_t src[MAX_PATH] = L"";
-      wchar_t dst[MAX_PATH] = L"";
-      LiliumUI::joinPath(payloadDir, rel, src, MAX_PATH);
-      LiliumUI::joinPath(destLiliumDir, rel, dst, MAX_PATH);
-      uint64_t fsz = queryFileSizeW(src);
-      if (fsz == 0 && dryRun) fsz = 200000ULL;
-      if (fsz > 0 || dryRun) {
-        pushTask(CopyTaskKind::CopyFile, src, dst, rel, fsz);
+    // Loader (AppMain.exe)
+    wchar_t dstAppMain[MAX_PATH] = L"";
+    LiliumUI::joinPath(destLiliumDir, L"AppMain.exe", dstAppMain, MAX_PATH);
+    if (loaderMode == LoaderMode::UserExeOpener && exeopenerPath && exeopenerPath[0]) {
+      uint64_t lsz = queryFileSizeW(exeopenerPath);
+      if (lsz == 0) lsz = 192512ULL;
+      pushTask(CopyTaskKind::CopyFile, exeopenerPath, dstAppMain, L"AppMain.exe (exeopener)", lsz);
+    } else if (loaderMode == LoaderMode::ReuseExisting) {
+      pushTask(CopyTaskKind::ReuseLoader, nullptr, dstAppMain, L"AppMain.exe (既存を流用)", 0);
+    } else if (loaderMode == LoaderMode::DirectNoOpener) {
+      wchar_t srcLauncher[MAX_PATH] = L"";
+      LiliumUI::joinPath(payloadDir, L"AppMain_.exe", srcLauncher, MAX_PATH);
+      uint64_t lsz = queryFileSizeW(srcLauncher);
+      if (lsz == 0) lsz = 188416ULL;
+      pushTask(CopyTaskKind::CopyFile, srcLauncher, dstAppMain, L"AppMain.exe (第3世代直接)", lsz);
+    } else {
+      pushTask(CopyTaskKind::VirtualLoader, nullptr, dstAppMain, L"AppMain.exe (試運転仮想)", dryRun ? 192512ULL : 0);
+    }
+
+    // Selected catalog files
+    for (int i = 0; i < kCatalogCount; ++i) {
+      if (!selected[i]) continue;
+      for (int f = 0; f < kAppCatalog[i].fileCount; ++f) {
+        const wchar_t * rel = kAppCatalog[i].relFiles[f];
+        if (!rel) continue;
+        wchar_t src[MAX_PATH] = L"";
+        wchar_t dst[MAX_PATH] = L"";
+        LiliumUI::joinPath(payloadDir, rel, src, MAX_PATH);
+        LiliumUI::joinPath(destLiliumDir, rel, dst, MAX_PATH);
+        uint64_t fsz = queryFileSizeW(src);
+        if (fsz == 0 && dryRun) fsz = 200000ULL;
+        if (fsz > 0 || dryRun) {
+          pushTask(CopyTaskKind::CopyFile, src, dst, rel, fsz);
+        }
       }
     }
+
+    wchar_t dstCfg[MAX_PATH] = L"";
+    wchar_t dstDin[MAX_PATH] = L"";
+    wchar_t dstMan[MAX_PATH] = L"";
+    LiliumUI::joinPath(destLiliumDir, L"AppMain.cfg", dstCfg, MAX_PATH);
+    LiliumUI::joinPath(destLiliumDir, L"index.din", dstDin, MAX_PATH);
+    LiliumUI::joinPath(destLiliumDir, L"lilium_manifest.ini", dstMan, MAX_PATH);
+    pushTask(CopyTaskKind::WriteCfg, nullptr, dstCfg, L"AppMain.cfg (8B生成)", 8);
+    pushTask(CopyTaskKind::WriteIndexDin, nullptr, dstDin, L"index.din 生成", 0);
+    pushTask(CopyTaskKind::WriteManifest, nullptr, dstMan, L"lilium_manifest.ini 生成", 256);
+    return count;
   }
 
-  wchar_t dstCfg[MAX_PATH] = L"";
-  wchar_t dstDin[MAX_PATH] = L"";
-  wchar_t dstMan[MAX_PATH] = L"";
-  LiliumUI::joinPath(destLiliumDir, L"AppMain.cfg", dstCfg, MAX_PATH);
-  LiliumUI::joinPath(destLiliumDir, L"index.din", dstDin, MAX_PATH);
-  LiliumUI::joinPath(destLiliumDir, L"lilium_manifest.ini", dstMan, MAX_PATH);
-  pushTask(CopyTaskKind::WriteCfg, nullptr, dstCfg, L"AppMain.cfg (8B生成)", 8);
-  pushTask(CopyTaskKind::WriteIndexDin, nullptr, dstDin, L"index.din 生成", 0);
-  pushTask(CopyTaskKind::WriteManifest, nullptr, dstMan, L"lilium_manifest.ini 生成", 256);
+  // Standalone (No-Launcher) mode: each selected app goes into <Base>\アプリ\<AppName>
+  wchar_t appsRoot[MAX_PATH] = L"";
+  extractAppsRootFromDestDir(destLiliumDir, appsRoot, MAX_PATH);
+  if (appsRoot[0]) {
+    pushTask(CopyTaskKind::MkDir, nullptr, appsRoot, L"アプリフォルダ確認", 0);
+  }
+
+  wchar_t fallbackExistingLoader[MAX_PATH] = L"";
+  LiliumUI::joinPath(destLiliumDir, L"AppMain.exe", fallbackExistingLoader, MAX_PATH);
+
+  for (int i = 1; i < kCatalogCount; ++i) {
+    if (i == 11) continue; // chat10m shares LiliumChat folder and is handled inside i == 10
+    if (!selected[i]) continue;
+    if (kAppCatalog[i].fileCount <= 0 || !kAppCatalog[i].relFiles[0]) continue;
+
+    const wchar_t * folder = kAppCatalog[i].standaloneFolder;
+    wchar_t appDir[MAX_PATH] = L"";
+    LiliumUI::joinPath(appsRoot, folder, appDir, MAX_PATH);
+    wchar_t mkDisp[96] = L"";
+    _snwprintf(mkDisp, 95, L"%ls フォルダ", folder);
+    pushTask(CopyTaskKind::MkDir, nullptr, appDir, mkDisp, 0);
+
+    wchar_t srcMain[MAX_PATH] = L"";
+    LiliumUI::joinPath(payloadDir, kAppCatalog[i].relFiles[0], srcMain, MAX_PATH);
+    uint64_t mainSz = queryFileSizeW(srcMain);
+    if (mainSz == 0 && dryRun) mainSz = 200000ULL;
+
+    wchar_t dstMainLoader[MAX_PATH] = L"";
+    wchar_t dstMainBody[MAX_PATH] = L"";
+    LiliumUI::joinPath(appDir, L"AppMain.exe", dstMainLoader, MAX_PATH);
+    LiliumUI::joinPath(appDir, L"AppMain_.exe", dstMainBody, MAX_PATH);
+
+    wchar_t dispA[96] = L"";
+    wchar_t dispB[96] = L"";
+    _snwprintf(dispA, 95, L"%ls\\AppMain.exe", folder);
+    _snwprintf(dispB, 95, L"%ls\\AppMain_.exe", folder);
+
+    if (loaderMode == LoaderMode::UserExeOpener && exeopenerPath && exeopenerPath[0]) {
+      uint64_t lsz = queryFileSizeW(exeopenerPath);
+      if (lsz == 0) lsz = 192512ULL;
+      pushTask(CopyTaskKind::CopyFile, exeopenerPath, dstMainLoader, dispA, lsz);
+      if (mainSz > 0 || dryRun) pushTask(CopyTaskKind::CopyFile, srcMain, dstMainBody, dispB, mainSz);
+    } else if (loaderMode == LoaderMode::DirectNoOpener) {
+      if (mainSz > 0 || dryRun) pushTask(CopyTaskKind::CopyFile, srcMain, dstMainLoader, dispA, mainSz);
+    } else if (loaderMode == LoaderMode::ReuseExisting) {
+      if (fileExistsW(dstMainLoader)) {
+        pushTask(CopyTaskKind::ReuseLoader, nullptr, dstMainLoader, dispA, 0);
+      } else if (fileExistsW(fallbackExistingLoader)) {
+        uint64_t lsz = queryFileSizeW(fallbackExistingLoader);
+        pushTask(CopyTaskKind::CopyFile, fallbackExistingLoader, dstMainLoader, dispA, lsz);
+      } else if (dryRun) {
+        pushTask(CopyTaskKind::VirtualLoader, nullptr, dstMainLoader, dispA, 192512ULL);
+      } else {
+        pushTask(CopyTaskKind::ReuseLoader, nullptr, dstMainLoader, dispA, 0);
+      }
+      if (mainSz > 0 || dryRun) pushTask(CopyTaskKind::CopyFile, srcMain, dstMainBody, dispB, mainSz);
+    } else {
+      pushTask(CopyTaskKind::VirtualLoader, nullptr, dstMainLoader, dispA, dryRun ? 192512ULL : 0);
+      if (mainSz > 0 || dryRun) pushTask(CopyTaskKind::CopyFile, srcMain, dstMainBody, dispB, mainSz);
+    }
+
+    auto copyAsset = [&](const wchar_t * srcRel, const wchar_t * dstRel) {
+      wchar_t srcA[MAX_PATH] = L"";
+      wchar_t dstA[MAX_PATH] = L"";
+      LiliumUI::joinPath(payloadDir, srcRel, srcA, MAX_PATH);
+      LiliumUI::joinPath(appDir, dstRel, dstA, MAX_PATH);
+      uint64_t asz = queryFileSizeW(srcA);
+      if (asz == 0 && dryRun) asz = 200000ULL;
+      if (asz > 0 || dryRun) {
+        wchar_t dName[96] = L"";
+        _snwprintf(dName, 95, L"%ls\\%ls", folder, dstRel);
+        pushTask(CopyTaskKind::CopyFile, srcA, dstA, dName, asz);
+      }
+    };
+
+    if (i == 1) {
+      // Calc fonts
+      copyAsset(L"font.ttf", L"font.ttf");
+      copyAsset(L"misaki_gothic.ttf", L"misaki_gothic.ttf");
+    } else if (i == 10) {
+      // Chat models subfolder
+      wchar_t mDir[MAX_PATH] = L"";
+      LiliumUI::joinPath(appDir, L"models", mDir, MAX_PATH);
+      pushTask(CopyTaskKind::MkDir, nullptr, mDir, L"LiliumChat\\models", 0);
+      copyAsset(L"apps\\models\\zundamon-v4-base_q8.bin", L"models\\zundamon-v4-base_q8.bin");
+      copyAsset(L"apps\\models\\tok.bin", L"models\\tok.bin");
+      if (selected[11]) {
+        copyAsset(L"apps\\models\\akebono-10m-chat_q8.bin", L"models\\akebono-10m-chat_q8.bin");
+        copyAsset(L"apps\\models\\akebono-10m-chat_q8.tok", L"models\\akebono-10m-chat_q8.tok");
+      }
+    } else if (i == 12) {
+      // DOOM IWAD
+      copyAsset(L"apps\\freedoom1.zwad", L"freedoom1.zwad");
+    } else if (i == 13) {
+      // IME dictionary
+      copyAsset(L"apps\\lilium_ime.dic", L"lilium_ime.dic");
+    }
+
+    wchar_t dstCfg[MAX_PATH] = L"";
+    wchar_t dstDin[MAX_PATH] = L"";
+    wchar_t dstMan[MAX_PATH] = L"";
+    LiliumUI::joinPath(appDir, L"AppMain.cfg", dstCfg, MAX_PATH);
+    LiliumUI::joinPath(appDir, L"index.din", dstDin, MAX_PATH);
+    LiliumUI::joinPath(appDir, L"lilium_manifest.ini", dstMan, MAX_PATH);
+    wchar_t cfgD[96] = L"", dinD[96] = L"", manD[96] = L"";
+    _snwprintf(cfgD, 95, L"%ls\\AppMain.cfg", folder);
+    _snwprintf(dinD, 95, L"%ls\\index.din", folder);
+    _snwprintf(manD, 95, L"%ls\\lilium_manifest.ini", folder);
+    pushTask(CopyTaskKind::WriteCfg, nullptr, dstCfg, cfgD, 8);
+    pushTask(CopyTaskKind::WriteIndexDin, nullptr, dstDin, dinD, 0);
+    pushTask(CopyTaskKind::WriteManifest, nullptr, dstMan, manD, 256);
+  }
 
   return count;
 }
