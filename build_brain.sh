@@ -32,6 +32,69 @@ JOBS="${JOBS:-${NUMBER_OF_PROCESSORS:-4}}"
 TOOLCHAIN_OPT="cegcc"
 OUT_DIR="output/release/simulator/brain"
 
+if [[ "${1:-}" == "--installer" ]]; then
+  echo "[INFO] Building Lilium Installer (Windows 10/11 MinGW64 GUI)..."
+  if ! command -v g++ >/dev/null 2>&1; then
+    echo "[ERROR] MinGW64 g++ not found in PATH."
+    exit 1
+  fi
+  INST_DIR="output/release/LiliumInstaller"
+  PAYLOAD_DIR="${INST_DIR}/payload"
+  mkdir -p "${INST_DIR}" "${PAYLOAD_DIR}/apps/models"
+
+  RES_OBJ="${INST_DIR}/lilium_installer_res.o"
+  if command -v windres >/dev/null 2>&1 && [[ -f "suite/installer/lilium_installer.rc" ]]; then
+    windres suite/installer/lilium_installer.rc "${RES_OBJ}"
+  else
+    RES_OBJ=""
+  fi
+
+  g++ -O2 -std=gnu++17 -Wall -Wextra -DNOMINMAX -DUNICODE -D_UNICODE -fno-exceptions -fno-rtti \
+    suite/installer/main.cpp suite/common/lilium_ui.cpp ion/src/simulator/brain/misaki_font_data.cpp \
+    ${RES_OBJ} -o "${INST_DIR}/LiliumInstaller.exe" \
+    -mwindows -static -s -lgdi32 -luser32 -lcomdlg32 -lshell32 -lole32 -lcomctl32
+  rm -f "${RES_OBJ}"
+
+  ARM_DIST="output/release/simulator/brain/Lilium"
+  if [[ -f "${ARM_DIST}/AppMain_.exe" ]]; then
+    echo "[INFO] Staging ARM payload (excluding AppMain.exe & AppMain.cfg) -> ${PAYLOAD_DIR}..."
+    for f in "AppMain_.exe" "font.ttf" "misaki_gothic.ttf"; do
+      if [[ -f "${ARM_DIST}/${f}" ]]; then
+        cp -f "${ARM_DIST}/${f}" "${PAYLOAD_DIR}/${f}"
+      fi
+    done
+    rm -f "${PAYLOAD_DIR}/AppMain.exe" "${PAYLOAD_DIR}/AppMain.cfg" "${PAYLOAD_DIR}/index.din"
+    for f in "${ARM_DIST}/apps/"*; do
+      [[ -f "$f" ]] && cp -f "$f" "${PAYLOAD_DIR}/apps/"
+    done
+    if [[ -d "${ARM_DIST}/apps/models" ]]; then
+      for f in "${ARM_DIST}/apps/models/"*; do
+        [[ -f "$f" ]] && cp -f "$f" "${PAYLOAD_DIR}/apps/models/"
+      done
+    fi
+  else
+    echo "[WARN] ARM release bundle not found (${ARM_DIST}); run './build_brain.sh' to populate payload/."
+  fi
+
+  cat > "${INST_DIR}/README_INSTALLER.txt" <<'EOF'
+Lilium Installer for Windows 10/11
+==================================
+1. LiliumInstaller.exe を起動し、USB接続した Brain または microSD カードを選択します。
+   (SDカードのフォーマットは不要です。<ドライブ>\アプリ\Lilium\ へ配置されます)
+2. 試運転コード「LILIUM-TEST」を入力すると、実ドライブへ書き込まず全導入UIを確認できます。
+3. PW-SH1 より前の機種 (480x320) および第5世代 (非WinCE) は確認ステップで導入不可と判定されます。
+4. exeopener.exe は配布ライセンス保護のため非同梱です。手順4でお手元のファイルをご指定ください。
+5. AppMain.cfg (8バイト) はコピー流用せず、標準WVGA仕様 (01 00 00 00 FF FF FF FF) 等を自動生成します。
+EOF
+
+  echo "=============================================================================="
+  echo "[SUCCESS] Lilium Installer build completed!"
+  echo "  Executable : ${INST_DIR}/LiliumInstaller.exe"
+  echo "  Payload    : ${PAYLOAD_DIR}/ (exeopener/AppMain.exe excluded)"
+  echo "=============================================================================="
+  exit 0
+fi
+
 if [[ "${1:-}" == "--host" ]]; then
   echo "[INFO] --host specified: building Brain target with host Windows MinGW toolchain for PC verification..."
   if [[ -d "/mingw64/bin" ]] && [[ ":$PATH:" != *":/mingw64/bin:"* ]]; then
